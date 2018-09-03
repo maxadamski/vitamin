@@ -1,57 +1,94 @@
-
-from .utils import topological_sort
-
-from memoized_property import memoized_property
-from dataclasses import dataclass, field
 from enum import Enum
 from typing import *
+from typing import Dict, Callable
+
+from dataclasses import dataclass, field
+
+CONSTANT = 'Constant'
+SYMBOL = 'Symbol'
+NAME = 'Name'
+STRING = 'StringLiteral'
+NUMBER = 'NumberLiteral'
+INT = 'Int'
+
+OP_KINDS = ['xfx', 'yfx', 'xfy', 'fx', 'fy', 'xf', 'yf']
+
+
+@dataclass
+class Loc:
+    line: int
+    char: int
+    byte: int
+
+    def __repr__(self):
+        return f"{self.line}:{self.char}:{self.byte}"
+
+
+@dataclass
+class Span:
+    start: Loc
+    stop: Loc
+
+    def __len__(self):
+        return self.stop.byte - self.start.byte + 1
+
+    def __repr__(self):
+        return f"{self.start}-{self.stop}"
 
 
 @dataclass
 class AST:
-    pass
+    span: Span
+
 
 @dataclass
 class Constant(AST):
-    value: str
+    mem: str
+    typ: str = ''
 
-    def __repr__(self):
-        return self.value
+    def __str__(self):
+        return self.mem
+
 
 @dataclass
 class Symbol(Constant):
-    pass
+    def __str__(self):
+        return self.mem
 
-    def __repr__(self):
-        return self.value
 
 @dataclass
 class Name(Constant):
-    pass
+    def __str__(self):
+        return self.mem
 
-    def __repr__(self):
-        return self.value
 
 @dataclass
 class KeywordArgument(AST):
     keyword: Name
     value: Constant
 
+    def __str__(self):
+        return ':'.join(map(str, [self.keyword, self.value]))
+
+
 @dataclass
 class Directive(AST):
     name: Name
     args: List[AST]
 
+    def __str__(self):
+        args = ' '.join(map(str, self.args))
+        if args: args = ' ' + args
+        return f"(#{self.name}{args})"
+
+
 @dataclass
 class Program(AST):
     nodes: List[AST]
 
+    def __str__(self):
+        return '\n'.join(map(str, self.nodes))
 
-#
-# Operator
-#
-
-KINDS = ['xfx', 'yfx', 'xfy', 'fx', 'fy', 'xf', 'yf']
 
 class Associativity(str, Enum):
     RIGHT = 'Right'
@@ -64,6 +101,7 @@ class Associativity(str, Enum):
         if kind in ['xfy', 'fy']: return Associativity.RIGHT
         if kind in ['yfx', 'yf']: return Associativity.LEFT
 
+
 class Fixity(str, Enum):
     PREFIX = 'Prefix'
     SUFFIX = 'Suffix'
@@ -74,6 +112,7 @@ class Fixity(str, Enum):
         if kind in ['xfx', 'yfx', 'xfy']: return Fixity.INFIX
         if kind in ['fx', 'fy']: return Fixity.PREFIX
         if kind in ['xf', 'yf']: return Fixity.SUFFIX
+
 
 @dataclass
 class Op:
@@ -88,37 +127,32 @@ class Op:
         self.fix = Fixity.from_kind(self.kind)
 
 
-#
-# Expression
-#
-
 @dataclass
 class ListExpr(AST):
     nodes: List[AST]
+
+    def __repr__(self):
+        return f"'({' '.join(map(str, self.nodes))})"
+
 
 @dataclass
 class ExprNode(AST):
     head: AST
     tail: List[AST]
 
-    def __init__(self, head, *tail):
-        self.head, self.tail = head, tail
-
     def __repr__(self):
         tail = ' '.join(map(str, self.tail))
         if tail: tail = ' ' + tail
         return f"({self.head}{tail})"
 
+
 @dataclass
 class ExprLeaf(AST):
-    value: AST
+    head: AST
 
     def __repr__(self):
-        return f"{self.value}"
+        return f"{self.head}"
 
-#
-# Directives
-#
 
 @dataclass
 class operatorgroup:
@@ -127,38 +161,61 @@ class operatorgroup:
     gt: str = ''
     lt: str = ''
 
+
 @dataclass
 class operator:
     group: str
     names: List[str]
 
 
-# TODO: Maybe check precedence relations without explicitly assigning precedence number
-def operatorgroup_order(groups: Dict[str, operatorgroup]) -> int:
-    '''
-    Assigns a precedence to each group based on their relations.
-    The precedence is an integer from range [1, inf).
+@dataclass
+class DirectiveSpec:
+    name: str
+    call: Callable
+    args: list
+    kwargs: dict
+    varargs: list
 
-    returns: The highest precedence assigned
-    '''
-    graph = {name: [] for name in groups.keys()}
-    for group in groups.values():
-        if group.gt: graph[group.gt].append(group.name)
-        if group.lt: graph[group.name].append(group.lt)
-    order = topological_sort(graph)
-    for i, group in enumerate(order):
-        groups[group].prec = i + 1
-    return len(order)
 
-def operator_parse(groups: Dict[str, operatorgroup], ops: List[operator]) -> List[Op]:
-    '''
-    Combines operatorgroup and operator directives into Op ojects.
-    '''
-    operators = []
-    for directive in ops:
-        group = groups[directive.group]
-        for name in directive.names:
-            op = Op(name, group.kind, group.prec)
-            operators.append(op)
-    return operators
+class Sym:
+    name: str
+    pass
 
+
+@dataclass
+class Function(Sym):
+    # metadata
+    name: str
+    # file: str
+    # span: Span
+    # pure: bool
+
+    pos_args: [str] = field(default_factory=list)
+    key_args: Dict[str, str] = field(default_factory=dict)
+    var_args: Optional[str] = None
+    ret_type: [str] = field(default_factory=list)
+    builtin: Optional[Callable] = None
+
+
+@dataclass
+class Variable(Sym):
+    name: str
+    type: str
+    mem: Any
+
+
+@dataclass
+class Scope:
+    symbols: Dict[str, Sym]
+    parent: Optional = None  # optional scope
+
+
+@dataclass
+class Context:
+    groups: dict = field(default_factory=dict)
+    opdirs: list = field(default_factory=list)
+    ops: list = field(default_factory=list)
+    directives: Dict[str, DirectiveSpec] = field(default_factory=dict)
+    scope: Scope = None
+    LPATH: list = None
+    ast: AST = None

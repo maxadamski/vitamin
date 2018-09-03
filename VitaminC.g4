@@ -47,9 +47,11 @@ decl
     | commandDirective SEMI
     ;
 
+//function : 'fun' name parameters '->' name block ;
+
 constantArg : (name COLON)? constant ;
-functionDirective : '#' name '(' constantArg (',' constantArg)* ')' ;
-commandDirective : '#' name constant+ ;
+functionDirective : '#' name '(' constantArg? (',' constantArg)* ')' ;
+commandDirective : '#' name constant* ;
 
 //clause : '(' expr ')' ;
 //ifStatement : 'if' clause block ('else' 'if' clause block)* ('else' block)? ;
@@ -65,10 +67,12 @@ primary
 
 //expression : pre* primary suf* ( bin? pre* primary suf* )* ;
 
-constant : number | symbol | name ;
-number : Number ;
+constant : string | number | symbol | name ;
 symbol : Symbol | COLON ;
 name : Name ;
+
+number : Number ;
+string : String ;
 
 
 /****************************

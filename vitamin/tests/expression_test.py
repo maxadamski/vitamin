@@ -1,24 +1,24 @@
 import unittest
 from unittest import TestCase, main
-from vitamin.structure import Op, AST, ExprLeaf, ExprNode
+from vitamin.structure import Op, AST, ExprLeaf, ExprNode, Constant
 from vitamin.parser_expr import *
 
-char2tokens = lambda s: list(s)
-word2tokens = lambda s: s.split(' ')
+char2tokens = lambda s: [Constant(None, x) for x in s]
+word2tokens = lambda s: [Constant(None, x) for x in s.split(' ')]
 
-def parse2(parser: Parser, tokens: List[str]):
-    if not tokens: return ExprLeaf('')
+def parse2(parser: Parser, tokens: List[Constant]):
+    if not tokens: return ExprLeaf(None, '')
     new_tokens = []
     for token in tokens:
-        t = Token(token, token)
-        if token not in parser.op_names:
-            t.key = LIT
+        t = Token(LIT, token)
+        if token.mem in parser.op_names:
+            t.key = token.mem
         new_tokens.append(t)
     return parser.parse(iter(new_tokens))
 
 def to_sexpr(ast: AST):
     if isinstance(ast, ExprLeaf):
-        return f'{ast.value}'
+        return f'{ast.head}'
     if isinstance(ast, ExprNode):
         tail = ' '.join(map(to_sexpr, ast.tail))
         return f'({ast.head} {tail})'
@@ -37,7 +37,7 @@ class TestExpression(TestCase):
 
     def assertParserError(self, parser, tokens, error):
         with self.assertRaises(error):
-            parse2(parser, tokens)
+            parse2(parser, char2tokens(tokens))
 
     def assertBadPrecedence(self, parser, lexer, *tokens):
         for t in tokens:

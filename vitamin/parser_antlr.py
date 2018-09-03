@@ -1,3 +1,9 @@
+"""
+The ASTEmitter is mostly redundant, as it only converts the Antlr AST to Vitamin's
+representation. It is important though, because when a custom parser will
+be written, it will output directly in Vitamin's AST, and no other code
+besides `parse_string/file` functions, will have to be changed.
+"""
 
 from .structure import *
 
@@ -5,6 +11,17 @@ from antlr4 import ParseTreeWalker, CommonTokenStream, FileStream, ParserRuleCon
 from .parser.VitaminCLexer import VitaminCLexer
 from .parser.VitaminCParser import VitaminCParser
 from .parser.VitaminCListener import VitaminCListener
+
+from pprint import pprint
+
+def span(ctx):
+    if not ctx.stop: ctx.stop = ctx.start
+    start = Loc(ctx.start.line, ctx.start.column + 1, ctx.start.start)
+    end = Loc(ctx.stop.line, ctx.stop.column + 1, ctx.stop.stop)
+    if ctx.start.line == ctx.stop.line:
+        end.char = start.char + end.byte - start.byte + 1
+    #print(start, end, ctx.getText())
+    return Span(start, end)
 
 class ASTEmitter(VitaminCListener):
     def __init__(self, input_stream, token_stream):
@@ -20,7 +37,7 @@ class ASTEmitter(VitaminCListener):
         return output
 
     def enterProgram(self, ctx):
-        ast = Program([])
+        ast = Program(span(ctx), [])
         for child in ctx.chunk().getChildren():
             if isinstance(child, VitaminCParser.DeclContext):
                 ast.nodes.append(self.emitDecl(child))
@@ -41,7 +58,7 @@ class ASTEmitter(VitaminCListener):
             return self.emitCommandDirective(ctx.commandDirective())
 
     def emitExpr(self, ctx):
-        ast = ListExpr([])
+        ast = ListExpr(span(ctx), [])
         for primary in ctx.primary():
             if primary.constant():
                 ast.nodes.append(self.emitConstant(primary.constant()))
@@ -51,12 +68,12 @@ class ASTEmitter(VitaminCListener):
 
     def emitFunctionDirective(self, ctx):
         name = self.emitName(ctx.name())
-        ast = Directive(name, [])
+        ast = Directive(span(ctx), name, [])
         for arg in ctx.constantArg():
             val = self.emitConstant(arg.constant())
             if arg.name():
                 key = self.emitName(arg.name())
-                ast.args.append(KeywordArgument(key, val))
+                ast.args.append(KeywordArgument(span(arg), key, val))
             else:
                 ast.args.append(val)
         return ast
@@ -64,7 +81,7 @@ class ASTEmitter(VitaminCListener):
     def emitCommandDirective(self, ctx):
         name = self.emitName(ctx.name())
         args = [self.emitConstant(x) for x in ctx.constant()]
-        return Directive(name, args)
+        return Directive(span(ctx), name, args)
 
     def emitConstant(self, ctx):
         if ctx.symbol():
@@ -73,12 +90,20 @@ class ASTEmitter(VitaminCListener):
             return self.emitName(ctx.name())
         if ctx.number():
             return self.emitNumber(ctx.number())
+        if ctx.string():
+            return self.emitString(ctx.string())
+
+    def emitString(self, ctx):
+        return Constant(span(ctx), ctx.getText(), STRING)
+
+    def emitNumber(self, ctx):
+        return Constant(span(ctx), ctx.getText(), NUMBER)
 
     def emitSymbol(self, ctx):
-        return Symbol(ctx.getText())
+        return Constant(span(ctx), ctx.getText(), SYMBOL)
 
     def emitName(self, ctx):
-        return Name(ctx.getText())
+        return Constant(span(ctx), ctx.getText(), NAME)
 
 
 def parse_stream(input_stream):

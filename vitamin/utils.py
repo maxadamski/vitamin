@@ -5,7 +5,7 @@ def topological_sort(graph: dict):
 
     graph:
         Dictionary where each key represents a graph node,
-        and each value is a list of connected nodes.
+        and each head is a list of connected nodes.
 
         The graph has to be acyclic. If a cycle is detected,
         a ValueError is raised.

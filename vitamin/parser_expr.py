@@ -4,8 +4,8 @@ A simple expression parser in Pratt style.
 I wantad to implement Prolog's algorithm, but it was too hard to translate.
 """
 
-from .structure import Op, Fixity, Associativity, ExprNode, ExprLeaf, ListExpr
-from .structure import Name, Symbol, Constant
+from .structure import Op, Fixity, Associativity
+from .structure import ExprNode, ExprLeaf, ListExpr, Constant
 
 from dataclasses import dataclass
 from typing import *
@@ -111,17 +111,19 @@ def null_error(p, token, rbp):
 def left_error(p, token, rbp, left):
     raise UnexpectedToken(f"{token} can't be used as infix")
 
-def literal(p, token, rbp):
-    return ExprLeaf(token.val)
+def literal(p, t, rbp):
+    return ExprLeaf(t.val.span, t.val)
 
-def infix(p, token, rbp, left):
-    return ExprNode(token.val, left, p.parse_until(rbp))
+def infix(p, t, rbp, left):
+    return ExprNode(t.val.span, t.val, [left, p.parse_until(rbp)])
 
-def suffix(p, token, rbp, left):
-    return ExprNode(token.val + '`', left)
+def suffix(p, t, rbp, left):
+    t.val.value += '`'
+    return ExprNode(t.val.span, t.val, [left])
 
-def prefix(p, token, rbp):
-    return ExprNode(token.val, p.parse_until(rbp))
+def prefix(p, t, rbp):
+    return ExprNode(t.val.span, t.val, [p.parse_until(rbp)])
+
 
 #
 # Dynamic precedence parser
@@ -135,7 +137,8 @@ def ternary(p, token, rbp, left):
     p.expect(':')
     p.token = p.next()
     b = p.parse_until(rbp)
-    return ExprNode(token.val, left, a, b)
+    raise ValueError()
+    #return ExprNode(token.val, left, a, b)
 
 def make_parser(ops: List[Op]):
     max_prec = max(op.prec for op in ops) if ops else 0
@@ -153,7 +156,6 @@ def make_parser(ops: List[Op]):
 
     for op in ops:
         prec = op.prec + offset
-
         #if op.fix == 'y3x':
         #    p.add_left(op.name, ternary, op.prec, op.prec)
         #if op.kind == 'x3y':
@@ -164,11 +166,9 @@ def make_parser(ops: List[Op]):
             p.add_left(op.name, infix, prec, prec)
         if op.fix == Fixity.INFIX and op.ass == Associativity.LEFT:
             p.add_left(op.name, infix, prec, prec + 1)
-        #if op.fix == Fixity.PREFIX and op.ass == Associativity.RIGHT:
-        if op.kind == 'fy':
+        if op.fix == Fixity.PREFIX and op.ass == Associativity.RIGHT:
             p.add_null(op.name, prefix, prec)
-        #if op.fix == Fixity.PREFIX and op.ass == Associativity.NONE:
-        if op.kind == 'fx':
+        if op.fix == Fixity.PREFIX and op.ass == Associativity.NONE:
             p.add_null(op.name, prefix, prec, nbp=prec - 1)
         if op.fix == Fixity.SUFFIX:
             p.add_left(op.name, suffix, prec, prec)
@@ -177,13 +177,12 @@ def make_parser(ops: List[Op]):
 
 def parse(parser: Parser, expr: ListExpr):
     if not expr.nodes: return None
-
     tokens = []
     for node in expr.nodes:
         t = Token(LIT, node)
         if isinstance(node, Constant):
-            if node.value in parser.op_names:
-                t.key = node.value
+            if node.mem in parser.op_names:
+                t.key = node.mem
         elif isinstance(node, ListExpr):
             t.val = parse(parser, node)
         else:
@@ -191,5 +190,7 @@ def parse(parser: Parser, expr: ListExpr):
 
         tokens.append(t)
 
-    return parser.parse(iter(tokens))
+    ast = parser.parse(iter(tokens))
+    ast.span = expr.span
+    return ast
 

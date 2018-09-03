@@ -116,15 +116,6 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#number.
-    def enterNumber(self, ctx:VitaminCParser.NumberContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#number.
-    def exitNumber(self, ctx:VitaminCParser.NumberContext):
-        pass
-
-
     # Enter a parse tree produced by VitaminCParser#symbol.
     def enterSymbol(self, ctx:VitaminCParser.SymbolContext):
         pass
@@ -140,6 +131,24 @@ class VitaminCListener(ParseTreeListener):
 
     # Exit a parse tree produced by VitaminCParser#name.
     def exitName(self, ctx:VitaminCParser.NameContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#number.
+    def enterNumber(self, ctx:VitaminCParser.NumberContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#number.
+    def exitNumber(self, ctx:VitaminCParser.NumberContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#string.
+    def enterString(self, ctx:VitaminCParser.StringContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#string.
+    def exitString(self, ctx:VitaminCParser.StringContext):
         pass
 
 
