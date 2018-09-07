@@ -13,9 +13,9 @@ test:
 main: parser
 	python3 vitamin.py sample/main.vc
 
-#debug:
-#	$(ANTLR) -Dlanguage=Java -o tmp VitaminC.g4
-#	javac -g tmp/*.java
-#	CLASSPATH=tmp:"$$CLASSPATH" $(GRUN) VitaminC program -gui
+syntax_debug:
+	$(ANTLR) -Dlanguage=Java -o tmp VitaminC.g4
+	javac -g tmp/*.java
+	CLASSPATH=tmp:"$$CLASSPATH" $(GRUN) VitaminC program -gui
 
 

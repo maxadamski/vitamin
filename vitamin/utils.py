@@ -1,6 +1,8 @@
+from typing import *
+
 
 def topological_sort(graph: dict):
-    '''
+    """
     Generic topological sorting algorithm
 
     graph:
@@ -14,7 +16,7 @@ def topological_sort(graph: dict):
 
     returns:
         List of nodes in topological order
-    '''
+    """
     status = {node: '' for node in graph}
     result = []
 
@@ -33,3 +35,6 @@ def topological_sort(graph: dict):
 
     return result
 
+
+def class_name(obj) -> str:
+    return str(type(obj)).replace("<class '", "").replace("'>", '').split('.')[-1]

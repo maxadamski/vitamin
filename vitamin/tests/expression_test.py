@@ -187,7 +187,7 @@ class TestExpression(TestCase):
 
     def test_same_name(self):
         p = make_parser([
-            # declaring an infix and suffix operator with the same name is invalid
+            # declaring an infix and suffix OpDir with the same name is invalid
             #Op('-', 'yf', 2),
             Op('-', 'fy', 3),
             Op('-', 'yfx', 1),

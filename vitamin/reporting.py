@@ -1,4 +1,5 @@
-from .structure import Loc, Span
+from typing import *
+from .structure import *
 
 RED = "\x1B[31m"
 GRN = "\x1B[32m"
@@ -25,11 +26,15 @@ def excerpt(f, span):
     return f.read(len(span) + offset)
 
 
-def report(f, ast, hi=None):
+def reports(f, ast, hi=None):
     if not hi: hi = ast.span
     hi_lines = hi.stop.line - hi.start.line + 1
     t = excerpt(f, ast.span)
-    print(decorated(t, ast.span, hi=hi, hi_col=hi_lines == 1))
+    return decorated(t, ast.span, hi=hi, hi_col=hi_lines == 1)
+
+
+def report(f, ast, hi=None):
+    print(report(f, ast, hi))
 
 
 def formatted_line(line: str, y_fmt: str):
@@ -90,19 +95,6 @@ def print_report(title, description, excerpt, solution):
     print(solution + '\n')
 
 
-def warn_duplicate_operatorgroup(file, node):
-    print(f"-? OVERRIDING PRECEDENCE")
-    print(f"you are overriding precedence definitions for the operator group '{name}'")
-    print(f"this is very dangerous and may cause compilation errors")
-    report(file, node, node.span)
-
-
-def err_bad_operatorgroup(file, node):
-    print(f"-- UNKNOWN GROUP")
-    print(f"'{group}' is not a registered operator group")
-    report(file, node, node.args[0].span)
-
-
 def err_file_search_failed(file, node):
     print(f"-- LOAD ERROR")
     print(f"file '{file_path}' could not be found")
@@ -120,7 +112,62 @@ def err_bad_directive(main, node):
     report(main, node, hi=node.name.span)
 
 
-def err_function_not_variadic(file, call, arg):
-    print(f"-- UNEXPECTED VARARG")
-    print(f"this function doesn't take variable arguments, but got '{arg}'")
-    report(file, call, arg.span)
+def err_template(ctx, expr, hi, header, description):
+    code = reports(ctx.file, expr, hi=hi)
+    header = header.upper()
+    return f"-- {header}\n{description}\n{code}"
+
+
+def warn_duplicate_operatorgroup(ctx, hi: Object):
+    return err_template(ctx, ctx.expr, hi.span, "overriding operator group",
+                        f"this is very dangerous and may cause compilation errors")
+
+
+def warn_unknown_operatorgroup(ctx, hi: Object):
+    return err_template(ctx, ctx.expr, hi.span, "unknown operator group",
+                        f"adding operotor to an undefined operator group")
+
+
+def err_unknown_pragma(ctx, hi: Object):
+    return err_template(ctx, ctx.expr, hi.span, "unknown directive",
+                        f"this is not a known compiler directive")
+
+
+def err_unknown_symbol(ctx, hi: Object):
+    return err_template(ctx, ctx.expr, hi.span, "unknown symbol",
+                        f"this is a reference to an undefined name")
+
+
+def err_pragma_arg_type(ctx, hi: Object, exp_typ: Typ, got_typ: Typ):
+    return err_template(ctx, ctx.expr, hi.span, "type mismatch",
+                        f"directive expects argument of type '{exp_typ}', but got '{got_typ}'")
+
+
+def err_pragma_not_enough_args(ctx, exp_count: int, got_count: int):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "missing arguments",
+                        f"directive takes {exp_count} positional arguments, but got {got_count}")
+
+
+def err_pragma_not_variadic(ctx):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "unexpected argument",
+                        "directive doesn't take variadic arguments")
+
+
+def err_pragma_bad_key_arg(ctx, hi):
+    return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
+                        f"directive doesn't take this keyword argument")
+
+
+def err_pragma_dup_key_arg(ctx, hi):
+    return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
+                        f"keyword argument is duplicated")
+
+
+def err_pragma_key_before_pos(ctx, hi):
+    return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
+                        f"keyword arguments must be after positional arguments")
+
+def err_no_operators(ctx):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "no operators",
+        f"without any operators defined only primary expressions can be parsed\n" +
+        f"define operators with #operator(group), and compile with #operatorcompile")

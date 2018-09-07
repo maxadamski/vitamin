@@ -17,15 +17,6 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#block.
-    def enterBlock(self, ctx:VitaminCParser.BlockContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#block.
-    def exitBlock(self, ctx:VitaminCParser.BlockContext):
-        pass
-
-
     # Enter a parse tree produced by VitaminCParser#chunk.
     def enterChunk(self, ctx:VitaminCParser.ChunkContext):
         pass
@@ -35,57 +26,21 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#stat.
-    def enterStat(self, ctx:VitaminCParser.StatContext):
+    # Enter a parse tree produced by VitaminCParser#block.
+    def enterBlock(self, ctx:VitaminCParser.BlockContext):
         pass
 
-    # Exit a parse tree produced by VitaminCParser#stat.
-    def exitStat(self, ctx:VitaminCParser.StatContext):
-        pass
-
-
-    # Enter a parse tree produced by VitaminCParser#decl.
-    def enterDecl(self, ctx:VitaminCParser.DeclContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#decl.
-    def exitDecl(self, ctx:VitaminCParser.DeclContext):
+    # Exit a parse tree produced by VitaminCParser#block.
+    def exitBlock(self, ctx:VitaminCParser.BlockContext):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#constantArg.
-    def enterConstantArg(self, ctx:VitaminCParser.ConstantArgContext):
+    # Enter a parse tree produced by VitaminCParser#quote.
+    def enterQuote(self, ctx:VitaminCParser.QuoteContext):
         pass
 
-    # Exit a parse tree produced by VitaminCParser#constantArg.
-    def exitConstantArg(self, ctx:VitaminCParser.ConstantArgContext):
-        pass
-
-
-    # Enter a parse tree produced by VitaminCParser#functionDirective.
-    def enterFunctionDirective(self, ctx:VitaminCParser.FunctionDirectiveContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#functionDirective.
-    def exitFunctionDirective(self, ctx:VitaminCParser.FunctionDirectiveContext):
-        pass
-
-
-    # Enter a parse tree produced by VitaminCParser#commandDirective.
-    def enterCommandDirective(self, ctx:VitaminCParser.CommandDirectiveContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#commandDirective.
-    def exitCommandDirective(self, ctx:VitaminCParser.CommandDirectiveContext):
-        pass
-
-
-    # Enter a parse tree produced by VitaminCParser#variable.
-    def enterVariable(self, ctx:VitaminCParser.VariableContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#variable.
-    def exitVariable(self, ctx:VitaminCParser.VariableContext):
+    # Exit a parse tree produced by VitaminCParser#quote.
+    def exitQuote(self, ctx:VitaminCParser.QuoteContext):
         pass
 
 
@@ -107,6 +62,33 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by VitaminCParser#pragma.
+    def enterPragma(self, ctx:VitaminCParser.PragmaContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#pragma.
+    def exitPragma(self, ctx:VitaminCParser.PragmaContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#pragmaFun.
+    def enterPragmaFun(self, ctx:VitaminCParser.PragmaFunContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#pragmaFun.
+    def exitPragmaFun(self, ctx:VitaminCParser.PragmaFunContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#pragmaArg.
+    def enterPragmaArg(self, ctx:VitaminCParser.PragmaArgContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#pragmaArg.
+    def exitPragmaArg(self, ctx:VitaminCParser.PragmaArgContext):
+        pass
+
+
     # Enter a parse tree produced by VitaminCParser#constant.
     def enterConstant(self, ctx:VitaminCParser.ConstantContext):
         pass
@@ -116,30 +98,30 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#symbol.
-    def enterSymbol(self, ctx:VitaminCParser.SymbolContext):
+    # Enter a parse tree produced by VitaminCParser#atom.
+    def enterAtom(self, ctx:VitaminCParser.AtomContext):
         pass
 
-    # Exit a parse tree produced by VitaminCParser#symbol.
-    def exitSymbol(self, ctx:VitaminCParser.SymbolContext):
-        pass
-
-
-    # Enter a parse tree produced by VitaminCParser#name.
-    def enterName(self, ctx:VitaminCParser.NameContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#name.
-    def exitName(self, ctx:VitaminCParser.NameContext):
+    # Exit a parse tree produced by VitaminCParser#atom.
+    def exitAtom(self, ctx:VitaminCParser.AtomContext):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#number.
-    def enterNumber(self, ctx:VitaminCParser.NumberContext):
+    # Enter a parse tree produced by VitaminCParser#intn.
+    def enterIntn(self, ctx:VitaminCParser.IntnContext):
         pass
 
-    # Exit a parse tree produced by VitaminCParser#number.
-    def exitNumber(self, ctx:VitaminCParser.NumberContext):
+    # Exit a parse tree produced by VitaminCParser#intn.
+    def exitIntn(self, ctx:VitaminCParser.IntnContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#real.
+    def enterReal(self, ctx:VitaminCParser.RealContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#real.
+    def exitReal(self, ctx:VitaminCParser.RealContext):
         pass
 
 

@@ -1,27 +1,31 @@
 """
 A simple expression parser in Pratt style.
 
-I wantad to implement Prolog's algorithm, but it was too hard to translate.
+I wanted to implement Prolog's algorithm, but it was too hard to translate.
 """
 
-from .structure import Op, Fixity, Associativity
-from .structure import ExprNode, ExprLeaf, ListExpr, Constant
+from .structure import Token as ExprToken
+from .reporting import *
 
 from dataclasses import dataclass
 from typing import *
 
 EOF = 'EOF'
 
+
 class UnexpectedToken(Exception):
     pass
+
 
 class BadPrecedence(Exception):
     pass
 
+
 @dataclass
 class Token:
     key: str
-    val: Any
+    val: Object
+
 
 @dataclass
 class Null:
@@ -29,6 +33,7 @@ class Null:
     nud: Callable
     rbp: int
     nbp: int
+
 
 @dataclass
 class Left:
@@ -57,7 +62,7 @@ class Parser:
     def next(self):
         return next(self.tokens, Token(EOF, ''))
 
-    #def expect(self, val):
+    # def expect(self, val):
     #    if not self.token.val == val:
     #        raise UnexpectedToken(f"expected {val}, got {self.token.val}")
 
@@ -108,21 +113,29 @@ class Parser:
 def null_error(p, token, rbp):
     raise UnexpectedToken(f"{token} can't be used as prefix")
 
+
 def left_error(p, token, rbp, left):
     raise UnexpectedToken(f"{token} can't be used as infix")
 
-def literal(p, t, rbp):
-    return ExprLeaf(t.val.span, t.val)
+
+# TODO: recalculate span for expr
+
+def literal(p, t: Token, rbp):
+    t.val.leaf = True
+    return t.val
+
 
 def infix(p, t, rbp, left):
-    return ExprNode(t.val.span, t.val, [left, p.parse_until(rbp)])
+    return Expr(ExprToken.Expr, [t.val, left, p.parse_until(rbp)], span=t.val.span)
+
 
 def suffix(p, t, rbp, left):
     t.val.value += '`'
-    return ExprNode(t.val.span, t.val, [left])
+    return Expr(ExprToken.Expr, [t.val, left], span=t.val.span)
+
 
 def prefix(p, t, rbp):
-    return ExprNode(t.val.span, t.val, [p.parse_until(rbp)])
+    return Expr(ExprToken.Expr, [t.val, p.parse_until(rbp)], span=t.val.span)
 
 
 #
@@ -131,6 +144,7 @@ def prefix(p, t, rbp):
 
 LIT = 'LIT'
 
+
 def ternary(p, token, rbp, left):
     # _ ? _ : _
     a = p.parse_until(0)
@@ -138,7 +152,8 @@ def ternary(p, token, rbp, left):
     p.token = p.next()
     b = p.parse_until(rbp)
     raise ValueError()
-    #return ExprNode(token.val, left, a, b)
+    # return ExprNode(token.val, left, a, b)
+
 
 def make_parser(ops: List[Op]):
     max_prec = max(op.prec for op in ops) if ops else 0
@@ -156,9 +171,9 @@ def make_parser(ops: List[Op]):
 
     for op in ops:
         prec = op.prec + offset
-        #if op.fix == 'y3x':
+        # if op.fix == 'y3x':
         #    p.add_left(op.name, ternary, op.prec, op.prec)
-        #if op.kind == 'x3y':
+        # if op.kind == 'x3y':
         #    p.add_left(op.name, ternary, op.prec, op.prec - 1)
         if op.fix == Fixity.INFIX and op.ass == Associativity.NONE:
             p.add_left(op.name, infix, prec, prec + 1, nbp=prec - 1)
@@ -175,22 +190,20 @@ def make_parser(ops: List[Op]):
 
     return p
 
-def parse(parser: Parser, expr: ListExpr):
-    if not expr.nodes: return None
-    tokens = []
-    for node in expr.nodes:
-        t = Token(LIT, node)
-        if isinstance(node, Constant):
-            if node.mem in parser.op_names:
-                t.key = node.mem
-        elif isinstance(node, ListExpr):
-            t.val = parse(parser, node)
-        else:
-            raise ValueError(f"Node must be primary {node}")
 
+def parse(parser: Parser, expr: Expr):
+    if parser is None: raise SemError(err_no_operators)
+    if not isinstance(expr, Expr): raise ValueError(f'expr must be Expr')
+    if not expr.args: return None
+    tokens = []
+    for child in expr.args:
+        t = Token(LIT, child)
+        if isinstance(child, Expr):
+            t.val = parse(parser, child)
+        elif isinstance(child, Object) and child.mem in parser.op_names:
+            t.key = child.mem
         tokens.append(t)
 
     ast = parser.parse(iter(tokens))
     ast.span = expr.span
     return ast
-

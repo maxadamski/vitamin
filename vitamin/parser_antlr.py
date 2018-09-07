@@ -5,14 +5,13 @@ be written, it will output directly in Vitamin's AST, and no other code
 besides `parse_string/file` functions, will have to be changed.
 """
 
-from .structure import *
-
-from antlr4 import ParseTreeWalker, CommonTokenStream, FileStream, ParserRuleContext
 from .parser.VitaminCLexer import VitaminCLexer
 from .parser.VitaminCParser import VitaminCParser
 from .parser.VitaminCListener import VitaminCListener
+from .structure import *
 
-from pprint import pprint
+from antlr4 import ParseTreeWalker, CommonTokenStream, FileStream, InputStream
+
 
 def span(ctx):
     if not ctx.stop: ctx.stop = ctx.start
@@ -20,90 +19,100 @@ def span(ctx):
     end = Loc(ctx.stop.line, ctx.stop.column + 1, ctx.stop.stop)
     if ctx.start.line == ctx.stop.line:
         end.char = start.char + end.byte - start.byte + 1
-    #print(start, end, ctx.getText())
+    # print(start, end, ctx.getText())
     return Span(start, end)
+
+
+def str2int(data: str) -> int:
+    base = 10
+    if data.startswith('0x'):
+        base = 16
+    elif data.startswith('0o'):
+        base = 8
+    elif data.startswith('0b'):
+        base = 2
+    return int(data, base)
+
 
 class ASTEmitter(VitaminCListener):
     def __init__(self, input_stream, token_stream):
         self.input_stream = input_stream
         self.token_stream = token_stream
+        self.ast = None
 
-    def context_source(self, ctx, hi = None):
-        if isinstance(hi, ParserRuleContext): hi = hi.segment()
-        is_one_line = ctx.stop.line - ctx.start.line == 0
-        start, stop = ctx.start.start, ctx.stop.start
-        source = self.input_stream.getText(start, stop)
-        output = source_excerpt(source, ctx.segment(), hi=hi, hi_col=is_one_line)
-        return output
+    def enterProgram(self, ctx: VitaminCParser.ProgramContext):
+        self.ast = self.emitChunk(ctx.chunk())
 
-    def enterProgram(self, ctx):
-        ast = Program(span(ctx), [])
-        for child in ctx.chunk().getChildren():
-            if isinstance(child, VitaminCParser.DeclContext):
-                ast.nodes.append(self.emitDecl(child))
-            if isinstance(child, VitaminCParser.StatContext):
-                ast.nodes.append(self.emitStat(child))
-        self.program = ast
+    def emitChunk(self, ctx: VitaminCParser.ChunkContext):
+        args = [self.emitExpr(x) for x in ctx.expr()]
+        return Expr(Token.Block, args, span(ctx))
 
-    def emitStat(self, ctx):
-        if ctx.expr():
+    def emitBlock(self, ctx: VitaminCParser.BlockContext):
+        return self.emitChunk(ctx.chunk())
+
+    def emitQuote(self, ctx: VitaminCParser.QuoteContext):
+        expr = self.emitBlock(ctx.block())
+        expr.head = Token.Quote
+        return expr
+
+    def emitExpr(self, ctx: VitaminCParser.ExprContext):
+        args = [self.emitPrimary(x) for x in ctx.primary()]
+        return Expr(Token.ListExpr, args, span(ctx))
+
+    def emitPrimary(self, ctx: VitaminCParser.PrimaryContext):
+        if ctx.constant():
+            return self.emitConstant(ctx.constant())
+        elif ctx.pragma():
+            return self.emitPragma(ctx.pragma())
+        elif ctx.quote():
+            return self.emitQuote(ctx.quote())
+        elif ctx.expr():
             return self.emitExpr(ctx.expr())
 
-    def emitDecl(self, ctx):
-        if ctx.variable():
-            return self.emitExpr(ctx.variable().expr())
-        if ctx.functionDirective():
-            return self.emitFunctionDirective(ctx.functionDirective())
-        if ctx.commandDirective():
-            return self.emitCommandDirective(ctx.commandDirective())
-
-    def emitExpr(self, ctx):
-        ast = ListExpr(span(ctx), [])
-        for primary in ctx.primary():
-            if primary.constant():
-                ast.nodes.append(self.emitConstant(primary.constant()))
-            if primary.expr():
-                ast.nodes.append(self.emitExpr(primary.expr()))
-        return ast
-
-    def emitFunctionDirective(self, ctx):
-        name = self.emitName(ctx.name())
-        ast = Directive(span(ctx), name, [])
-        for arg in ctx.constantArg():
-            val = self.emitConstant(arg.constant())
-            if arg.name():
-                key = self.emitName(arg.name())
-                ast.args.append(KeywordArgument(span(arg), key, val))
-            else:
-                ast.args.append(val)
-        return ast
-
-    def emitCommandDirective(self, ctx):
-        name = self.emitName(ctx.name())
-        args = [self.emitConstant(x) for x in ctx.constant()]
-        return Directive(span(ctx), name, args)
-
-    def emitConstant(self, ctx):
-        if ctx.symbol():
-            return self.emitSymbol(ctx.symbol())
-        if ctx.name():
-            return self.emitName(ctx.name())
-        if ctx.number():
-            return self.emitNumber(ctx.number())
-        if ctx.string():
+    def emitConstant(self, ctx: VitaminCParser.ConstantContext):
+        if ctx.atom():
+            return self.emitAtom(ctx.atom())
+        elif ctx.intn():
+            return self.emitIntn(ctx.intn())
+        elif ctx.real():
+            return self.emitReal(ctx.real())
+        elif ctx.string():
             return self.emitString(ctx.string())
 
-    def emitString(self, ctx):
-        return Constant(span(ctx), ctx.getText(), STRING)
+    # TODO: Revise the literal parsing functions
 
-    def emitNumber(self, ctx):
-        return Constant(span(ctx), ctx.getText(), NUMBER)
+    def emitAtom(self, ctx: VitaminCParser.AtomContext):
+        return Object(T_ATOM, ctx.getText(), span=span(ctx))
 
-    def emitSymbol(self, ctx):
-        return Constant(span(ctx), ctx.getText(), SYMBOL)
+    def emitIntn(self, ctx: VitaminCParser.IntnContext):
+        data = ctx.getText().lower()
+        return Object(T_INT_LITERAL, str2int(data), span=span(ctx))
 
-    def emitName(self, ctx):
-        return Constant(span(ctx), ctx.getText(), NAME)
+    def emitReal(self, ctx: VitaminCParser.RealContext):
+        data = ctx.getText().lower()
+        if data.startswith('0x'): raise NotImplemented()
+        return Object(T_REAL_LITERAL, Decimal(data), span=span(ctx))
+
+    def emitString(self, ctx: VitaminCParser.StringContext):
+        data = ctx.getText()
+        if not data.startswith('"'): raise NotImplemented()
+        return Object(T_STRING_LITERAL, data[1:-1], span=span(ctx))
+
+    def emitPragma(self, ctx: VitaminCParser.PragmaContext):
+        name = ctx.atom().getText()
+        pragma = PragmaExpr(span(ctx), name, [])
+        #if ctx.pragmaCmd():
+        #    for arg in ctx.pragmaCmd().constant():
+        #        val = self.emitConstant(arg.constant())
+        #        arg = PragmaArg(span(arg), None, val)
+        #        pragma.args.append(arg)
+        if ctx.pragmaFun():
+            for arg in ctx.pragmaFun().pragmaArg():
+                key = self.emitAtom(arg.atom()) if arg.atom() else None
+                val = self.emitConstant(arg.constant())
+                arg = PragmaArg(span(arg), key, val)
+                pragma.args.append(arg)
+        return pragma
 
 
 def parse_stream(input_stream):
@@ -111,19 +120,17 @@ def parse_stream(input_stream):
     token_stream = CommonTokenStream(lexer)
     parser = VitaminCParser(token_stream)
 
-    tree = parser.program()
-    listener = ASTEmitter(input_stream, token_stream)
+    emitter = ASTEmitter(input_stream, token_stream)
     walker = ParseTreeWalker()
-    walker.walk(listener, tree)
-    return listener.program
+    walker.walk(emitter, parser.program())
+    return emitter.ast
 
 
 def parse_string(string):
-    input_stream = InputStream(path)
+    input_stream = InputStream(string)
     return parse_stream(input_stream)
 
 
 def parse_file(path):
     input_stream = FileStream(path)
     return parse_stream(input_stream)
-

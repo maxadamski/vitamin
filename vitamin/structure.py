@@ -1,17 +1,47 @@
-from enum import Enum
+"""
+Definitions of internally used structures and built-in constants
+"""
+
+from .utils import class_name
+
 from typing import *
-from typing import Dict, Callable
-
 from dataclasses import dataclass, field
-
-CONSTANT = 'Constant'
-SYMBOL = 'Symbol'
-NAME = 'Name'
-STRING = 'StringLiteral'
-NUMBER = 'NumberLiteral'
-INT = 'Int'
+from enum import Enum, unique
+from decimal import Decimal
 
 OP_KINDS = ['xfx', 'yfx', 'xfy', 'fx', 'fy', 'xf', 'yf']
+
+TypEnum = Union[List['TypEnum'], str]
+
+
+class SemError(ValueError):
+    pass
+
+
+@dataclass
+class Typ:
+    typ: TypEnum
+    # generic type names
+    gen: List[TypEnum] = field(default_factory=list)
+
+    # generic type constraints
+    # con: List[TypBound]
+
+    def __str__(self):
+        if isinstance(self.typ, str): return self.typ
+        return ' -> '.join(map(str, self.typ))
+
+
+T_ANY = Typ('Any')
+T_VOID = Typ('()')
+T_ATOM = Typ('Atom')
+T_EXPR = Typ('Expr')
+T_STRING_LITERAL = Typ('StringLiteral')
+T_INT_LITERAL = Typ('IntLiteral')
+T_REAL_LITERAL = Typ('RealLiteral')
+T_INT = Typ('Int')
+T_BOOL = Typ('Bool')
+T_ARRAY = Typ(['Array', 'T'], gen=['T'])
 
 
 @dataclass
@@ -34,60 +64,6 @@ class Span:
 
     def __repr__(self):
         return f"{self.start}-{self.stop}"
-
-
-@dataclass
-class AST:
-    span: Span
-
-
-@dataclass
-class Constant(AST):
-    mem: str
-    typ: str = ''
-
-    def __str__(self):
-        return self.mem
-
-
-@dataclass
-class Symbol(Constant):
-    def __str__(self):
-        return self.mem
-
-
-@dataclass
-class Name(Constant):
-    def __str__(self):
-        return self.mem
-
-
-@dataclass
-class KeywordArgument(AST):
-    keyword: Name
-    value: Constant
-
-    def __str__(self):
-        return ':'.join(map(str, [self.keyword, self.value]))
-
-
-@dataclass
-class Directive(AST):
-    name: Name
-    args: List[AST]
-
-    def __str__(self):
-        args = ' '.join(map(str, self.args))
-        if args: args = ' ' + args
-        return f"(#{self.name}{args})"
-
-
-@dataclass
-class Program(AST):
-    nodes: List[AST]
-
-    def __str__(self):
-        return '\n'.join(map(str, self.nodes))
 
 
 class Associativity(str, Enum):
@@ -128,94 +104,195 @@ class Op:
 
 
 @dataclass
-class ListExpr(AST):
-    nodes: List[AST]
-
-    def __repr__(self):
-        return f"'({' '.join(map(str, self.nodes))})"
-
-
-@dataclass
-class ExprNode(AST):
-    head: AST
-    tail: List[AST]
-
-    def __repr__(self):
-        tail = ' '.join(map(str, self.tail))
-        if tail: tail = ' ' + tail
-        return f"({self.head}{tail})"
-
-
-@dataclass
-class ExprLeaf(AST):
-    head: AST
-
-    def __repr__(self):
-        return f"{self.head}"
-
-
-@dataclass
-class operatorgroup:
+class OpGroupDir:
     name: str
     kind: str
     gt: str = ''
     lt: str = ''
+    prec: int = None
 
 
 @dataclass
-class operator:
+class OpDir:
     group: str
     names: List[str]
 
 
-@dataclass
-class DirectiveSpec:
-    name: str
-    call: Callable
-    args: list
-    kwargs: dict
-    varargs: list
+@unique
+class Token(str, Enum):
+    ListExpr = 'ListExpr'
+    Expr = 'Expr'
+    Block = 'Block'
+    Quote = 'Quote'
+    Pragma = 'Pragma'
 
 
-class Sym:
-    name: str
-    pass
-
-
-@dataclass
-class Function(Sym):
-    # metadata
-    name: str
-    # file: str
-    # span: Span
-    # pure: bool
-
-    pos_args: [str] = field(default_factory=list)
-    key_args: Dict[str, str] = field(default_factory=dict)
-    var_args: Optional[str] = None
-    ret_type: [str] = field(default_factory=list)
-    builtin: Optional[Callable] = None
-
-
-@dataclass
-class Variable(Sym):
-    name: str
-    type: str
+class Object:
+    typ: Typ
     mem: Any
+    span: Span
+    leaf: bool
+    literal: bool
+
+    def __init__(self, typ, mem, span=None, leaf=True, literal=False):
+        self.typ, self.mem = typ, mem
+        self.span = span
+        self.leaf = leaf
+        self.literal = literal
+
+    def __str__(self):
+        return dump(self)
+
+
+LambdaArg = Union[Tuple[str, TypEnum], Tuple[str, TypEnum, Object]]
+
+C_TRUE = Object(T_BOOL, 1)
+C_FALSE = Object(T_BOOL, 0)
+C_NIL = Object(T_ANY, None)
+
+
+class Expr(Object):
+    def __init__(self, head, args, span):
+        mem = {'head': head, 'args': args}
+        super().__init__(T_EXPR, mem, span=span, leaf=False, literal=False)
+
+    @property
+    def head(self) -> Token:
+        return self.mem['head']
+
+    @head.setter
+    def head(self, value: Token):
+        self.mem['head'] = value
+
+    @property
+    def args(self) -> List[Object]:
+        return self.mem['args']
+
+    @args.setter
+    def args(self, value: List[Object]):
+        self.mem['tail'] = value
+
+    def tree(self, level=0, index=0):
+        pad = '  ' * level
+        typ = class_name(self)
+
+
+def spec_to_typ(spec: List[LambdaArg], ret: TypEnum):
+    typ, keywords, default = [], {}, {}
+    for arg in spec:
+        keywords[arg[0]] = arg[1]
+        typ.append(arg[1])
+        if len(arg) == 3:
+            default[arg[0]] = arg[2]
+    typ.append(ret)
+    return typ, keywords, default
+
+
+@dataclass
+class Lambda(Object):
+    mem: Callable
+
+    keywords: Dict[str, Typ]
+    keys: List[str]
+    default: Dict[str, Object]
+    returns: Typ
+    varargs: bool
+    arity: int
+    varkey: Optional[str] = None
+    vartyp: Optional[Typ] = None
+
+    def __init__(
+            self, mem, spec: List[LambdaArg],
+            returns: TypEnum = T_VOID,
+            varargs=False):
+        typ, keywords, default = spec_to_typ(spec, returns)
+        super().__init__(Typ(typ), mem)
+        if varargs:
+            self.varkey, self.vartyp = spec[-1][0], spec[-1][1]
+        self.keys = [tup[0] for tup in spec]
+        self.keywords = keywords
+        self.default = default
+        self.varargs = varargs
+        self.returns = returns
+        self.fullarity = len(keywords)
+        self.arity = len(keywords) - len(default)
+
+
+@dataclass
+class PragmaArg:
+    span: Span
+    key: Optional[Object]
+    val: Object
+
+
+@dataclass
+class PragmaExpr:
+    span: Span
+    name: str
+    args: List[PragmaArg]
+
+    @property
+    def argc(self):
+        return len(self.args)
 
 
 @dataclass
 class Scope:
-    symbols: Dict[str, Sym]
+    symbols: Dict[str, Object]
     parent: Optional = None  # optional scope
 
 
 @dataclass
 class Context:
-    groups: dict = field(default_factory=dict)
-    opdirs: list = field(default_factory=list)
-    ops: list = field(default_factory=list)
-    directives: Dict[str, DirectiveSpec] = field(default_factory=dict)
+    groups: Dict[str, OpGroupDir] = field(default_factory=dict)
+    opdirs: List[OpDir] = field(default_factory=list)
+    ops: List[Op] = field(default_factory=list)
+    pragmas: Dict[str, Lambda] = field(default_factory=dict)
     scope: Scope = None
-    LPATH: list = None
-    ast: AST = None
+    path: List[str] = None
+    file: Any = None
+    node: Expr = None
+    expr: Expr = None
+    ast: Expr = None
+    node_index: int = 0
+
+
+def unpack_args(args: Dict[str, Object], names: Iterator[str]) -> Iterator[Object]:
+    return map(lambda arg: args[arg], names)
+
+
+def deref_mem(objects: Iterator[Object]) -> Iterator[Any]:
+    return map(lambda obj: obj.mem, objects)
+
+
+def dump(obj: Object, level=0, index=0):
+    typ = class_name(obj)
+    pad = "  " * level
+    res = ""
+
+    if isinstance(obj, Expr):
+        head = obj.head
+        args = ""
+        for i, arg in enumerate(obj.args):
+            args += f"\n"
+            if isinstance(arg, Expr) or isinstance(arg, PragmaExpr):
+                args += dump(arg, level=level + 2, index=i)
+            else:
+                args += f"{pad}    [{i}] {dump(arg)}"
+
+        res += f"{pad}{typ} [{index}]\n"
+        res += f"{pad}  head: {head}\n"
+        res += f"{pad}  args: {args}\n"
+        return res
+
+    elif isinstance(obj, PragmaExpr):
+        name = Object(T_ATOM, obj.name, leaf=True, literal=True)
+        args = [arg.val for arg in obj.args]
+        e = Expr(Token.Pragma, [name] + args, None)
+        return dump(e, level=level, index=index)
+
+    else:
+        if obj.leaf:
+            return f"{pad}{typ} {obj.mem} :: {obj.typ}"
+        else:
+            return f"{pad}{typ}\n{pad}  mem: {obj.mem}"

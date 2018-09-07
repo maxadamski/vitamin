@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 
-import os.path as path
-import sys
-
 from vitamin.analyzer import *
-from vitamin.corelib import d_load, f_assign, f_print, f_mul, d_operator, d_operatorgroup, eval
+from vitamin.corelib import *
 from vitamin.parser_antlr import parse_file
 from vitamin.parser_expr import make_parser, parse
 from vitamin.reporting import *
-from vitamin.structure import Function, Scope, Context, operatorgroup, operator, Op, DirectiveSpec
+from vitamin.structure import *
 from vitamin.utils import topological_sort
 
+import os.path as path
+import sys
 
-def operatorgroup_order(groups: Dict[str, operatorgroup]) -> int:
+
+def operatorgroup_order(groups: Dict[str, OpGroupDir]) -> int:
     """
     Assigns a precedence to each group based on their relations.
     The precedence is an integer from range [1, inf).
@@ -30,9 +30,15 @@ def operatorgroup_order(groups: Dict[str, operatorgroup]) -> int:
     return len(order)
 
 
-def operator_parse(groups: Dict[str, operatorgroup], ops: List[operator]) -> List[Op]:
+def pragma_operatorcompile(ctx: Context, args):
+    operatorgroup_order(ctx.groups)
+    ctx.ops = operator_parse(ctx.groups, ctx.opdirs)
+    ctx.expr_parser = make_parser(ctx.ops)
+
+
+def operator_parse(groups: Dict[str, OpGroupDir], ops: List[OpDir]) -> List[Op]:
     """
-    Combines operatorgroup and operator directives into Op ojects.
+    Combines OpGroupDir and OpDir directives into Op ojects.
     """
     operators = []
     for directive in ops:
@@ -45,53 +51,66 @@ def operator_parse(groups: Dict[str, operatorgroup], ops: List[operator]) -> Lis
 
 def main(argv):
     input_path = argv[1]
-    print('-- reading', input_path)
     ast = parse_file(input_path)
-    main = open(input_path)
-    LPATH = [path.dirname(input_path)]
 
     ctx = Context()
-    ctx.directives['operatorgroup'] = DirectiveSpec('operatorgroup', d_operatorgroup, [NAME, NAME],
-                                                    {'gt': NAME, 'lt': NAME}, None)
-    ctx.directives['operator'] = DirectiveSpec('operator', d_operator, [NAME], {}, CONSTANT)
-    ctx.directives['load'] = DirectiveSpec('load', d_load, [STRING], {}, [])
-
+    ctx.file = open(input_path)
+    ctx.path = [path.dirname(input_path)]
     ctx.scope = Scope({})
-    ctx.scope.symbols['print'] = Function('print', pos_args=[INT], builtin=f_print)
-    ctx.scope.symbols['='] = Function('=', pos_args=[NAME], builtin=f_assign)
-    ctx.scope.symbols['*'] = Function('*', pos_args=[INT, INT], ret_type=[INT], builtin=f_mul)
-
-    # search top level
-    ctx.LPATH = LPATH
     ctx.ast = ast
-    ctx.current_node = 0
-    while ctx.current_node < len(ast.nodes):
-        node = ast.nodes[ctx.current_node]
-        if isinstance(node, Directive):
-            name = node.name.mem
-            spec = ctx.directives.get(name, None)
-            if not spec:
-                err_bad_directive(main, node)
+    ctx.expr_parser = make_parser([])
 
-            args = analyze_directive(spec, main, node)
-            # TODO: do something if spec fails
-            if args: spec.call(ctx, main, node, *args)
-        ctx.current_node += 1
+    ctx.pragmas = {
+        'operatorcompile': Lambda(pragma_operatorcompile, []),
+        'operatorgroup': Lambda(pragma_operatorgroup,
+            [('name', T_ATOM), ('kind', T_ATOM), ('gt', T_ATOM, C_NIL), ('lt', T_ATOM, C_NIL)]),
+        'operator': Lambda(pragma_operator,
+            [('group', T_ATOM), ('names', T_ATOM)], varargs=True),
+    }
 
-    # process operator tables
-    operatorgroup_order(ctx.groups)
-    ctx.ops = operator_parse(ctx.groups, ctx.opdirs)
-    ctx.expr_parser = make_parser(ctx.ops)
+    ctx.scope.symbols = {
+        'true': C_TRUE,
+        'false': C_FALSE,
+        'nil': C_NIL,
+        '()': T_VOID,
+        'Expr': T_EXPR,
+        'Atom': T_ATOM,
+        'Any': T_ANY,
+        'Int': T_INT,
+        'StringLiteral': T_STRING_LITERAL,
+        'IntLiteral': T_INT_LITERAL,
+        'RealLiteral': T_REAL_LITERAL,
+        '=': Lambda(f_assign,
+            [('lhs', T_ATOM), ('rhs', T_INT)], returns=T_INT),
+        '+': Lambda(f_add,
+            [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+        '*': Lambda(f_mul,
+            [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+        'print': Lambda(f_print,
+            [('value', T_INT)]),
+    }
 
-    # pprint(ast)
-    print('\n-- start program')
+    # start interpreting file
+    ctx.node_index = 0
+    while ctx.node_index < len(ctx.ast.args):
+        ctx.expr = ctx.ast.args[ctx.node_index]
 
-    for i, node in enumerate(ast.nodes):
-        if isinstance(node, ListExpr):
-            # TODO: handle parse errors
-            expr = ast.nodes[i] = parse(ctx.expr_parser, node)
-            eval(ctx, main, expr)
+        try:
+            ctx.expr = ctx.ast.args[ctx.node_index] = parse(ctx.expr_parser, ctx.expr)
+        except SemError as e:
+            print(ctx.expr)
+            print(e)
+            return 1
+
+        try:
+            eval(ctx, ctx.expr)
+        except SemError as e:
+            print(ctx.expr)
+            print(e)
+            return 1
+
+        ctx.node_index += 1
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main(['vitamin', 'sample/main.vc'])

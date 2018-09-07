@@ -30,48 +30,36 @@ arguments : '(' ( argument (',' argument)* ','? )? ')' ;
 exprs : expr (',' expr)* ;
 */
 
-program : chunk ;
-block : '{' chunk '}' ;
-chunk : (stat | decl)* ;
-
-stat
-    : expr SEMI
-    // ifStatement
-    // whileStatement
-    //| 'break' SEMI
-    ;
-
-decl
-    : variable SEMI
-    | functionDirective SEMI
-    | commandDirective SEMI
-    ;
 
 //function : 'fun' name parameters '->' name block ;
-
-constantArg : (name COLON)? constant ;
-functionDirective : '#' name '(' constantArg? (',' constantArg)* ')' ;
-commandDirective : '#' name constant* ;
-
 //clause : '(' expr ')' ;
 //ifStatement : 'if' clause block ('else' 'if' clause block)* ('else' block)? ;
 //whileStatement : 'while' clause block ;
 
-variable : 'var' expr ;
+program : chunk EOF ;
+chunk : NL* expr? (NL+ expr)* NL* ;
+block : '{' chunk '}' ;
+quote : 'quote' block ;
+
 expr : primary+ ;
 
 primary
     : constant
+    | quote
+    | pragma
     | '(' expr ')'
     ;
 
-//expression : pre* primary suf* ( bin? pre* primary suf* )* ;
+pragma : '#' atom pragmaFun? ;
+pragmaFun : '(' pragmaArg (',' pragmaArg)* ')' ;
+pragmaArg : (atom COLON)? constant ;
 
-constant : string | number | symbol | name ;
-symbol : Symbol | COLON ;
-name : Name ;
+constant : atom | intn | real | string ;
 
-number : Number ;
+// boilerplate
+atom : Name | Symbol | COLON ;
+intn : Int ;
+real : Real ;
 string : String ;
 
 
@@ -84,26 +72,33 @@ ShebangLine : '#!' ~[\u000A\u000D]* -> channel(HIDDEN) ;
 fragment Whitespace : [ \t]+ ;
 fragment Newline : '\r'? '\n' '\r'? ;
 WS : Whitespace -> skip ;
-NL : Newline -> skip ;
+NL : Newline ;
 
 fragment HexDigits : [0-9A-Fa-f][0-9A-Fa-f_]* ;
 fragment DecDigits : [0-9][0-9_]* ;
 fragment OctDigits : [0-7][0-7_]* ;
 fragment BinDigits : [01][01_]* ;
 fragment Sign : [-+] ;
-fragment RealNumberLiteral
-    :      DecDigits ( '.' DecDigits )? ( [eE] Sign? DecDigits )?
-    | '0x' HexDigits ( '.' HexDigits )? ( [pP] Sign? HexDigits )?
+
+fragment RealLiteral
+    :      DecDigits ('.' DecDigits)? ([eE] Sign? DecDigits)?
+    | '0x' HexDigits ('.' HexDigits)? ([pP] Sign? HexDigits)?
+    ;
+
+fragment IntLiteral
+    :      DecDigits
+    | '0x' HexDigits
     | '0o' OctDigits
     | '0b' BinDigits
     ;
 
-Number : RealNumberLiteral [i]? ;
+Real : RealLiteral [i]? ;
+Int : IntLiteral [i]? ;
 
 fragment EscapedString : '"' ( '\\' . | ~["\n\r] )* '"' ;
 String : EscapedString ;
 
-Rune : '\'' '\\'? . '\'' ;
+//Rune : '\'' '\\'? . '\'' ;
 
 fragment LineComment : '//' ~[\r\n]* ;
 fragment BlockComment : '/*' ( BlockComment | . )*? '*/' ;
