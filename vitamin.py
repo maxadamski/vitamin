@@ -9,6 +9,8 @@ from vitamin.structure import *
 from vitamin.utils import topological_sort
 
 
+# todo: these should definitely be somewhere else
+
 def operatorgroup_order(groups: Dict[str, OpGroupDir]) -> int:
     """
     Assigns a precedence to each group based on their relations.
@@ -66,6 +68,9 @@ def main(argv):
             [('group', T_ATOM), ('names', T_ATOM)], varargs=True),
     }
 
+    G_NUMERIC = Typ('T', gen=['T'])
+    G_ANY = Typ('T', gen=['T'])
+
     ctx.scope.symbols = {
         'true': C_TRUE,
         'false': C_FALSE,
@@ -78,14 +83,23 @@ def main(argv):
         'StringLiteral': T_STRING_LITERAL,
         'IntLiteral': T_INT_LITERAL,
         'RealLiteral': T_REAL_LITERAL,
-        '=': Lambda(f_assign,
-            [('lhs', T_ATOM), ('rhs', T_INT)], returns=T_INT),
-        '+': Lambda(f_add,
-            [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-        '*': Lambda(f_mul,
-            [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-        'print': Lambda(f_print,
-            [('value', T_INT)]),
+        '=': [
+            Lambda(f_assign, [('lhs', T_ATOM), ('rhs', G_ANY)], returns=G_ANY),
+        ],
+        '+': [
+            Lambda(f_add, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+        ],
+        '*': [
+            Lambda(f_mul, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+            Lambda(f_mul, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+        ],
+        '-': [
+            Lambda(f_sub, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+            Lambda(f_neg, [('x', T_INT)], returns=T_INT)
+        ],
+        'print': [
+            Lambda(f_print, [('value', T_INT)]),
+        ],
     }
 
     # start interpreting file
@@ -109,6 +123,8 @@ def main(argv):
             return 1
 
         ctx.node_index += 1
+
+    return 0
 
 
 if __name__ == '__main__':

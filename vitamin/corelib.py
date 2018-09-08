@@ -19,6 +19,9 @@ def eval(ctx: Context, obj: Object):
         head_sym = ctx.scope.symbols.get(head.mem, None)
         if head_sym is None:
             raise SemError(err_unknown_symbol(ctx, head))
+        if isinstance(head_sym, list) and len(head_sym) > 0:
+            # todo: actually resolve name conflict
+            head_sym = head_sym[0]
         if not isinstance(head_sym, Lambda):
             # todo: why?
             raise SemError("Cannot apply non-function")
@@ -83,6 +86,16 @@ def f_mul(ctx, args: Dict[str, Object]):
 def f_add(ctx, args: Dict[str, Object]):
     lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
     return Object(T_INT, eval(ctx, lhs).mem + eval(ctx, rhs).mem)
+
+
+def f_sub(ctx, args: Dict[str, Object]):
+    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
+    return Object(T_INT, eval(ctx, lhs).mem - eval(ctx, rhs).mem)
+
+
+def f_neg(ctx, args: Dict[str, Object]):
+    x, = unpack_args(args, ['x'])
+    return Object(T_INT, -eval(ctx, x).mem)
 
 
 def pragma_operator(ctx: Context, args: Dict[str, Object]):

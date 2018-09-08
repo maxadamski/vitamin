@@ -61,7 +61,7 @@ class Span:
     stop: Loc
 
     def __len__(self):
-        return self.stop.byte - self.start.byte + 1
+        return self.stop.byte - self.start.byte
 
     def __repr__(self):
         return f"{self.start}-{self.stop}"
@@ -145,7 +145,7 @@ class Object:
         return dump(self)
 
 
-LambdaArg = Union[Tuple[str, TypEnum], Tuple[str, TypEnum, Object]]
+LambdaArg = Union[Tuple[str, Typ], Tuple[str, Typ, Object]]
 
 C_TRUE = Object(T_BOOL, 1)
 C_FALSE = Object(T_BOOL, 0)
@@ -204,7 +204,7 @@ class Lambda(Object):
 
     def __init__(
             self, mem, spec: List[LambdaArg],
-            returns: TypEnum = T_VOID,
+            returns: Typ = T_VOID,
             varargs=False):
         typ, keywords, default = spec_to_typ(spec, returns)
         super().__init__(Typ(typ), mem)

@@ -35,7 +35,7 @@ def report(f, ast, hi=None):
     The 'report' function automatically decides on the
     error highlighting style, and applies it to the source code.
     """
-    if not hi: hi = ast.span
+    if hi is None: hi = ast.span
     hi_lines = hi.stop.line - hi.start.line + 1
     t = excerpt(f, ast.span)
     return decorated(t, ast.span, hi=hi, hi_col=hi_lines == 1)
@@ -96,7 +96,7 @@ def decorated(source: str, span: Span, hi=None, hi_col=True):
     output = ''
     for i, line in enumerate(source.splitlines()):
         y_fmt = str(y).zfill(max_digits)
-        if not hi:
+        if hi is None:
             output += formatted_line(line, y_fmt)
         elif hi_col:
             output += formatted_line(line, y_fmt) + '\n'
