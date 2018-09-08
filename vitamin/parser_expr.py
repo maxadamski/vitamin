@@ -4,7 +4,7 @@ A simple expression parser in Pratt style.
 I wanted to implement Prolog's algorithm, but it was too hard to translate.
 """
 
-from .structure import Token as ExprToken
+from .structure import Fixity, Associativity, Expr, Op, Object, ExprToken, C_NIL
 from .reporting import *
 
 from dataclasses import dataclass
@@ -13,23 +13,27 @@ from typing import *
 EOF = 'EOF'
 
 
-class UnexpectedToken(Exception):
+class ParserError(Exception):
     pass
 
 
-class BadPrecedence(Exception):
+class UnexpectedToken(ParserError):
+    pass
+
+
+class BadPrecedence(ParserError):
     pass
 
 
 @dataclass
-class Token:
+class ParserToken:
     key: str
     val: Object
 
 
 @dataclass
 class Null:
-    # nud(parser: Parser, token: Token, rbp: Int) -> AST
+    # nud(parser: Parser, token: ParserToken, rbp: Int) -> AST
     nud: Callable
     rbp: int
     nbp: int
@@ -37,7 +41,7 @@ class Null:
 
 @dataclass
 class Left:
-    # led(parser: Parser, token: Token, rbp: Int, left: AST) -> AST
+    # led(parser: Parser, token: ParserToken, rbp: Int, left: AST) -> AST
     led: Callable
     lbp: int
     rbp: int
@@ -49,26 +53,47 @@ class Left:
 #
 
 class Parser:
+    op_names: List[str]
+    inf_prec: int
+    lit_prec: int
+    tokens: Iterator[ParserToken]
+    history: List[ParserToken]
+    token: ParserToken
+    ctx: Context
+
     def __init__(self):
         self.null, self.left = {}, {}
         self.add_null(EOF, null_error, 0)
         self.add_left(EOF, left_error, 0, 0)
+        self.tokens = None
 
     def parse(self, tokens):
         self.tokens = tokens
-        self.token = self.next()
+        self.history = []
+        self.token = None
+        self.advance()
         return self.parse_until(0)
 
     def next(self):
-        return next(self.tokens, Token(EOF, ''))
+        return next(self.tokens, ParserToken(EOF, C_NIL))
+
+    def advance(self):
+        self.history.append(self.token)
+        self.token = self.next()
+        return self.token
+
+    @property
+    def last(self):
+        return self.history[-1]
 
     # def expect(self, val):
     #    if not self.token.val == val:
     #        raise UnexpectedToken(f"expected {val}, got {self.token.val}")
 
     def parse_until(self, rbp):
+        last = self.last
         t = self.token
-        self.token = self.next()
+        self.advance()
 
         if t.key == EOF:
             raise UnexpectedToken(t)
@@ -76,27 +101,28 @@ class Parser:
         null = self.null.get(t.key, None)
 
         if not null:
-            raise UnexpectedToken(t)
+            raise UnexpectedToken(err_parser_null_unexpected_token(self.ctx, t))
         if not rbp <= null.nbp:
-            raise BadPrecedence(t)
+            raise BadPrecedence(err_parser_null_bad_precedence(self.ctx, t, last))
 
         ast = null.nud(self, t, null.rbp)
         nbp = self.inf_prec
 
         while True:
+            last = self.last
             t = self.token
             left = self.left.get(t.key, None)
 
             if not left:
-                raise UnexpectedToken(t)
+                raise UnexpectedToken(err_parser_left_unexpected_token(self.ctx, t))
             if not left.lbp <= nbp:
-                raise BadPrecedence(t)
+                raise BadPrecedence(err_parser_left_bad_precedence(self.ctx, t, last))
             if t.key == EOF:
                 break
             if not rbp <= left.lbp <= nbp:
                 break
 
-            self.token = self.next()
+            self.advance()
             ast = left.led(self, t, left.rbp, ast)
             nbp = left.nbp
         return ast
@@ -110,17 +136,17 @@ class Parser:
         self.null[key] = Null(nud, rbp, nbp)
 
 
-def null_error(p, token, rbp):
-    raise UnexpectedToken(f"{token} can't be used as prefix")
+def null_error(p, t, rbp):
+    raise UnexpectedToken(err_parser_null_not_registered(p.ctx, t))
 
 
-def left_error(p, token, rbp, left):
-    raise UnexpectedToken(f"{token} can't be used as infix")
+def left_error(p, t, rbp, left):
+    raise UnexpectedToken(err_parser_left_not_registered(p.ctx, t))
 
 
 # TODO: recalculate span for expr
 
-def literal(p, t: Token, rbp):
+def literal(p, t: ParserToken, rbp):
     t.val.leaf = True
     return t.val
 
@@ -142,7 +168,7 @@ def prefix(p, t, rbp):
 # Dynamic precedence parser
 #
 
-LIT = 'LIT'
+LIT = 'Literal'
 
 
 def ternary(p, token, rbp, left):
@@ -191,19 +217,23 @@ def make_parser(ops: List[Op]):
     return p
 
 
-def parse(parser: Parser, expr: Expr):
-    if parser is None: raise SemError(err_no_operators)
-    if not isinstance(expr, Expr): raise ValueError(f'expr must be Expr')
-    if not expr.args: return None
-    tokens = []
-    for child in expr.args:
-        t = Token(LIT, child)
-        if isinstance(child, Expr):
-            t.val = parse(parser, child)
-        elif isinstance(child, Object) and child.mem in parser.op_names:
-            t.key = child.mem
-        tokens.append(t)
+def parse(parser: Parser, expr: Object):
+    if isinstance(expr, Expr):
+        if not expr.args:
+            return None
 
-    ast = parser.parse(iter(tokens))
-    ast.span = expr.span
-    return ast
+        tokens = []
+        for child in expr.args:
+            t = ParserToken(LIT, child)
+            if isinstance(child, Expr):
+                t.val = parse(parser, child)
+            elif isinstance(child, Object) and child.mem in parser.op_names:
+                t.key = child.mem
+            tokens.append(t)
+
+        ast = parser.parse(iter(tokens))
+        ast.span = expr.span
+        return ast
+
+    if isinstance(expr, Object):
+        return Expr(ExprToken.Expr, [expr], expr.span)

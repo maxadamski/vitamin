@@ -45,19 +45,19 @@ class ASTEmitter(VitaminCListener):
 
     def emitChunk(self, ctx: VitaminCParser.ChunkContext):
         args = [self.emitExpr(x) for x in ctx.expr()]
-        return Expr(Token.Block, args, span(ctx))
+        return Expr(ExprToken.Block, args, span(ctx))
 
     def emitBlock(self, ctx: VitaminCParser.BlockContext):
         return self.emitChunk(ctx.chunk())
 
     def emitQuote(self, ctx: VitaminCParser.QuoteContext):
         expr = self.emitBlock(ctx.block())
-        expr.head = Token.Quote
+        expr.head = ExprToken.Quote
         return expr
 
     def emitExpr(self, ctx: VitaminCParser.ExprContext):
         args = [self.emitPrimary(x) for x in ctx.primary()]
-        return Expr(Token.ListExpr, args, span(ctx))
+        return Expr(ExprToken.ListExpr, args, span(ctx))
 
     def emitPrimary(self, ctx: VitaminCParser.PrimaryContext):
         if ctx.constant():

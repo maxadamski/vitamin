@@ -10,7 +10,7 @@ def parse2(parser: Parser, tokens: List[Constant]):
     if not tokens: return ExprLeaf(None, '')
     new_tokens = []
     for token in tokens:
-        t = Token(LIT, token)
+        t = ParserToken(LIT, token)
         if token.mem in parser.op_names:
             t.key = token.mem
         new_tokens.append(t)

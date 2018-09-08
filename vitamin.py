@@ -3,7 +3,7 @@
 from vitamin.analyzer import *
 from vitamin.corelib import *
 from vitamin.parser_antlr import parse_file
-from vitamin.parser_expr import make_parser, parse
+from vitamin.parser_expr import make_parser, parse, ParserError
 from vitamin.reporting import *
 from vitamin.structure import *
 from vitamin.utils import topological_sort
@@ -55,6 +55,7 @@ def main(argv):
 
     ctx = Context()
     ctx.file = open(input_path)
+    ctx.file_name = input_path
     ctx.path = [path.dirname(input_path)]
     ctx.scope = Scope({})
     ctx.ast = ast
@@ -96,11 +97,12 @@ def main(argv):
         ctx.expr = ctx.ast.args[ctx.node_index]
 
         try:
+            ctx.expr_parser.ctx = ctx
             ctx.expr = ctx.ast.args[ctx.node_index] = parse(ctx.expr_parser, ctx.expr)
-        except SemError as e:
-            print(ctx.expr)
+        except ParserError as e:
             print(e)
-            return 1
+            ctx.node_index += 1
+            continue
 
         try:
             eval(ctx, ctx.expr)

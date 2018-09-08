@@ -119,7 +119,7 @@ class OpDir:
 
 
 @unique
-class Token(str, Enum):
+class ExprToken(str, Enum):
     ListExpr = 'ListExpr'
     Expr = 'Expr'
     Block = 'Block'
@@ -157,11 +157,11 @@ class Expr(Object):
         super().__init__(T_EXPR, mem, span=span, leaf=False, literal=False)
 
     @property
-    def head(self) -> Token:
+    def head(self) -> ExprToken:
         return self.mem['head']
 
     @head.setter
-    def head(self, value: Token):
+    def head(self, value: ExprToken):
         self.mem['head'] = value
 
     @property
@@ -288,7 +288,7 @@ def dump(obj: Object, level=0, index=0):
     elif isinstance(obj, PragmaExpr):
         name = Object(T_ATOM, obj.name, leaf=True, literal=True)
         args = [arg.val for arg in obj.args]
-        e = Expr(Token.Pragma, [name] + args, None)
+        e = Expr(ExprToken.Pragma, [name] + args, None)
         return dump(e, level=level, index=index)
 
     else:

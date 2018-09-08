@@ -1,5 +1,6 @@
-from typing import *
 from .structure import *
+
+from typing import *
 
 RED = "\x1B[31m"
 GRN = "\x1B[32m"
@@ -112,60 +113,120 @@ def err_bad_directive(main, node):
     report(main, node, hi=node.name.span)
 
 
-def err_template(ctx, expr, hi, header, description):
+def err_template(ctx, expr, hi, header, description, hints=None):
     code = reports(ctx.file, expr, hi=hi)
-    header = header.upper()
-    return f"-- {header}\n{description}\n{code}"
+    header = f"-- {header.upper()} "
+    file = f" [{ctx.file_name}:{expr.span.start.line}:{expr.span.start.char}]"
+    padding = "-" * (80 - len(header) - len(file))
+    result = f"{header}{padding}{file}\n\n{description}\n\n{code}"
+    if hints:
+        result += "\n"
+        for hint in hints:
+            fmt = '\n      '.join(hint.split('\n'))
+            result += f"hint: {fmt}\n"
+    return result
+
+
+def err_parser_null_unexpected_token(ctx: Context, t):
+    return err_template(
+        ctx, ctx.expr, t.val.span, "parser error",
+        f"expected a primary or prefix operator, but got {t.val.typ} '{t.val.mem}'")
+
+
+def err_parser_left_unexpected_token(ctx: Context, t):
+    return err_template(
+        ctx, ctx.expr, t.val.span, "parser error",
+        f"expected an infix or suffix operator, but got {t.val.typ} '{t.val.mem}'")
+
+
+def err_parser_null_bad_precedence(ctx: Context, t, last):
+    message = \
+        f"violated precedence contract: '{t.key}' cannot follow '{last.key}' in this context.\n" + \
+        f"check operator associativity and precedence relations to debug this error."
+    hints = [
+        f"a prefix operator of higher precedence precedes a prefix operator of lower precedence.\n" +
+        f"fix trivially by reversing the operator order",
+        f"the same non-associative prefix operator may be used in succession.\n" +
+        f"fix trivially by putting the subexpression in parentheses"
+    ]
+    return err_template(
+        ctx, ctx.expr, t.val.span, "parser error", message, hints=hints)
+
+
+def err_parser_left_bad_precedence(ctx: Context, t, last):
+    message = \
+        f"violated precedence contract: '{t.key}' cannot appear in this context.\n" + \
+        f"check operator associativity and precedence relations to debug this error."
+
+    hints = [
+        f"the same non-associative infix/suffix operator may be used in succession\n" +
+        f"fix trivially by putting the subexpression in parentheses"
+    ]
+    return err_template(
+        ctx, ctx.expr, t.val.span, "parser error", message, hints=hints)
+
+
+def err_parser_null_not_registered(ctx: Context, t):
+    return err_template(
+        ctx, ctx.expr, t.val.span, "parser error",
+        f"'{t.key}' can't be used as a prefix operator")
+
+
+def err_parser_left_not_registered(ctx: Context, t):
+    return err_template(
+        ctx, ctx.expr, t.val.span, "parser error",
+        f"'{t.key}' can't be used as a infix or suffix operator")
 
 
 def warn_duplicate_operatorgroup(ctx, hi: Object):
     return err_template(ctx, ctx.expr, hi.span, "overriding operator group",
-                        f"this is very dangerous and may cause compilation errors")
+        f"this is very dangerous and may cause compilation errors")
 
 
 def warn_unknown_operatorgroup(ctx, hi: Object):
     return err_template(ctx, ctx.expr, hi.span, "unknown operator group",
-                        f"adding operotor to an undefined operator group")
+        f"adding operotor to an undefined operator group")
 
 
 def err_unknown_pragma(ctx, hi: Object):
     return err_template(ctx, ctx.expr, hi.span, "unknown directive",
-                        f"this is not a known compiler directive")
+        f"this is not a known compiler directive")
 
 
 def err_unknown_symbol(ctx, hi: Object):
     return err_template(ctx, ctx.expr, hi.span, "unknown symbol",
-                        f"this is a reference to an undefined name")
+        f"this is a reference to an undefined name")
 
 
 def err_pragma_arg_type(ctx, hi: Object, exp_typ: Typ, got_typ: Typ):
     return err_template(ctx, ctx.expr, hi.span, "type mismatch",
-                        f"directive expects argument of type '{exp_typ}', but got '{got_typ}'")
+        f"directive expects argument of type '{exp_typ}', but got '{got_typ}'")
 
 
 def err_pragma_not_enough_args(ctx, exp_count: int, got_count: int):
     return err_template(ctx, ctx.expr, ctx.expr.span, "missing arguments",
-                        f"directive takes {exp_count} positional arguments, but got {got_count}")
+        f"directive takes {exp_count} positional arguments, but got {got_count}")
 
 
 def err_pragma_not_variadic(ctx):
     return err_template(ctx, ctx.expr, ctx.expr.span, "unexpected argument",
-                        "directive doesn't take variadic arguments")
+        "directive doesn't take variadic arguments")
 
 
 def err_pragma_bad_key_arg(ctx, hi):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
-                        f"directive doesn't take this keyword argument")
+        f"directive doesn't take this keyword argument")
 
 
 def err_pragma_dup_key_arg(ctx, hi):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
-                        f"keyword argument is duplicated")
+        f"keyword argument is duplicated")
 
 
 def err_pragma_key_before_pos(ctx, hi):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
-                        f"keyword arguments must be after positional arguments")
+        f"keyword arguments must be after positional arguments")
+
 
 def err_no_operators(ctx):
     return err_template(ctx, ctx.expr, ctx.expr.span, "no operators",
