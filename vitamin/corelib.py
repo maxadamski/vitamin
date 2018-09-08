@@ -1,10 +1,13 @@
-from os import path as path
-from typing import *
+"""
+This file contains definitions of built-in functions and directives
 
-from vitamin.parser_antlr import parse_file
-from vitamin.reporting import *
-from vitamin.structure import *
-from vitamin.analyzer import *
+They assume correct input, because if an error is encountered, they
+will not get called at all. (The exception being eval)
+
+todo: move 'eval' to another file, and call it in 'f_eval'
+"""
+
+from .analyzer import *
 
 
 def eval(ctx: Context, obj: Object):
@@ -17,6 +20,7 @@ def eval(ctx: Context, obj: Object):
         if head_sym is None:
             raise SemError(err_unknown_symbol(ctx, head))
         if not isinstance(head_sym, Lambda):
+            # todo: why?
             raise SemError("Cannot apply non-function")
 
         args: List[Object] = []
@@ -34,8 +38,6 @@ def eval(ctx: Context, obj: Object):
 
         return head_sym.mem(ctx, args_dict)
 
-        raise SemError(f"eval(Expr) not implemented")
-
     if isinstance(obj, Object):
 
         if obj.typ == T_ATOM:
@@ -49,14 +51,13 @@ def eval(ctx: Context, obj: Object):
         else:
             return obj
 
-        raise SemError(f"eval(Object) not implemented")
-
     if isinstance(obj, PragmaExpr):
         spec = ctx.pragmas.get(obj.name, None)
         if spec is None:
             raise SemError(err_unknown_pragma(ctx, obj))
         return call_pragma(ctx, obj, spec)
 
+    # todo: why?
     raise SemError(f"Cannot evluate object {obj}")
 
 
@@ -87,7 +88,7 @@ def f_add(ctx, args: Dict[str, Object]):
 def pragma_operator(ctx: Context, args: Dict[str, Object]):
     group, names = unpack_args(args, ['group', 'names'])
     if group.mem not in ctx.groups:
-        print(warn_unknown_operatorgroup(ctx, ctx.expr, group))
+        print(warn_pragma_operator_unknown_group(ctx, ctx.expr, group))
     for name in names.mem:
         obj = OpDir(group.mem, [name.mem])
         ctx.opdirs.append(obj)
@@ -96,9 +97,11 @@ def pragma_operator(ctx: Context, args: Dict[str, Object]):
 def pragma_operatorgroup(ctx: Context, args: Dict[str, Object]):
     name, kind, gt, lt = unpack_args(args, ['name', 'kind', 'gt', 'lt'])
     if name in ctx.groups:
-        print(warn_duplicate_operatorgroup(ctx, ctx.expr, name))
+        print(warn_pragma_operatorgroup_duplicate(ctx, ctx.expr, name))
     obj = OpGroupDir(name.mem, kind.mem, gt=gt.mem, lt=lt.mem)
     ctx.groups[name.mem] = obj
+
+# todo: think aboot how #load should work
 
 # def d_load(ctx, file, node, args, kwargs, varargs):
 #    file_path = args[0]

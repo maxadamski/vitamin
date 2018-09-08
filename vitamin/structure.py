@@ -1,13 +1,14 @@
 """
-Definitions of internally used structures and built-in constants
+This file contains the definitions of internally used structures
+and built-in constants, some of which should really be somewhere else
 """
 
-from .utils import class_name
-
-from typing import *
-from dataclasses import dataclass, field
 from enum import Enum, unique
-from decimal import Decimal
+from typing import *
+
+from dataclasses import dataclass, field
+
+from .utils import class_name
 
 OP_KINDS = ['xfx', 'yfx', 'xfy', 'fx', 'fy', 'xf', 'yf']
 

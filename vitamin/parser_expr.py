@@ -4,12 +4,9 @@ A simple expression parser in Pratt style.
 I wanted to implement Prolog's algorithm, but it was too hard to translate.
 """
 
-from .structure import Fixity, Associativity, Expr, Op, Object, ExprToken, C_NIL
 from .reporting import *
 
-from dataclasses import dataclass
-from typing import *
-
+LIT = 'Literal'
 EOF = 'EOF'
 
 
@@ -33,24 +30,22 @@ class ParserToken:
 
 @dataclass
 class Null:
-    # nud(parser: Parser, token: ParserToken, rbp: Int) -> AST
-    nud: Callable
+    # fun nud(parser: Parser, token: ParserToken, rbp: Int) -> AST
+    nud: Callable[['Parser', ParserToken, int], Expr]
     rbp: int
     nbp: int
 
 
 @dataclass
 class Left:
-    # led(parser: Parser, token: ParserToken, rbp: Int, left: AST) -> AST
-    led: Callable
+    # fun led(parser: Parser, token: ParserToken, rbp: Int, left: AST) -> AST
+    led: Callable[['Parser', ParserToken, int, Expr], Expr]
     lbp: int
     rbp: int
     nbp: int
 
 
-#
 # Generic Pratt style top-down parser
-#
 
 class Parser:
     op_names: List[str]
@@ -60,6 +55,10 @@ class Parser:
     history: List[ParserToken]
     token: ParserToken
     ctx: Context
+
+    @property
+    def last(self):
+        return self.history[-1]
 
     def __init__(self):
         self.null, self.left = {}, {}
@@ -81,14 +80,6 @@ class Parser:
         self.history.append(self.token)
         self.token = self.next()
         return self.token
-
-    @property
-    def last(self):
-        return self.history[-1]
-
-    # def expect(self, val):
-    #    if not self.token.val == val:
-    #        raise UnexpectedToken(f"expected {val}, got {self.token.val}")
 
     def parse_until(self, rbp):
         last = self.last
@@ -128,13 +119,13 @@ class Parser:
         return ast
 
     def add_left(self, key, led, lbp, rbp, nbp=None):
-        if not nbp: nbp = lbp
-        self.left[key] = Left(led, lbp, rbp, nbp)
+        self.left[key] = Left(led, lbp, rbp, nbp if nbp else lbp)
 
     def add_null(self, key, nud, rbp, nbp=None):
-        if not nbp: nbp = rbp
-        self.null[key] = Null(nud, rbp, nbp)
+        self.null[key] = Null(nud, rbp, nbp if nbp else rbp)
 
+
+# Operator led and nud implementation
 
 def null_error(p, t, rbp):
     raise UnexpectedToken(err_parser_null_not_registered(p.ctx, t))
@@ -144,7 +135,10 @@ def left_error(p, t, rbp, left):
     raise UnexpectedToken(err_parser_left_not_registered(p.ctx, t))
 
 
-# TODO: recalculate span for expr
+# TODO: recalculate (sum) span for expr
+# TODO: n-ary chaining operators like 'x > y > z'
+# TODO: left mixfix operators like 'x ? y : z'
+# TODO: null mixfix operators like 'if x then y else z'
 
 def literal(p, t: ParserToken, rbp):
     t.val.leaf = True
@@ -164,22 +158,16 @@ def prefix(p, t, rbp):
     return Expr(ExprToken.Expr, [t.val, p.parse_until(rbp)], span=t.val.span)
 
 
-#
+# def ternary(p, token, rbp, left):
+#    # _ ? _ : _
+#    a = p.parse_until(0)
+#    p.expect(':')
+#    p.token = p.next()
+#    b = p.parse_until(rbp)
+#    return ExprToken(ExprToken.Expr, [token.val, left, a, b])
+
+
 # Dynamic precedence parser
-#
-
-LIT = 'Literal'
-
-
-def ternary(p, token, rbp, left):
-    # _ ? _ : _
-    a = p.parse_until(0)
-    p.expect(':')
-    p.token = p.next()
-    b = p.parse_until(rbp)
-    raise ValueError()
-    # return ExprNode(token.val, left, a, b)
-
 
 def make_parser(ops: List[Op]):
     max_prec = max(op.prec for op in ops) if ops else 0
@@ -197,9 +185,9 @@ def make_parser(ops: List[Op]):
 
     for op in ops:
         prec = op.prec + offset
-        # if op.fix == 'y3x':
+        # if op.fix == 'y3x': # ternary left associative operator
         #    p.add_left(op.name, ternary, op.prec, op.prec)
-        # if op.kind == 'x3y':
+        # if op.kind == 'x3y': # ternary right associative operator
         #    p.add_left(op.name, ternary, op.prec, op.prec - 1)
         if op.fix == Fixity.INFIX and op.ass == Associativity.NONE:
             p.add_left(op.name, infix, prec, prec + 1, nbp=prec - 1)

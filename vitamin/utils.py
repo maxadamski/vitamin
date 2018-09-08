@@ -1,4 +1,6 @@
-from typing import *
+"""
+Useful stuff directly unrelated to Vitamin
+"""
 
 
 def topological_sort(graph: dict):

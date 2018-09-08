@@ -1,19 +1,23 @@
 """
+This file contains the compatibility layer between the Antlr grammar and Vitamin's AST
+
 The ASTEmitter is mostly redundant, as it only converts the Antlr AST to Vitamin's
-representation. It is important though, because when a custom parser will
-be written, it will output directly in Vitamin's AST, and no other code
-besides `parse_string/file` functions, will have to be changed.
+representation. When a custom parser is written, it will output directly in Vitamin's AST,
+and no other code besides `parse_string/file` functions, will have to be changed.
 """
 
-from .parser.VitaminCLexer import VitaminCLexer
-from .parser.VitaminCParser import VitaminCParser
-from .parser.VitaminCListener import VitaminCListener
-from .structure import *
+from decimal import Decimal
 
 from antlr4 import ParseTreeWalker, CommonTokenStream, FileStream, InputStream
 
+from .parser.VitaminCLexer import VitaminCLexer
+from .parser.VitaminCListener import VitaminCListener
+from .parser.VitaminCParser import VitaminCParser
+from .structure import *
+
 
 def span(ctx):
+    # TODO: what if expression ends in newlines
     if not ctx.stop: ctx.stop = ctx.start
     start = Loc(ctx.start.line, ctx.start.column + 1, ctx.start.start)
     end = Loc(ctx.stop.line, ctx.stop.column + 1, ctx.stop.stop)
@@ -101,7 +105,7 @@ class ASTEmitter(VitaminCListener):
     def emitPragma(self, ctx: VitaminCParser.PragmaContext):
         name = ctx.atom().getText()
         pragma = PragmaExpr(span(ctx), name, [])
-        #if ctx.pragmaCmd():
+        # if ctx.pragmaCmd():
         #    for arg in ctx.pragmaCmd().constant():
         #        val = self.emitConstant(arg.constant())
         #        arg = PragmaArg(span(arg), None, val)

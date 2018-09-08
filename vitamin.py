@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
-from vitamin.analyzer import *
+from os import path as path
+
 from vitamin.corelib import *
 from vitamin.parser_antlr import parse_file
 from vitamin.parser_expr import make_parser, parse, ParserError
-from vitamin.reporting import *
 from vitamin.structure import *
 from vitamin.utils import topological_sort
-
-import os.path as path
-import sys
 
 
 def operatorgroup_order(groups: Dict[str, OpGroupDir]) -> int:

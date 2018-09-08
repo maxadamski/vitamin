@@ -1,7 +1,8 @@
 import unittest
-from unittest import TestCase, main
-from vitamin.structure import Op, AST, ExprLeaf, ExprNode, Constant
+from unittest import TestCase
+
 from vitamin.parser_expr import *
+from vitamin.structure import AST, ExprLeaf, ExprNode, Constant
 
 char2tokens = lambda s: [Constant(None, x) for x in s]
 word2tokens = lambda s: [Constant(None, x) for x in s.split(' ')]

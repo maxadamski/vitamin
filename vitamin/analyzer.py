@@ -1,19 +1,27 @@
+"""
+This file contains functions checking if the semantics of an expression are valid.
+"""
+
 from .reporting import *
 from .structure import *
 
 
 def lambda_check_type(ctx: Context, args: Dict[str, Object], spec: Lambda):
-    #if not isinstance(val, typ):
+    # todo: actually do type checking
+    # if not isinstance(val, typ):
     #    raise SemError(err_pragma_arg_type(ctx, expr, arg, typ, type(val)))
     return True
 
 
 def pragma_parse_expr(ctx: Context, expr: PragmaExpr, spec: Lambda) -> Dict[str, Object]:
-    # check the number of positional arguments
-    # check if key_arg and var_arg is after pos_args
-    # check if key_arg is known
-    # check if pragma is variadic
-    # check if argument type matches
+    """
+    check the number of positional arguments
+    check if key_arg and var_arg is after pos_args
+    check if key_arg is known
+    check if pragma is variadic
+    check if argument type matches
+    """
+    # todo: generalize this to work on functions too (requires removing PragmaExpr, in lieu of Expr)
     args: Dict[str, Object] = {}
 
     if expr.argc < spec.arity:
@@ -48,5 +56,6 @@ def pragma_parse_expr(ctx: Context, expr: PragmaExpr, spec: Lambda) -> Dict[str,
 
 
 def call_pragma(ctx: Context, expr: PragmaExpr, spec: Lambda):
+    # todo: move this somewhere else
     args = pragma_parse_expr(ctx, expr, spec)
     return spec.mem(ctx, args)
