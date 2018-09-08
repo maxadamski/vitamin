@@ -74,26 +74,30 @@ fragment Newline : '\r'? '\n' '\r'? ;
 WS : Whitespace -> skip ;
 NL : Newline ;
 
+fragment NumberSign : [-+] ;
 fragment HexDigits : [0-9A-Fa-f][0-9A-Fa-f_]* ;
 fragment DecDigits : [0-9][0-9_]* ;
 fragment OctDigits : [0-7][0-7_]* ;
 fragment BinDigits : [01][01_]* ;
-fragment Sign : [-+] ;
+fragment DecFraction : '.' DecDigits ;
+fragment HexFraction : '.' HexFraction ;
+fragment DecExponent : [eE] NumberSign? DecDigits ;
+fragment HexExponent : [pP] NumberSign? HexDigits ;
 
-fragment RealLiteral
-    :      DecDigits ('.' DecDigits)? ([eE] Sign? DecDigits)?
-    | '0x' HexDigits ('.' HexDigits)? ([pP] Sign? HexDigits)?
+fragment FloatReal
+    :      DecDigits (DecFraction DecExponent? | DecExponent)
+    | '0x' HexDigits (HexFraction HexExponent? | HexExponent)
     ;
 
-fragment IntLiteral
+fragment IntReal
     :      DecDigits
     | '0x' HexDigits
     | '0o' OctDigits
     | '0b' BinDigits
     ;
 
-Real : RealLiteral [i]? ;
-Int : IntLiteral [i]? ;
+Real : FloatReal [i]? ;
+Int  : IntReal   [i]? ;
 
 fragment EscapedString : '"' ( '\\' . | ~["\n\r] )* '"' ;
 String : EscapedString ;
