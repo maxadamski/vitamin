@@ -16,7 +16,7 @@ def operatorgroup_order(groups: Dict[str, OpGroupDir]) -> int:
     Assigns a precedence to each group based on their relations.
     The precedence is an integer from range [1, inf).
 
-    returns: The highest precedence assigned
+    return_type: The highest precedence assigned
     """
     # TODO: Maybe check precedence relations without explicitly assigning precedence number
     graph = {name: [] for name in groups.keys()}
@@ -61,11 +61,14 @@ def main(argv):
     ctx.expr_parser = make_parser([])
 
     ctx.pragmas = {
-        'operatorcompile': Lambda(pragma_operatorcompile, []),
-        'operatorgroup': Lambda(pragma_operatorgroup,
+        'operatorcompile': Lambda(
+            'operatorcompile', pragma_operatorcompile, []),
+        'operatorgroup': Lambda(
+            'operatorgroup', pragma_operatorgroup,
             [('name', T_ATOM), ('kind', T_ATOM), ('gt', T_ATOM, C_NIL), ('lt', T_ATOM, C_NIL)]),
-        'operator': Lambda(pragma_operator,
-            [('group', T_ATOM), ('names', T_ATOM)], varargs=True),
+        'operator': Lambda(
+            'operator', pragma_operator,
+            [('group', T_ATOM), ('names', T_ATOM)], variadic=True),
     }
 
     G_NUMERIC = Typ('T', gen=['T'])
@@ -84,25 +87,24 @@ def main(argv):
         'IntLiteral': T_INT_LITERAL,
         'RealLiteral': T_REAL_LITERAL,
         '=': [
-            Lambda(f_assign, [('lhs', T_ATOM), ('rhs', G_ANY)], returns=G_ANY),
+            Lambda('=', f_assign, [('lhs', T_ATOM), ('rhs', G_ANY)], returns=G_ANY),
         ],
         '+': [
-            Lambda(f_add, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+            Lambda('+', f_add, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
         ],
         '*': [
-            Lambda(f_mul, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-            Lambda(f_mul, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+            Lambda('*', f_mul, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
         ],
         '-': [
-            Lambda(f_sub, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-            Lambda(f_neg, [('x', T_INT)], returns=T_INT)
+            Lambda('-', f_sub, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
+            Lambda('-', f_neg, [('x', T_INT)], returns=T_INT)
         ],
         'print': [
-            Lambda(f_print, [('value', T_INT)]),
+            Lambda('print', f_print, [('value', T_INT)]),
         ],
     }
 
-    # start interpreting file
+    # start interpreting file (practically still compile time)
     ctx.node_index = 0
     while ctx.node_index < len(ctx.ast.args):
         ctx.expr = ctx.ast.args[ctx.node_index]
@@ -115,10 +117,11 @@ def main(argv):
             ctx.node_index += 1
             continue
 
+        eval(ctx, ctx.expr)
         try:
-            eval(ctx, ctx.expr)
+            pass
         except SemError as e:
-            print(ctx.expr)
+            #print(ctx.expr)
             print(e)
             return 1
 

@@ -86,35 +86,30 @@ class ASTEmitter(VitaminCListener):
     # TODO: Revise the literal parsing functions
 
     def emitAtom(self, ctx: VitaminCParser.AtomContext):
-        return Object(T_ATOM, ctx.getText(), span=span(ctx))
+        return Obj(T_ATOM, ctx.getText(), span=span(ctx))
 
     def emitIntn(self, ctx: VitaminCParser.IntnContext):
         data = ctx.getText().lower()
-        return Object(T_INT_LITERAL, str2int(data), span=span(ctx))
+        return Obj(T_INT_LITERAL, str2int(data), span=span(ctx))
 
     def emitReal(self, ctx: VitaminCParser.RealContext):
         data = ctx.getText().lower()
         if data.startswith('0x'): raise NotImplemented()
-        return Object(T_REAL_LITERAL, Decimal(data), span=span(ctx))
+        return Obj(T_REAL_LITERAL, Decimal(data), span=span(ctx))
 
     def emitString(self, ctx: VitaminCParser.StringContext):
         data = ctx.getText()
         if not data.startswith('"'): raise NotImplemented()
-        return Object(T_STRING_LITERAL, data[1:-1], span=span(ctx))
+        return Obj(T_STRING_LITERAL, data[1:-1], span=span(ctx))
 
     def emitPragma(self, ctx: VitaminCParser.PragmaContext):
-        name = ctx.atom().getText()
-        pragma = PragmaExpr(span(ctx), name, [])
-        # if ctx.pragmaCmd():
-        #    for arg in ctx.pragmaCmd().constant():
-        #        val = self.emitConstant(arg.constant())
-        #        arg = PragmaArg(span(arg), None, val)
-        #        pragma.args.append(arg)
+        name = self.emitAtom(ctx.atom())
+        pragma = Expr(ExprToken.Pragma, [name], span(ctx))
         if ctx.pragmaFun():
             for arg in ctx.pragmaFun().pragmaArg():
                 key = self.emitAtom(arg.atom()) if arg.atom() else None
                 val = self.emitConstant(arg.constant())
-                arg = PragmaArg(span(arg), key, val)
+                arg = LambdaArg(span(arg), val, key=key)
                 pragma.args.append(arg)
         return pragma
 

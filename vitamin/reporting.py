@@ -181,64 +181,73 @@ def err_parser_left_not_registered(ctx: Context, t):
         f"'{t.key}' can't be used as a infix or suffix operator")
 
 
-def err_pragma_load_search_failed(ctx, hi: Object, file_path: str):
+def err_pragma_load_search_failed(ctx, hi: Obj, file_path: str):
     return err_template(ctx, ctx.expr, hi.span, "file error",
         f"file '{file_path}' could not be found")
 
 
-def err_pragma_load_file_does_not_exist(ctx, hi: Object, file_path: str):
+def err_pragma_load_file_does_not_exist(ctx, hi: Obj, file_path: str):
     return err_template(ctx, ctx.expr, hi.span, "file error",
         f"file '{file_path}' does not exist")
 
 
-def warn_pragma_operatorgroup_duplicate(ctx, hi: Object):
+def warn_pragma_operatorgroup_duplicate(ctx, hi: Obj):
     return err_template(ctx, ctx.expr, hi.span, "overriding operator group",
         f"this is very dangerous and may cause compilation errors")
 
 
-def warn_pragma_operator_unknown_group(ctx, hi: Object):
+def warn_pragma_operator_unknown_group(ctx, hi: Obj):
     return err_template(ctx, ctx.expr, hi.span, "unknown operator group",
         f"adding operator to an undefined operator group")
 
 
-def err_unknown_pragma(ctx, hi: Object):
+def err_unknown_pragma(ctx, hi: Obj):
     return err_template(ctx, ctx.expr, hi.span, "unknown directive",
         f"this is not a known compiler directive")
 
 
-def err_unknown_symbol(ctx, hi: Object):
+def err_unknown_symbol(ctx, hi: Obj):
     return err_template(ctx, ctx.expr, hi.span, "unknown symbol",
         f"this is a reference to an undefined name")
 
 
-def err_pragma_arg_type(ctx, hi: Object, exp_typ: Typ, got_typ: Typ):
+def err_lambda__arg_type(ctx, hi: Obj, exp_typ: Typ, got_typ: Typ):
     return err_template(ctx, ctx.expr, hi.span, "type mismatch",
-        f"directive expects argument of type '{exp_typ}', but got '{got_typ}'")
+        f"lambda expects argument of type '{exp_typ}', but got '{got_typ}'")
 
 
-def err_pragma_not_enough_args(ctx, exp_count: int, got_count: int):
-    return err_template(ctx, ctx.expr, ctx.expr.span, "missing arguments",
-        f"directive takes {exp_count} positional arguments, but got {got_count}")
+def err_lambda__pos_count_mismatch(ctx, got_count: int, exp_count: int):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "signature mismatch",
+        f"lambda takes {exp_count} positional arguments, but got {got_count}")
 
 
-def err_pragma_not_variadic(ctx):
-    return err_template(ctx, ctx.expr, ctx.expr.span, "unexpected argument",
-        "directive doesn't take variadic arguments")
+def err_lambda__key_count_mismatch(ctx, got_count: int, exp_count: int):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "signature mismatch",
+        f"lambda takes {exp_count} keyword arguments, but got {got_count}")
 
 
-def err_pragma_bad_key_arg(ctx, hi):
+def err_lambda__not_variadic(ctx, hi):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
-        f"directive doesn't take this keyword argument")
+        "lambda doesn't take variadic arguments")
 
 
-def err_pragma_dup_key_arg(ctx, hi):
+def err_lambda__unknown_keyword(ctx, hi, spec):
+    keys = ', '.join(spec.keywords)
+    return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
+        f"lambda doesn't take this keyword argument",
+        hints=[f"the following keywords are valid: {keys}",
+               f"original signature '{spec}'"])
+
+
+def err_lambda__duplicate_keyword(ctx, hi):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
         f"keyword argument is duplicated")
 
 
-def err_pragma_key_before_pos(ctx, hi):
+def err_lambda__argument_order(ctx, hi, spec):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
-        f"keyword arguments must be after positional arguments")
+        f"keyword arguments must be placed after positional arguments",
+        hints=[f"original signature signature '{spec}'"])
 
 
 def err_no_operators(ctx):

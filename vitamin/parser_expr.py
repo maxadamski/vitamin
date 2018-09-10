@@ -25,7 +25,7 @@ class BadPrecedence(ParserError):
 @dataclass
 class ParserToken:
     key: str
-    val: Object
+    val: Obj
 
 
 @dataclass
@@ -81,7 +81,7 @@ class Parser:
         self.token = self.next()
         return self.token
 
-    def parse_until(self, rbp):
+    def parse_until(self, rbp) -> Expr:
         last = self.last
         t = self.token
         self.advance()
@@ -145,17 +145,22 @@ def literal(p, t: ParserToken, rbp):
     return t.val
 
 
+def prefix(p, t: ParserToken, rbp):
+    rhs = p.parse_until(rbp)
+    args = [t.val, LambdaArg(rhs.span, rhs)]
+    return Expr(ExprToken.Call, args, span=t.val.span)
+
+
 def infix(p, t, rbp, left):
-    return Expr(ExprToken.Expr, [t.val, left, p.parse_until(rbp)], span=t.val.span)
+    lhs, rhs = left, p.parse_until(rbp)
+    args = [t.val, LambdaArg(lhs.span, lhs), LambdaArg(rhs.span, rhs)]
+    return Expr(ExprToken.Call, args, span=t.val.span)
 
 
 def suffix(p, t, rbp, left):
     t.val.value += '`'
-    return Expr(ExprToken.Expr, [t.val, left], span=t.val.span)
-
-
-def prefix(p, t, rbp):
-    return Expr(ExprToken.Expr, [t.val, p.parse_until(rbp)], span=t.val.span)
+    args = [t.val, LambdaArg(left.span, left)]
+    return Expr(ExprToken.Call, args, span=t.val.span)
 
 
 # def ternary(p, token, rbp, left):
@@ -205,8 +210,10 @@ def make_parser(ops: List[Op]):
     return p
 
 
-def parse(parser: Parser, expr: Object):
+def parse(parser: Parser, expr: Obj):
     if isinstance(expr, Expr):
+        if expr.head == ExprToken.Pragma:
+            return expr
         if not expr.args:
             return None
 
@@ -215,7 +222,7 @@ def parse(parser: Parser, expr: Object):
             t = ParserToken(LIT, child)
             if isinstance(child, Expr):
                 t.val = parse(parser, child)
-            elif isinstance(child, Object) and child.mem in parser.op_names:
+            elif isinstance(child, Obj) and child.mem in parser.op_names:
                 t.key = child.mem
             tokens.append(t)
 
@@ -223,5 +230,5 @@ def parse(parser: Parser, expr: Object):
         ast.span = expr.span
         return ast
 
-    if isinstance(expr, Object):
+    if isinstance(expr, Obj):
         return Expr(ExprToken.Expr, [expr], expr.span)

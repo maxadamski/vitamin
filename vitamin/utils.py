@@ -16,7 +16,7 @@ def topological_sort(graph: dict):
 
         Ex. {'A': ['B', 'C'], 'B': [], 'C': ['B']}
 
-    returns:
+    return_type:
         List of nodes in topological order
     """
     status = {node: '' for node in graph}

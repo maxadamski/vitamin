@@ -6,56 +6,59 @@ from .reporting import *
 from .structure import *
 
 
-def lambda_check_type(ctx: Context, args: Dict[str, Object], spec: Lambda):
+def process_lambda_type(ctx: Context, spec: Lambda, name: str, args: Dict[str, Obj]):
     # todo: actually do type checking
-    # if not isinstance(val, typ):
-    #    raise SemError(err_pragma_arg_type(ctx, expr, arg, typ, type(val)))
     return True
 
 
-def pragma_parse_expr(ctx: Context, expr: PragmaExpr, spec: Lambda) -> Dict[str, Object]:
+def process_lambda_args(ctx: Context, spec: Lambda, name: str, args: List[LambdaArg]) -> Dict[str, Obj]:
     """
-    check the number of positional arguments
-    check if key_arg and var_arg is after pos_args
-    check if key_arg is known
-    check if pragma is variadic
-    check if argument type matches
+    Type checking needs to be done separately!
     """
-    # todo: generalize this to work on functions too (requires removing PragmaExpr, in lieu of Expr)
-    args: Dict[str, Object] = {}
+    res: Dict[str, Obj] = {}
 
-    if expr.argc < spec.arity:
-        raise SemError(err_pragma_not_enough_args(ctx, spec.arity, expr.argc))
+    P, K = spec.pos_count, spec.key_count
+    p, k, v = 0, 0, 0
 
-    if expr.argc > spec.fullarity and not spec.varargs:
-        raise SemError(err_pragma_not_variadic(ctx))
+    if spec.variadic is not None:
+        # todo: use a typed array
+        res[spec.variadic] = Obj(T_ARRAY, [])
 
-    if spec.varargs:
-        args[spec.varkey] = Object(T_ARRAY, [], literal=True)
+    for i, arg in enumerate(args):
+        if p < P:
+            # first parse only positional arguments
+            if arg.is_keyword:
+                raise SemError(err_lambda__argument_order(ctx, arg, spec))
+            # no need to check bounds as p < P <= N
+            res[spec.keywords[p]] = arg.val
+            p += 1
 
-    for i, arg in enumerate(expr.args):
-        val = arg.val
-        if arg.key:
+        elif arg.is_keyword:
+            # parse keyword arguments
             key = arg.key.mem
             if key not in spec.keywords:
-                raise SemError(err_pragma_bad_key_arg(ctx, arg))
-            if key in args:
-                raise SemError(err_pragma_dup_key_arg(ctx, arg))
-            args[key] = val
-        elif spec.varargs and i >= spec.arity - 1:
-            args[spec.varkey].mem.append(val)
+                raise SemError(err_lambda__unknown_keyword(ctx, arg, spec))
+            if key in res:
+                raise SemError(err_lambda__duplicate_keyword(ctx, arg))
+            res[key] = arg.val
+            k += 1
+
         else:
-            args[spec.keys[i]] = val
+            # parse variadic arguments
+            if spec.variadic is None:
+                raise SemError(err_lambda__not_variadic(ctx, arg))
+            res[spec.variadic].mem.append(arg.val)
+            v += 1
 
-    for key, obj in spec.default.items():
-        if key not in args:
-            args[key] = obj
+    if not p == P:
+        raise SemError(err_lambda__pos_count_mismatch(ctx, p, P))
 
-    lambda_check_type(ctx, args, spec)
-    return args
+    if not 0 <= k <= K:
+        raise SemError(err_lambda__key_count_mismatch(ctx, k, K))
 
+    # now insert default arguments
+    for param in spec.param:
+        if param.key not in res:
+            res[param.key] = param.val
 
-def call_pragma(ctx: Context, expr: PragmaExpr, spec: Lambda):
-    # todo: move this somewhere else
-    args = pragma_parse_expr(ctx, expr, spec)
-    return spec.mem(ctx, args)
+    return res
