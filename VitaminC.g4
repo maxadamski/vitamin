@@ -44,11 +44,16 @@ quote : 'quote' block ;
 expr : primary+ ;
 
 primary
-    : constant
+    : call
+    | constant
     | quote
     | pragma
     | '(' expr ')'
     ;
+
+// maybe combine call and pragmaFun
+callArg : (atom COLON)? expr ;
+call : atom '(' callArg? (',' callArg)* ')' ;
 
 pragma : '#' atom pragmaFun? ;
 pragmaFun : '(' pragmaArg (',' pragmaArg)* ')' ;

@@ -100,7 +100,7 @@ def main(argv):
             Lambda('-', f_neg, [('x', T_INT)], returns=T_INT)
         ],
         'print': [
-            Lambda('print', f_print, [('value', T_INT)]),
+            Lambda('print', f_print, [('values', T_INT)], variadic=True),
         ],
     }
 
@@ -117,8 +117,8 @@ def main(argv):
             ctx.node_index += 1
             continue
 
-        eval(ctx, ctx.expr)
         try:
+            eval(ctx, ctx.expr)
             pass
         except SemError as e:
             #print(ctx.expr)

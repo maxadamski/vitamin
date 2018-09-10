@@ -72,6 +72,8 @@ class ASTEmitter(VitaminCListener):
             return self.emitQuote(ctx.quote())
         elif ctx.expr():
             return self.emitExpr(ctx.expr())
+        elif ctx.call():
+            return self.emitCall(ctx.call())
 
     def emitConstant(self, ctx: VitaminCParser.ConstantContext):
         if ctx.atom():
@@ -102,16 +104,25 @@ class ASTEmitter(VitaminCListener):
         if not data.startswith('"'): raise NotImplemented()
         return Obj(T_STRING_LITERAL, data[1:-1], span=span(ctx))
 
+    def emitCall(self, ctx: VitaminCParser.CallContext):
+        name = self.emitAtom(ctx.atom())
+        expr = Expr(ExprToken.Call, [name], span(ctx))
+        for arg in ctx.callArg():
+            key = self.emitAtom(arg.atom()) if arg.atom() else None
+            val = self.emitExpr(arg.expr())
+            expr.args.append(LambdaArg(span(arg), val, key=key))
+        return expr
+
     def emitPragma(self, ctx: VitaminCParser.PragmaContext):
         name = self.emitAtom(ctx.atom())
-        pragma = Expr(ExprToken.Pragma, [name], span(ctx))
+        expr = Expr(ExprToken.Pragma, [name], span(ctx))
         if ctx.pragmaFun():
             for arg in ctx.pragmaFun().pragmaArg():
                 key = self.emitAtom(arg.atom()) if arg.atom() else None
                 val = self.emitConstant(arg.constant())
                 arg = LambdaArg(span(arg), val, key=key)
-                pragma.args.append(arg)
-        return pragma
+                expr.args.append(arg)
+        return expr
 
 
 def parse_stream(input_stream):

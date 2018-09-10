@@ -62,6 +62,24 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by VitaminCParser#callArg.
+    def enterCallArg(self, ctx:VitaminCParser.CallArgContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#callArg.
+    def exitCallArg(self, ctx:VitaminCParser.CallArgContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#call.
+    def enterCall(self, ctx:VitaminCParser.CallContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#call.
+    def exitCall(self, ctx:VitaminCParser.CallContext):
+        pass
+
+
     # Enter a parse tree produced by VitaminCParser#pragma.
     def enterPragma(self, ctx:VitaminCParser.PragmaContext):
         pass

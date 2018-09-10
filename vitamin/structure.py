@@ -23,6 +23,10 @@ class SemError(ValueError):
     pass
 
 
+class ParserError(Exception):
+    pass
+
+
 @dataclass
 class Typ:
     typ: TypEnum
@@ -133,6 +137,12 @@ class ExprToken(str, Enum):
     Pragma = 'Pragma'
     Call = 'Call'
 
+    def __str__(self):
+        return self.value
+
+    def __repr__(self):
+        return '<ExprToken>'
+
 
 class Obj:
     typ: Typ
@@ -148,10 +158,11 @@ class Obj:
         self.literal = literal
 
     def __str__(self):
-        return dump(self)
+        return sexpr(self)
 
+    def __repr__(self):
+        return f"<<{self.typ}>>"
 
-LambdaArg = Union[Tuple[str, Typ], Tuple[str, Typ, Obj]]
 
 C_TRUE = Obj(T_BOOL, 1)
 C_FALSE = Obj(T_BOOL, 0)
@@ -184,17 +195,6 @@ class Expr(Obj):
         typ = class_name(self)
 
 
-def spec_to_typ(spec: List[LambdaArg], ret: TypEnum):
-    typ, keywords, default = [], {}, {}
-    for arg in spec:
-        keywords[arg[0]] = arg[1]
-        typ.append(arg[1])
-        if len(arg) == 3:
-            default[arg[0]] = arg[2]
-    typ.append(ret)
-    return typ, keywords, default
-
-
 @dataclass
 class LambdaParam:
     index: int
@@ -221,7 +221,7 @@ class LambdaParam:
 
 @dataclass
 class LambdaArg(Obj):
-    # TODO: LambdaArg is really a tuple!
+    # TODO: LambdaArg is really a named tuple!
     val: Obj
     key: Optional[Obj]
 
@@ -281,9 +281,6 @@ class Lambda(Obj):
                 self.pos_count += 1
             self.param.append(param)
             self.index[key] = param
-
-    def __str__(self):
-        return self.name + '(' + ', '.join(map(str, self.param)) + ')'
 
 
 @dataclass
@@ -346,3 +343,29 @@ def dump(obj: Obj, level=0, index=0):
             return f"{pad}{typ} {obj.mem} :: {obj.typ}"
         else:
             return f"{pad}{typ}\n{pad}  mem: {obj.mem}"
+
+
+def paren(string: str):
+    return '(' + string + ')'
+
+
+def sexpr(obj: Obj):
+    mem = obj.mem
+
+    if isinstance(obj, Lambda):
+        return obj.name + '(' + ', '.join(map(str, obj.param)) + ')'
+    elif isinstance(obj, LambdaArg):
+        key = str(obj.key.mem) if obj.key else None
+        val = str(obj.val.mem)
+        if key is None: return val
+        return f"{key}: {val}"
+    elif obj.typ == T_EXPR:
+        head = str(obj.head).split('.')[-1]
+        args = map(str, obj.args)
+        return paren(', '.join([head, *args]))
+    elif isinstance(mem, dict):
+        return paren(', '.join(f"{k}: {v}" for k, v in mem.items()))
+    elif isinstance(mem, list):
+        return paren(', '.join(map(str, mem)) + ')')
+    else:
+        return str(mem)

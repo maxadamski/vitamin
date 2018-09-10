@@ -12,6 +12,7 @@ from .analyzer import *
 
 
 def eval(ctx: Context, obj: Obj):
+    # todo: still need to check type of each arg (Tuple<Atom?, Obj>)
     head_sym = None
 
     if isinstance(obj, Expr) and obj.head == ExprToken.Pragma:
@@ -19,7 +20,6 @@ def eval(ctx: Context, obj: Obj):
         spec = ctx.pragmas.get(head.mem, None)
         if spec is None:
             raise SemError(err_unknown_pragma(ctx, obj))
-        # todo: still need to check type of each arg (Tuple<Atom?, Obj>)
         args = process_lambda_args(ctx, spec, head.mem, args)
         return spec.mem(ctx, args)
 
@@ -69,9 +69,8 @@ def f_assign(ctx, args: Dict[str, Obj]):
 
 
 def f_print(ctx, args: Dict[str, Obj]):
-    arg, = unpack_args(args, ['value'])
-    res = eval(ctx, arg)
-    print(res.mem)
+    values, = unpack_args(args, ['values'])
+    print(' '.join(str(eval(ctx, value).mem) for value in values.mem))
 
 
 def f_mul(ctx, args: Dict[str, Obj]):

@@ -5,13 +5,10 @@ I wanted to implement Prolog's algorithm, but it was too hard to translate.
 """
 
 from .reporting import *
+from .structure import ParserError
 
 LIT = 'Literal'
 EOF = 'EOF'
-
-
-class ParserError(Exception):
-    pass
 
 
 class UnexpectedToken(ParserError):
@@ -211,8 +208,16 @@ def make_parser(ops: List[Op]):
 
 
 def parse(parser: Parser, expr: Obj):
+    if isinstance(expr, LambdaArg):
+        expr.val = parse(parser, expr.val)
+        return expr
+
     if isinstance(expr, Expr):
         if expr.head == ExprToken.Pragma:
+            return expr
+        if expr.head == ExprToken.Call:
+            for i, arg in enumerate(expr.args[1:]):
+                expr.args[i+1] = parse(parser, arg)
             return expr
         if not expr.args:
             return None
