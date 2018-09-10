@@ -68,7 +68,7 @@ def main(argv):
             [('name', T_ATOM), ('kind', T_ATOM), ('gt', T_ATOM, C_NIL), ('lt', T_ATOM, C_NIL)]),
         'operator': Lambda(
             'operator', pragma_operator,
-            [('group', T_ATOM), ('names', T_ATOM)], variadic=True),
+            [('group', T_ATOM), ('names', T_ATOM)], variadic='names'),
     }
 
     G_NUMERIC = Typ('T', gen=['T'])
@@ -83,6 +83,7 @@ def main(argv):
         'Atom': T_ATOM,
         'Any': T_ANY,
         'Int': T_INT,
+        'String': T_STRING,
         'StringLiteral': T_STRING_LITERAL,
         'IntLiteral': T_INT_LITERAL,
         'RealLiteral': T_REAL_LITERAL,
@@ -99,8 +100,20 @@ def main(argv):
             Lambda('-', f_sub, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
             Lambda('-', f_neg, [('x', T_INT)], returns=T_INT)
         ],
+        '==': [
+            Lambda('==', f_equals, [('lhs', T_INT), ('rhs', T_INT)], returns=T_BOOL),
+        ],
+        '!': [
+            Lambda('!', f_not, [('value', T_BOOL)], returns=T_BOOL)
+        ],
+        '>': [
+            Lambda('>', f_gt, [('lhs', T_INT), ('rhs', T_INT)], returns=T_BOOL),
+        ],
         'print': [
-            Lambda('print', f_print, [('values', T_INT)], variadic=True),
+            Lambda('print', f_print,
+                [('values', T_STRING),
+                 ('sep', T_STRING, Obj(T_STRING, ' ')),
+                 ('end', T_STRING, Obj(T_STRING, '\n'))], variadic='values'),
         ],
     }
 

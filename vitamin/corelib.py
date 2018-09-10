@@ -69,8 +69,10 @@ def f_assign(ctx, args: Dict[str, Obj]):
 
 
 def f_print(ctx, args: Dict[str, Obj]):
-    values, = unpack_args(args, ['values'])
-    print(' '.join(str(eval(ctx, value).mem) for value in values.mem))
+    values, sep, end = unpack_args(args, ['values', 'sep', 'end'])
+    values = [eval(ctx, value) for value in values.mem]
+    result = sep.mem.join(str(value.mem) for value in values)
+    print(result, end=end.mem)
 
 
 def f_mul(ctx, args: Dict[str, Obj]):
@@ -91,6 +93,21 @@ def f_sub(ctx, args: Dict[str, Obj]):
 def f_neg(ctx, args: Dict[str, Obj]):
     x, = unpack_args(args, ['x'])
     return Obj(T_INT, -eval(ctx, x).mem)
+
+
+def f_equals(ctx, args: Dict[str, Obj]):
+    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
+    return C_TRUE if lhs.mem == rhs.mem else C_FALSE
+
+
+def f_gt(ctx, args: Dict[str, Obj]):
+    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
+    return C_TRUE if lhs.mem > rhs.mem else C_FALSE
+
+
+def f_not(ctx, args: Dict[str, Obj]):
+    value = unpack_args(args, ['value'])
+    return C_TRUE if value == C_FALSE else C_FALSE
 
 
 def pragma_operator(ctx: Context, args: Dict[str, Obj]):

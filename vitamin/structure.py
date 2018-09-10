@@ -46,6 +46,7 @@ T_NOTHING = Typ('Nothing')
 T_VOID = Typ('()')
 T_ATOM = Typ('Atom')
 T_EXPR = Typ('Expr')
+T_STRING = Typ('String')
 T_STRING_LITERAL = Typ('StringLiteral')
 T_INT_LITERAL = Typ('IntLiteral')
 T_REAL_LITERAL = Typ('RealLiteral')
@@ -164,8 +165,8 @@ class Obj:
         return f"<<{self.typ}>>"
 
 
-C_TRUE = Obj(T_BOOL, 1)
-C_FALSE = Obj(T_BOOL, 0)
+C_TRUE = Obj(T_BOOL, 'true')
+C_FALSE = Obj(T_BOOL, 'false')
 C_NIL = Obj(T_NOTHING, None)
 
 
@@ -255,8 +256,8 @@ class Lambda(Obj):
         return list(self.index.keys())
 
     def __init__(
-            self, name, mem, parameters: List[LambdaArg],
-            returns: Typ = T_VOID, variadic=False):
+            self, name, mem, parameters: List[Union[Tuple[str, Typ], Tuple[str, Typ, Obj]]],
+            returns: Typ = T_VOID, variadic=None):
         super().__init__(T_NOTHING, mem)
 
         self.name = name
@@ -264,17 +265,16 @@ class Lambda(Obj):
         self.param, self.index = [], {}
         self.return_type = returns
         self.arity = len(parameters)
-        self.variadic = None
+        self.variadic = variadic
         self.pragma = False
 
         for i, p in enumerate(parameters):
             key, typ, val = p[0], p[1], None
             if len(p) > 2: val = p[2]
             param = LambdaParam(i, key, typ, val)
-            if variadic and i == self.arity - 1:
+            if key is not None and key == variadic:
                 param.var = True
                 param.val = Obj(T_ARRAY, [])
-                self.variadic = key
             elif param.is_keyword:
                 self.key_count += 1
             else:
@@ -356,7 +356,7 @@ def sexpr(obj: Obj):
         return obj.name + '(' + ', '.join(map(str, obj.param)) + ')'
     elif isinstance(obj, LambdaArg):
         key = str(obj.key.mem) if obj.key else None
-        val = str(obj.val.mem)
+        val = sexpr(obj.val)
         if key is None: return val
         return f"{key}: {val}"
     elif obj.typ == T_EXPR:
@@ -366,6 +366,8 @@ def sexpr(obj: Obj):
     elif isinstance(mem, dict):
         return paren(', '.join(f"{k}: {v}" for k, v in mem.items()))
     elif isinstance(mem, list):
-        return paren(', '.join(map(str, mem)) + ')')
+        return paren(', '.join(map(str, mem)))
+    elif isinstance(mem, str):
+        return f'"{mem}"'
     else:
         return str(mem)

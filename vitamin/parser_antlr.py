@@ -102,7 +102,8 @@ class ASTEmitter(VitaminCListener):
     def emitString(self, ctx: VitaminCParser.StringContext):
         data = ctx.getText()
         if not data.startswith('"'): raise NotImplemented()
-        return Obj(T_STRING_LITERAL, data[1:-1], span=span(ctx))
+        data = data[1:-1].encode('utf-8').decode('unicode_escape')
+        return Obj(T_STRING_LITERAL, data, span=span(ctx))
 
     def emitCall(self, ctx: VitaminCParser.CallContext):
         name = self.emitAtom(ctx.atom())
