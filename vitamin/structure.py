@@ -43,6 +43,7 @@ class Typ:
 
 T_ANY = Typ('Any')
 T_NOTHING = Typ('Nothing')
+T_TYPE = Typ('Type')
 T_VOID = Typ('()')
 T_ATOM = Typ('Atom')
 T_EXPR = Typ('Expr')
@@ -131,10 +132,9 @@ class OpDir:
 
 @unique
 class ExprToken(str, Enum):
-    ListExpr = 'ListExpr'
-    Expr = 'Expr'
+    Unparsed = 'Unparsed'
+    Literal = 'Literal'
     Block = 'Block'
-    Quote = 'Quote'
     Pragma = 'Pragma'
     Call = 'Call'
 
@@ -151,12 +151,14 @@ class Obj:
     span: Span
     leaf: bool
     literal: bool
+    constant: bool
 
-    def __init__(self, typ, mem, span=None, leaf=True, literal=False):
+    def __init__(self, typ, mem, span=None, leaf=True, literal=False, constant=False):
         self.typ, self.mem = typ, mem
         self.span = span
         self.leaf = leaf
         self.literal = literal
+        self.constant = constant
 
     def __str__(self):
         return sexpr(self)
@@ -165,9 +167,10 @@ class Obj:
         return f"<<{self.typ}>>"
 
 
-C_TRUE = Obj(T_BOOL, 'true')
-C_FALSE = Obj(T_BOOL, 'false')
-C_NIL = Obj(T_NOTHING, None)
+C_TRUE = Obj(T_BOOL, 'true', constant=True)
+C_FALSE = Obj(T_BOOL, 'false', constant=True)
+C_NIL = Obj(T_NOTHING, None, constant=True)
+C_VOID = Obj(T_VOID, '()', constant=True)
 
 
 class Expr(Obj):
@@ -196,17 +199,15 @@ class Expr(Obj):
         typ = class_name(self)
 
 
+LambdaParamTuple = Union[Tuple[str, Typ], Tuple[str, Typ, Obj]]
+
+
 @dataclass
 class LambdaParam:
     index: int
     key: str
     typ: Typ
     val: Optional[Obj] = None
-    var: bool = False
-
-    @property
-    def is_variadic(self):
-        return self.var
 
     @property
     def is_keyword(self):
@@ -237,7 +238,7 @@ class LambdaArg(Obj):
 
 @dataclass
 class Lambda(Obj):
-    mem: Callable
+    mem: Union[Callable, Expr]
 
     name: str
     param: List[LambdaParam]
@@ -256,7 +257,7 @@ class Lambda(Obj):
         return list(self.index.keys())
 
     def __init__(
-            self, name, mem, parameters: List[Union[Tuple[str, Typ], Tuple[str, Typ, Obj]]],
+            self, name, mem, parameters: List[LambdaParamTuple],
             returns: Typ = T_VOID, variadic=None):
         super().__init__(T_NOTHING, mem)
 
@@ -273,7 +274,6 @@ class Lambda(Obj):
             if len(p) > 2: val = p[2]
             param = LambdaParam(i, key, typ, val)
             if key is not None and key == variadic:
-                param.var = True
                 param.val = Obj(T_ARRAY, [])
             elif param.is_keyword:
                 self.key_count += 1
@@ -285,8 +285,33 @@ class Lambda(Obj):
 
 @dataclass
 class Scope:
-    symbols: Dict[str, Obj]
-    parent: Optional = None  # optional scope
+    symbols: Dict[str, List[Obj]]
+    parent: Optional['Scope'] = None  # optional scope
+
+    def get_sym_next(self, key) -> Optional[Obj]:
+        return next(self.get_sym(key), None)
+
+    def get_sym_map(self, key: Callable[[Obj], bool]) -> Optional[Obj]:
+        while True:
+            symbol = self.get_sym_next(key)
+            if symbol is None: return None
+            res = key
+            if key(symbol): return symbol
+
+    def get_sym(self, key) -> Iterator[Obj]:
+        scope = self
+        while True:
+            if key in scope.symbols:
+                for obj in scope.symbols[key]:
+                    yield obj
+            if scope.parent is None:
+                break
+            scope = scope.parent
+
+    def add_sym(self, key, obj):
+        if key not in self.symbols:
+            self.symbols[key] = []
+        self.symbols[key].append(obj)
 
 
 @dataclass
@@ -299,9 +324,25 @@ class Context:
     path: List[str] = None
     file: Any = None
     node: Expr = None
-    expr: Expr = None
+    exprs: List[Expr] = field(default_factory=list)
     ast: Expr = None
     node_index: int = 0
+
+    @property
+    def expr(self) -> Expr:
+        return self.exprs[-1]
+
+    def push_expr(self, expr):
+        self.exprs.append(expr)
+
+    def pop_expr(self) -> Expr:
+        return self.exprs.pop()
+
+    def push_scope(self):
+        self.scope = Scope({}, self.scope)
+
+    def pop_scope(self):
+        self.scope = self.scope.parent
 
 
 def unpack_args(args: Dict[str, Obj], names: Iterator[str]) -> Iterator[Obj]:
@@ -322,7 +363,7 @@ def dump(obj: Obj, level=0, index=0):
         args = ""
         for i, arg in enumerate(obj.args):
             args += f"\n"
-            if isinstance(arg, Expr) or isinstance(arg, PragmaExpr):
+            if isinstance(arg, Expr):
                 args += dump(arg, level=level + 2, index=i)
             else:
                 args += f"{pad}    [{i}] {dump(arg)}"
@@ -331,12 +372,6 @@ def dump(obj: Obj, level=0, index=0):
         res += f"{pad}  head: {head}\n"
         res += f"{pad}  args: {args}\n"
         return res
-
-    elif isinstance(obj, PragmaExpr):
-        name = Obj(T_ATOM, obj.name, leaf=True, literal=True)
-        args = [arg.val for arg in obj.args]
-        e = Expr(ExprToken.Pragma, [name] + args, None)
-        return dump(e, level=level, index=index)
 
     else:
         if obj.leaf:
@@ -352,21 +387,23 @@ def paren(string: str):
 def sexpr(obj: Obj):
     mem = obj.mem
 
-    if isinstance(obj, Lambda):
+    if isinstance(obj, Obj) and obj.typ == T_ATOM:
+        return obj.mem
+    elif isinstance(obj, Lambda):
         return obj.name + '(' + ', '.join(map(str, obj.param)) + ')'
     elif isinstance(obj, LambdaArg):
         key = str(obj.key.mem) if obj.key else None
         val = sexpr(obj.val)
         if key is None: return val
         return f"{key}: {val}"
-    elif obj.typ == T_EXPR:
-        head = str(obj.head).split('.')[-1]
-        args = map(str, obj.args)
-        return paren(', '.join([head, *args]))
+    elif isinstance(obj, Expr):
+        #head = str(obj.head).split('.')[-1]
+        args = list(map(str, obj.args))
+        return paren(', '.join(args))
     elif isinstance(mem, dict):
-        return paren(', '.join(f"{k}: {v}" for k, v in mem.items()))
+        return '[' + ', '.join(f"{k}: {v}" for k, v in mem.items()) + ']'
     elif isinstance(mem, list):
-        return paren(', '.join(map(str, mem)))
+        return '[' + ', '.join(map(str, mem)) + ']'
     elif isinstance(mem, str):
         return f'"{mem}"'
     else:

@@ -212,12 +212,23 @@ def parse(parser: Parser, expr: Obj):
         expr.val = parse(parser, expr.val)
         return expr
 
+    if isinstance(expr, Lambda):
+        for param in expr.param:
+            if param.val is not None:
+                param.val = parse(parser, param.val)
+        expr.mem = parse(parser, expr.mem)
+        return expr
+
     if isinstance(expr, Expr):
         if expr.head == ExprToken.Pragma:
             return expr
         if expr.head == ExprToken.Call:
             for i, arg in enumerate(expr.args[1:]):
                 expr.args[i+1] = parse(parser, arg)
+            return expr
+        if expr.head == ExprToken.Block:
+            for i, arg in enumerate(expr.args):
+                expr.args[i] = parse(parser, arg)
             return expr
         if not expr.args:
             return None
@@ -236,4 +247,4 @@ def parse(parser: Parser, expr: Obj):
         return ast
 
     if isinstance(expr, Obj):
-        return Expr(ExprToken.Expr, [expr], expr.span)
+        return Expr(ExprToken.Literal, [expr], expr.span)

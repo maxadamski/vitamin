@@ -35,15 +35,6 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#quote.
-    def enterQuote(self, ctx:VitaminCParser.QuoteContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#quote.
-    def exitQuote(self, ctx:VitaminCParser.QuoteContext):
-        pass
-
-
     # Enter a parse tree produced by VitaminCParser#expr.
     def enterExpr(self, ctx:VitaminCParser.ExprContext):
         pass
@@ -62,12 +53,30 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#callArg.
-    def enterCallArg(self, ctx:VitaminCParser.CallArgContext):
+    # Enter a parse tree produced by VitaminCParser#typ.
+    def enterTyp(self, ctx:VitaminCParser.TypContext):
         pass
 
-    # Exit a parse tree produced by VitaminCParser#callArg.
-    def exitCallArg(self, ctx:VitaminCParser.CallArgContext):
+    # Exit a parse tree produced by VitaminCParser#typ.
+    def exitTyp(self, ctx:VitaminCParser.TypContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#fun.
+    def enterFun(self, ctx:VitaminCParser.FunContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#fun.
+    def exitFun(self, ctx:VitaminCParser.FunContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#funParam.
+    def enterFunParam(self, ctx:VitaminCParser.FunParamContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#funParam.
+    def exitFunParam(self, ctx:VitaminCParser.FunParamContext):
         pass
 
 
@@ -77,6 +86,15 @@ class VitaminCListener(ParseTreeListener):
 
     # Exit a parse tree produced by VitaminCParser#call.
     def exitCall(self, ctx:VitaminCParser.CallContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#callArg.
+    def enterCallArg(self, ctx:VitaminCParser.CallArgContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#callArg.
+    def exitCallArg(self, ctx:VitaminCParser.CallArgContext):
         pass
 
 

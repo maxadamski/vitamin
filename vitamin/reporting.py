@@ -236,7 +236,7 @@ def err_lambda__unknown_keyword(ctx, hi, spec):
     return err_template(ctx, ctx.expr, hi.span, "unexpected argument",
         f"lambda doesn't take this keyword argument",
         hints=[f"the following keywords are valid: {keys}",
-               f"original signature '{spec}'"])
+            f"original signature '{spec}'"])
 
 
 def err_lambda__duplicate_keyword(ctx, hi):
@@ -254,3 +254,22 @@ def err_no_operators(ctx):
     return err_template(ctx, ctx.expr, ctx.expr.span, "no operators",
         f"without any operators defined only primary expressions can be parsed\n" +
         f"define operators with #operator(group), and compile with #operatorcompile")
+
+
+def err_eval__redeclare_variable(ctx):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "variable redefinition",
+        f"cannot redeclare this variable in current scope")
+
+
+def err_eval__assign_undeclared(ctx):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "variable redefinition",
+        f"cannot assign to an undeclared variable")
+
+
+def err_eval__assign_to_constant(ctx):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "constant reassignment",
+        f"cannot assign to a constant")
+
+
+def err_unknown(ctx, message):
+    return err_template(ctx, ctx.expr, ctx.expr.span, "unknown error", message)

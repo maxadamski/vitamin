@@ -3,8 +3,9 @@
 from os import path as path
 
 from vitamin.corelib import *
+from vitamin.interpreter import *
 from vitamin.parser_antlr import parse_file
-from vitamin.parser_expr import make_parser, parse, ParserError
+from vitamin.parser_expr import make_parser, parse
 from vitamin.structure import *
 from vitamin.utils import topological_sort
 
@@ -33,6 +34,7 @@ def pragma_operatorcompile(ctx: Context, args):
     operatorgroup_order(ctx.groups)
     ctx.ops = operator_parse(ctx.groups, ctx.opdirs)
     ctx.expr_parser = make_parser(ctx.ops)
+    ctx.post_macro = True
 
 
 def operator_parse(groups: Dict[str, OpGroupDir], ops: List[OpDir]) -> List[Op]:
@@ -74,69 +76,67 @@ def main(argv):
     G_NUMERIC = Typ('T', gen=['T'])
     G_ANY = Typ('T', gen=['T'])
 
-    ctx.scope.symbols = {
-        'true': C_TRUE,
-        'false': C_FALSE,
-        'nil': C_NIL,
-        '()': T_VOID,
-        'Expr': T_EXPR,
-        'Atom': T_ATOM,
-        'Any': T_ANY,
-        'Int': T_INT,
-        'String': T_STRING,
-        'StringLiteral': T_STRING_LITERAL,
-        'IntLiteral': T_INT_LITERAL,
-        'RealLiteral': T_REAL_LITERAL,
-        '=': [
-            Lambda('=', f_assign, [('lhs', T_ATOM), ('rhs', G_ANY)], returns=G_ANY),
-        ],
-        '+': [
-            Lambda('+', f_add, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-        ],
-        '*': [
-            Lambda('*', f_mul, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-        ],
-        '-': [
-            Lambda('-', f_sub, [('lhs', T_INT), ('rhs', T_INT)], returns=T_INT),
-            Lambda('-', f_neg, [('x', T_INT)], returns=T_INT)
-        ],
-        '==': [
-            Lambda('==', f_equals, [('lhs', T_INT), ('rhs', T_INT)], returns=T_BOOL),
-        ],
-        '!': [
-            Lambda('!', f_not, [('value', T_BOOL)], returns=T_BOOL)
-        ],
-        '>': [
-            Lambda('>', f_gt, [('lhs', T_INT), ('rhs', T_INT)], returns=T_BOOL),
-        ],
-        'print': [
-            Lambda('print', f_print,
-                [('values', T_STRING),
-                 ('sep', T_STRING, Obj(T_STRING, ' ')),
-                 ('end', T_STRING, Obj(T_STRING, '\n'))], variadic='values'),
-        ],
-    }
+    def add_fun(name, func, args, ret=T_VOID, var=None):
+        obj = Lambda(name, func, args, returns=ret, variadic=var)
+        ctx.scope.add_sym(name, obj)
+
+    def add_sym(name, obj):
+        ctx.scope.add_sym(name, obj)
+
+    add_sym('true', C_TRUE)
+    add_sym('false', C_FALSE)
+    add_sym('nil', C_NIL)
+    add_sym('Any', T_ANY)
+    add_sym('Nothing', T_NOTHING)
+    add_sym('()', T_VOID)
+    add_sym('Expr', T_EXPR)
+    add_sym('Atom', T_ATOM)
+    add_sym('Int', T_INT)
+    add_sym('Type', T_TYPE)
+    add_sym('String', T_STRING)
+    add_sym('StringLiteral', T_STRING_LITERAL)
+    add_sym('IntLiteral', T_INT_LITERAL)
+    add_sym('RealLiteral', T_REAL_LITERAL)
+
+    add_fun('-', f_sub, [('x', T_INT), ('y', T_INT)], ret=T_INT)
+    add_fun('-', f_neg, [('x', T_INT)], ret=T_INT)
+    add_fun('=', f_assign, [('x', T_ATOM), ('y', G_ANY)], ret=G_ANY)
+    add_fun(':=', f_declare, [('x', T_ATOM), ('y', T_ANY)], ret=G_ANY)
+    add_fun('+', f_add, [('x', T_INT), ('y', T_INT)], ret=T_INT)
+    add_fun('*', f_mul, [('x', T_INT), ('y', T_INT)], ret=T_INT)
+    add_fun('==', f_equals, [('x', T_INT), ('y', T_INT)], ret=T_BOOL)
+    add_fun('!', f_not, [('x', T_BOOL)], ret=T_BOOL)
+    add_fun('&&', f_and, [('x', T_BOOL), ('y', T_BOOL)], ret=T_BOOL)
+    add_fun('||', f_or, [('x', T_BOOL), ('y', T_BOOL)], ret=T_BOOL)
+    add_fun('>', f_gt, [('x', T_INT), ('y', T_INT)], ret=T_BOOL)
+    add_fun('typeof', f_typeof, [('x', T_ATOM)], ret=T_STRING)
+    add_fun('printr', f_printr, [('x', T_STRING)])
 
     # start interpreting file (practically still compile time)
+    ctx.post_macro = False
     ctx.node_index = 0
     while ctx.node_index < len(ctx.ast.args):
-        ctx.expr = ctx.ast.args[ctx.node_index]
+        expr = ctx.ast.args[ctx.node_index]
 
         try:
+            ctx.push_expr(expr)
             ctx.expr_parser.ctx = ctx
-            ctx.expr = ctx.ast.args[ctx.node_index] = parse(ctx.expr_parser, ctx.expr)
+            expr = ctx.ast.args[ctx.node_index] = parse(ctx.expr_parser, ctx.expr)
         except ParserError as e:
             print(e)
             ctx.node_index += 1
             continue
+        finally:
+            ctx.pop_expr()
 
         try:
-            eval(ctx, ctx.expr)
-            pass
+            ctx.push_expr(expr)
+            eval_obj(ctx, ctx.expr)
         except SemError as e:
-            #print(ctx.expr)
             print(e)
             return 1
+        finally:
+            ctx.pop_expr()
 
         ctx.node_index += 1
 

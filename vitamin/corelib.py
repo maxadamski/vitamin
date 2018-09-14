@@ -3,117 +3,102 @@ This file contains definitions of built-in functions and directives
 
 They assume correct input, because if an error is encountered, they
 will not get called at all. (The exception being eval)
-
-todo: first finish eval
-todo: move 'eval' to another file, and call from here it in 'f_eval'
 """
 
+from .interpreter import *
 from .analyzer import *
-
-
-def eval(ctx: Context, obj: Obj):
-    # todo: still need to check type of each arg (Tuple<Atom?, Obj>)
-    head_sym = None
-
-    if isinstance(obj, Expr) and obj.head == ExprToken.Pragma:
-        head, args = obj.args[0], obj.args[1:]
-        spec = ctx.pragmas.get(head.mem, None)
-        if spec is None:
-            raise SemError(err_unknown_pragma(ctx, obj))
-        args = process_lambda_args(ctx, spec, head.mem, args)
-        return spec.mem(ctx, args)
-
-    elif isinstance(obj, Expr) and obj.head == ExprToken.Call:
-        head, args = obj.args[0], obj.args[1:]
-        head_sym = ctx.scope.symbols.get(head.mem, None)
-        if head_sym is None:
-            raise SemError(err_unknown_symbol(ctx, head))
-        if isinstance(head_sym, list) and len(head_sym) > 0:
-            # todo: actually resolve name conflict
-            head_sym = head_sym[0]
-        if not isinstance(head_sym, Lambda):
-            # todo: why?
-            raise SemError("Cannot apply non-function")
-
-        for i, arg in enumerate(args):
-            # fixme: this is kinda sloppy
-            is_assignment = i == 0 and head.mem in ['=', '+=', '*=']
-            if not is_assignment:
-                args[i].val = eval(ctx, arg.val)
-        args_dict = process_lambda_args(ctx, head_sym, head.mem, args)
-        # todo: do type checking here
-        return head_sym.mem(ctx, args_dict)
-
-    elif isinstance(obj, Obj):
-        if obj.typ == T_ATOM:
-            head = obj
-            head_sym = ctx.scope.symbols.get(head.mem, None)
-            if head_sym is None:
-                raise SemError(err_unknown_symbol(ctx, head))
-
-            return head_sym
-
-        else:
-            return obj
-
-    # fixme: write an informative generic message in reporting
-    raise SemError(f"Cannot evluate object {obj}")
 
 
 def f_assign(ctx, args: Dict[str, Obj]):
     # check if symbol already exists
     # if yes, check if symbol is a variable and it's type matches
-    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
-    ctx.scope.symbols[lhs.mem] = eval(ctx, rhs)
-    return rhs
+    x, y = unpack_args(args, ['x', 'y'])
+    symbol = ctx.scope.get_sym_next(x.mem)
+    if symbol is None:
+        raise SemError(err_eval__assign_undeclared(ctx))
+    if symbol.constant:
+        raise SemError(err_eval__assign_to_constant(ctx))
+    symbol.mem = y.mem
+    return symbol
 
 
-def f_print(ctx, args: Dict[str, Obj]):
-    values, sep, end = unpack_args(args, ['values', 'sep', 'end'])
-    values = [eval(ctx, value) for value in values.mem]
-    result = sep.mem.join(str(value.mem) for value in values)
-    print(result, end=end.mem)
+def f_declare(ctx, args: Dict[str, Obj]):
+    x, y = unpack_args(args, ['x', 'y'])
+    if x.mem in ctx.scope.symbols:
+        raise SemError(err_eval__redeclare_variable(ctx))
+    ctx.scope.add_sym(x.mem, y)
+    return y
+
+
+def f_printr(ctx, args: Dict[str, Obj]):
+    x, = unpack_args(args, ['x'])
+    if isinstance(x, Expr):
+        print(str(x), end='')
+    else:
+        print(x.mem, end='')
+    return C_VOID
 
 
 def f_mul(ctx, args: Dict[str, Obj]):
-    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
-    return Obj(T_INT, eval(ctx, lhs).mem * eval(ctx, rhs).mem)
+    x, y = unpack_args(args, ['x', 'y'])
+    return Obj(T_INT, x.mem * y.mem)
 
 
 def f_add(ctx, args: Dict[str, Obj]):
-    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
-    return Obj(T_INT, eval(ctx, lhs).mem + eval(ctx, rhs).mem)
+    x, y = unpack_args(args, ['x', 'y'])
+    return Obj(T_INT, x.mem + y.mem)
 
 
 def f_sub(ctx, args: Dict[str, Obj]):
-    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
-    return Obj(T_INT, eval(ctx, lhs).mem - eval(ctx, rhs).mem)
+    x, y = unpack_args(args, ['x', 'y'])
+    return Obj(T_INT, x.mem - y.mem)
+
+
+def f_typeof(ctx, args: Dict[str, Obj]):
+    x, = unpack_args(args, ['x'])
+    return Obj(T_ANY, x.typ)
 
 
 def f_neg(ctx, args: Dict[str, Obj]):
     x, = unpack_args(args, ['x'])
-    return Obj(T_INT, -eval(ctx, x).mem)
+    return Obj(T_INT, -x.mem)
 
 
 def f_equals(ctx, args: Dict[str, Obj]):
-    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
-    return C_TRUE if lhs.mem == rhs.mem else C_FALSE
+    x, y = unpack_args(args, ['x', 'y'])
+    return C_TRUE if x.mem == y.mem else C_FALSE
 
 
 def f_gt(ctx, args: Dict[str, Obj]):
-    lhs, rhs = unpack_args(args, ['lhs', 'rhs'])
-    return C_TRUE if lhs.mem > rhs.mem else C_FALSE
+    x, y = unpack_args(args, ['x', 'y'])
+    return C_TRUE if x.mem > y.mem else C_FALSE
 
 
 def f_not(ctx, args: Dict[str, Obj]):
-    value = unpack_args(args, ['value'])
-    return C_TRUE if value == C_FALSE else C_FALSE
+    x, = unpack_args(args, ['x'])
+    return C_TRUE if x.mem == C_FALSE.mem else C_FALSE
+
+
+def f_and(ctx, args: Dict[str, Obj]):
+    x, y = unpack_args(args, ['x', 'y'])
+    x = eval_obj(ctx, x)
+    if x.mem == C_FALSE.mem: return C_FALSE
+    y = eval_obj(ctx, y)
+    return y.mem
+
+
+def f_or(ctx, args: Dict[str, Obj]):
+    x, y = unpack_args(args, ['x', 'y'])
+    x = eval_obj(ctx, x)
+    if x.mem == C_TRUE.mem: return C_TRUE
+    y = eval_obj(ctx, y)
+    return y.mem
 
 
 def pragma_operator(ctx: Context, args: Dict[str, Obj]):
     group, names = unpack_args(args, ['group', 'names'])
     if group.mem not in ctx.groups:
-        print(warn_pragma_operator_unknown_group(ctx, ctx.expr, group))
+        print(warn_pragma_operator_unknown_group(ctx, group))
     obj = OpDir(group.mem, [name.mem for name in names.mem])
     ctx.opdirs.append(obj)
 
@@ -121,7 +106,7 @@ def pragma_operator(ctx: Context, args: Dict[str, Obj]):
 def pragma_operatorgroup(ctx: Context, args: Dict[str, Obj]):
     name, kind, gt, lt = unpack_args(args, ['name', 'kind', 'gt', 'lt'])
     if name.mem in ctx.groups:
-        print(warn_pragma_operatorgroup_duplicate(ctx, ctx.expr, name))
+        print(warn_pragma_operatorgroup_duplicate(ctx, name))
     obj = OpGroupDir(name.mem, kind.mem, gt=gt.mem, lt=lt.mem)
     ctx.groups[name.mem] = obj
 

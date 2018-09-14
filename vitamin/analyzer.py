@@ -2,6 +2,7 @@
 This file contains functions checking if the semantics of an expression are valid.
 """
 
+from typing import *
 from .reporting import *
 from .structure import *
 
@@ -62,3 +63,16 @@ def process_lambda_args(ctx: Context, spec: Lambda, name: str, args: List[Lambda
             res[param.key] = param.val
 
     return res
+
+
+def process_lambda(ctx, symbol: Obj, head: Obj, args: List[LambdaArg]) -> Optional[Dict[str, Obj]]:
+    if not isinstance(symbol, Lambda):
+        # todo: why not?
+        raise SemError(err_unknown(ctx, f"Cannot apply non-function {symbol}"))
+
+    try:
+        args = process_lambda_args(ctx, symbol, symbol.name, args)
+        # todo: do type checking here
+        return args
+    except SemError:
+        return None

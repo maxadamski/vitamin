@@ -37,32 +37,38 @@ exprs : expr (',' expr)* ;
 //whileStatement : 'while' clause block ;
 
 program : chunk EOF ;
-chunk : NL* expr? (NL+ expr)* NL* ;
+chunk : NL* expr? ((SEMI NL* | NL+) expr)* NL* ;
 block : '{' chunk '}' ;
-quote : 'quote' block ;
 
-expr : primary+ ;
+expr
+    : primary+
+    | 'fun' fun
+    ;
 
 primary
     : call
     | constant
-    | quote
+    | block
     | pragma
     | '(' expr ')'
     ;
 
-// maybe combine call and pragmaFun
-callArg : (atom COLON)? expr ;
-call : atom '(' callArg? (',' callArg)* ')' ;
+//typ : atom | atom LANGLE typ (',' typ)* RANGLE | '_' ;
+typ : atom ;
+fun : atom '(' funParam? (',' funParam)* ')' ('->' typ)? block ;
+funParam : atom COLON typ (EQUAL expr)? ;
 
+// combine callArg and pragmaArg after creating the first compiler
+call : atom '(' callArg? (',' callArg)* ')' ;
+callArg : (atom COLON)? expr ;
 pragma : '#' atom pragmaFun? ;
 pragmaFun : '(' pragmaArg (',' pragmaArg)* ')' ;
 pragmaArg : (atom COLON)? constant ;
 
-constant : atom | intn | real | string ;
 
 // boilerplate
-atom : Name | Symbol | COLON ;
+constant : atom | intn | real | string ;
+atom : Name | Symbol | QUOTE | COLON | EQUAL | LANGLE | RANGLE ;
 intn : Int ;
 real : Real ;
 string : String ;
@@ -119,6 +125,10 @@ fragment NameHead : [_A-Za-z] ;
 fragment NameTail : NameHead | [0-9] ;
 Name : NameHead NameTail* ;
 
+LANGLE : '<' ;
+RANGLE : '>' ;
+QUOTE : '\'' ;
+EQUAL : '=' ;
 COLON : ':' ;
 SEMI : ';' ;
 

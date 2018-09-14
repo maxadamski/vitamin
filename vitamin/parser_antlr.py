@@ -54,22 +54,25 @@ class ASTEmitter(VitaminCListener):
     def emitBlock(self, ctx: VitaminCParser.BlockContext):
         return self.emitChunk(ctx.chunk())
 
-    def emitQuote(self, ctx: VitaminCParser.QuoteContext):
-        expr = self.emitBlock(ctx.block())
-        expr.head = ExprToken.Quote
-        return expr
+    #def emitQuote(self, ctx: VitaminCParser.QuoteContext):
+    #    expr = self.emitBlock(ctx.block())
+    #    expr.head = ExprToken.Quote
+    #    return expr
 
     def emitExpr(self, ctx: VitaminCParser.ExprContext):
-        args = [self.emitPrimary(x) for x in ctx.primary()]
-        return Expr(ExprToken.ListExpr, args, span(ctx))
+        if ctx.primary():
+            args = [self.emitPrimary(x) for x in ctx.primary()]
+            return Expr(ExprToken.Unparsed, args, span(ctx))
+        elif ctx.fun():
+            return self.emitFun(ctx.fun())
 
     def emitPrimary(self, ctx: VitaminCParser.PrimaryContext):
         if ctx.constant():
             return self.emitConstant(ctx.constant())
         elif ctx.pragma():
             return self.emitPragma(ctx.pragma())
-        elif ctx.quote():
-            return self.emitQuote(ctx.quote())
+        elif ctx.block():
+            return self.emitBlock(ctx.block())
         elif ctx.expr():
             return self.emitExpr(ctx.expr())
         elif ctx.call():
@@ -84,8 +87,19 @@ class ASTEmitter(VitaminCListener):
             return self.emitReal(ctx.real())
         elif ctx.string():
             return self.emitString(ctx.string())
+        elif ctx.word():
+            return self.emitWord(ctx.word())
 
     # TODO: Revise the literal parsing functions
+
+    def emitWord(self, ctx: VitaminCParser.AtomContext):
+        text = ctx.getText().lower()
+        if text == 'true':
+            return C_TRUE
+        if text == 'false':
+            return C_FALSE
+        if text == 'nil':
+            return C_NIL
 
     def emitAtom(self, ctx: VitaminCParser.AtomContext):
         return Obj(T_ATOM, ctx.getText(), span=span(ctx))
@@ -113,6 +127,29 @@ class ASTEmitter(VitaminCListener):
             val = self.emitExpr(arg.expr())
             expr.args.append(LambdaArg(span(arg), val, key=key))
         return expr
+
+    def emitFun(self, ctx: VitaminCParser.FunContext):
+        name = self.emitAtom(ctx.atom())
+        block = self.emitBlock(ctx.block())
+        returns = self.emitTyp(ctx.typ()) if ctx.typ() else T_VOID
+
+        # todo: detect which parameter is variadic
+        params: List[LambdaParamTuple] = []
+        for i, param in enumerate(ctx.funParam()):
+            key = self.emitAtom(param.atom()).mem
+            typ = self.emitTyp(param.typ())
+            if param.expr():
+                val = self.emitExpr(param.expr())
+                params.append((key, typ, val))
+            else:
+                params.append((key, typ))
+
+        expr = Lambda(name.mem, block, params, returns=returns)
+        return expr
+
+    def emitTyp(self, ctx: VitaminCParser.TypContext) -> Typ:
+        atom = self.emitAtom(ctx.atom())
+        return Typ(atom.mem, gen=[])
 
     def emitPragma(self, ctx: VitaminCParser.PragmaContext):
         name = self.emitAtom(ctx.atom())
