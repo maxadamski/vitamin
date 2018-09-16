@@ -51,14 +51,6 @@ class ASTEmitter(VitaminCListener):
         args = [self.emitExpr(x) for x in ctx.expr()]
         return Expr(ExprToken.Block, args, span(ctx))
 
-    def emitBlock(self, ctx: VitaminCParser.BlockContext):
-        return self.emitChunk(ctx.chunk())
-
-    #def emitQuote(self, ctx: VitaminCParser.QuoteContext):
-    #    expr = self.emitBlock(ctx.block())
-    #    expr.head = ExprToken.Quote
-    #    return expr
-
     def emitExpr(self, ctx: VitaminCParser.ExprContext):
         if ctx.primary():
             args = [self.emitPrimary(x) for x in ctx.primary()]
@@ -71,8 +63,8 @@ class ASTEmitter(VitaminCListener):
             return self.emitConstant(ctx.constant())
         elif ctx.pragma():
             return self.emitPragma(ctx.pragma())
-        elif ctx.block():
-            return self.emitBlock(ctx.block())
+        elif ctx.function():
+            return self.emitFunction(ctx.function())
         elif ctx.expr():
             return self.emitExpr(ctx.expr())
         elif ctx.call():
@@ -128,9 +120,15 @@ class ASTEmitter(VitaminCListener):
             expr.args.append(LambdaArg(span(arg), val, key=key))
         return expr
 
+    def emitFunction(self, ctx: VitaminCParser.FunctionContext):
+        params = [self.emitAtom(x).mem for x in ctx.atom()]
+        chunk = self.emitChunk(ctx.chunk())
+        expr = Expr(ExprToken.Lambda, [params, chunk], span(ctx))
+        return expr
+
     def emitFun(self, ctx: VitaminCParser.FunContext):
         name = self.emitAtom(ctx.atom())
-        block = self.emitBlock(ctx.block())
+        chunk = self.emitChunk(ctx.chunk())
         returns = self.emitTyp(ctx.typ()) if ctx.typ() else T_VOID
 
         # todo: detect which parameter is variadic
@@ -144,7 +142,7 @@ class ASTEmitter(VitaminCListener):
             else:
                 params.append((key, typ))
 
-        expr = Lambda(name.mem, block, params, returns=returns)
+        expr = Lambda(name.mem, chunk, params, returns=returns)
         return expr
 
     def emitTyp(self, ctx: VitaminCParser.TypContext) -> Typ:

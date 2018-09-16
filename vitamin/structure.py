@@ -137,6 +137,7 @@ class ExprToken(str, Enum):
     Block = 'Block'
     Pragma = 'Pragma'
     Call = 'Call'
+    Lambda = 'Lambda'
 
     def __str__(self):
         return self.value
@@ -312,6 +313,29 @@ class Scope:
                 break
             scope = scope.parent
 
+    def find(self, key) -> Iterator['Scope']:
+        scope = self
+        while True:
+            if key in scope.symbols:
+                yield scope
+            if scope.parent is None:
+                break
+            scope = scope.parent
+
+    def let(self, key, obj):
+        self.symbols[key] = [obj]
+
+    def set(self, key, obj):
+        scope = next(self.find(key), None)
+        if scope is None: return None
+        scope.symbols[key] = [obj]
+        return scope
+
+    def get(self, key):
+        scope = next(self.find(key), None)
+        if scope is None: return None
+        return next(iter(scope.symbols[key]), None)
+
     def add_sym(self, key, obj):
         if key not in self.symbols:
             self.symbols[key] = []
@@ -350,12 +374,6 @@ class Context:
 
     def pop_scope(self):
         self.scope = self.scope.parent
-
-    def set_slot(self, name: str, value):
-        self.scope.set_sym(name, value)
-
-    def get_slot(self, name: str):
-        return self.scope.get_sym_next(name)
 
 
 def unpack_args(args: Dict[str, Obj], names: Iterator[str]) -> Iterator[Obj]:
@@ -402,6 +420,8 @@ def sexpr(obj: Obj):
 
     if hasattr(obj, 'typ') and obj.typ == T_ATOM:
         return obj.mem
+    elif isinstance(mem, str):
+        return f'"{mem}"'
     elif isinstance(obj, Lambda):
         return obj.name + '(' + ', '.join(map(str, obj.param)) + ')'
     elif isinstance(obj, LambdaArg):
@@ -417,7 +437,5 @@ def sexpr(obj: Obj):
         return '[' + ', '.join(f"{k}: {v}" for k, v in mem.items()) + ']'
     elif isinstance(mem, list):
         return '[' + ', '.join(map(str, mem)) + ']'
-    elif isinstance(mem, str):
-        return f'"{mem}"'
     else:
         return mem

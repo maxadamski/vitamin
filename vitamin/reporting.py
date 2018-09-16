@@ -78,9 +78,8 @@ def highlight_col(hi: Span, line: str, y: int, y_fmt: str):
     elif hy0 < y < hy1:
         red = len(line)
 
+    if red <= 0: return ''
     squiggles = ' ' * pad + '^' * red
-    if not squiggles: return ''
-
     y_fmt = ' ' * len(y_fmt)
     return f"{y_fmt}   {RED}{squiggles}{RST}"
 

@@ -220,6 +220,10 @@ def parse(parser: Parser, expr: Obj):
         return expr
 
     if isinstance(expr, Expr):
+        if expr.head == ExprToken.Lambda:
+            for i, arg in enumerate(expr.args[1].args):
+                expr.args[1].args[i] = parse(parser, arg)
+            return expr
         if expr.head == ExprToken.Pragma:
             return expr
         if expr.head == ExprToken.Call:

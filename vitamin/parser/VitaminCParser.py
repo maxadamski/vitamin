@@ -7,77 +7,94 @@ import sys
 
 def serializedATN():
     with StringIO() as buf:
-        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\31")
-        buf.write("\u00ba\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
+        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\33")
+        buf.write("\u00d5\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
         buf.write("\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t\13\4\f\t\f\4\r\t\r\4\16")
         buf.write("\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22\4\23\t\23")
         buf.write("\3\2\3\2\3\2\3\3\7\3+\n\3\f\3\16\3.\13\3\3\3\5\3\61\n")
         buf.write("\3\3\3\3\3\7\3\65\n\3\f\3\16\38\13\3\3\3\6\3;\n\3\r\3")
         buf.write("\16\3<\5\3?\n\3\3\3\7\3B\n\3\f\3\16\3E\13\3\3\3\7\3H\n")
-        buf.write("\3\f\3\16\3K\13\3\3\4\3\4\3\4\3\4\3\5\6\5R\n\5\r\5\16")
-        buf.write("\5S\3\5\3\5\5\5X\n\5\3\6\3\6\3\6\3\6\3\6\3\6\3\6\3\6\5")
-        buf.write("\6b\n\6\3\7\3\7\3\b\3\b\3\b\5\bi\n\b\3\b\3\b\7\bm\n\b")
-        buf.write("\f\b\16\bp\13\b\3\b\3\b\3\b\5\bu\n\b\3\b\3\b\3\t\3\t\3")
-        buf.write("\t\3\t\3\t\5\t~\n\t\3\n\3\n\3\n\5\n\u0083\n\n\3\n\3\n")
-        buf.write("\7\n\u0087\n\n\f\n\16\n\u008a\13\n\3\n\3\n\3\13\3\13\3")
-        buf.write("\13\5\13\u0091\n\13\3\13\3\13\3\f\3\f\3\f\5\f\u0098\n")
-        buf.write("\f\3\r\3\r\3\r\3\r\7\r\u009e\n\r\f\r\16\r\u00a1\13\r\3")
-        buf.write("\r\3\r\3\16\3\16\3\16\5\16\u00a8\n\16\3\16\3\16\3\17\3")
-        buf.write("\17\3\17\3\17\5\17\u00b0\n\17\3\20\3\20\3\21\3\21\3\22")
-        buf.write("\3\22\3\23\3\23\3\23\2\2\24\2\4\6\b\n\f\16\20\22\24\26")
-        buf.write("\30\32\34\36 \"$\2\3\4\2\22\27\31\31\2\u00c1\2&\3\2\2")
-        buf.write("\2\4,\3\2\2\2\6L\3\2\2\2\bW\3\2\2\2\na\3\2\2\2\fc\3\2")
-        buf.write("\2\2\16e\3\2\2\2\20x\3\2\2\2\22\177\3\2\2\2\24\u0090\3")
-        buf.write("\2\2\2\26\u0094\3\2\2\2\30\u0099\3\2\2\2\32\u00a7\3\2")
-        buf.write("\2\2\34\u00af\3\2\2\2\36\u00b1\3\2\2\2 \u00b3\3\2\2\2")
-        buf.write("\"\u00b5\3\2\2\2$\u00b7\3\2\2\2&\'\5\4\3\2\'(\7\2\2\3")
-        buf.write("(\3\3\2\2\2)+\7\r\2\2*)\3\2\2\2+.\3\2\2\2,*\3\2\2\2,-")
-        buf.write("\3\2\2\2-\60\3\2\2\2.,\3\2\2\2/\61\5\b\5\2\60/\3\2\2\2")
-        buf.write("\60\61\3\2\2\2\61C\3\2\2\2\62\66\7\30\2\2\63\65\7\r\2")
-        buf.write("\2\64\63\3\2\2\2\658\3\2\2\2\66\64\3\2\2\2\66\67\3\2\2")
-        buf.write("\2\67?\3\2\2\28\66\3\2\2\29;\7\r\2\2:9\3\2\2\2;<\3\2\2")
-        buf.write("\2<:\3\2\2\2<=\3\2\2\2=?\3\2\2\2>\62\3\2\2\2>:\3\2\2\2")
-        buf.write("?@\3\2\2\2@B\5\b\5\2A>\3\2\2\2BE\3\2\2\2CA\3\2\2\2CD\3")
-        buf.write("\2\2\2DI\3\2\2\2EC\3\2\2\2FH\7\r\2\2GF\3\2\2\2HK\3\2\2")
-        buf.write("\2IG\3\2\2\2IJ\3\2\2\2J\5\3\2\2\2KI\3\2\2\2LM\7\3\2\2")
-        buf.write("MN\5\4\3\2NO\7\4\2\2O\7\3\2\2\2PR\5\n\6\2QP\3\2\2\2RS")
-        buf.write("\3\2\2\2SQ\3\2\2\2ST\3\2\2\2TX\3\2\2\2UV\7\5\2\2VX\5\16")
-        buf.write("\b\2WQ\3\2\2\2WU\3\2\2\2X\t\3\2\2\2Yb\5\22\n\2Zb\5\34")
-        buf.write("\17\2[b\5\6\4\2\\b\5\26\f\2]^\7\6\2\2^_\5\b\5\2_`\7\7")
-        buf.write("\2\2`b\3\2\2\2aY\3\2\2\2aZ\3\2\2\2a[\3\2\2\2a\\\3\2\2")
-        buf.write("\2a]\3\2\2\2b\13\3\2\2\2cd\5\36\20\2d\r\3\2\2\2ef\5\36")
-        buf.write("\20\2fh\7\6\2\2gi\5\20\t\2hg\3\2\2\2hi\3\2\2\2in\3\2\2")
-        buf.write("\2jk\7\b\2\2km\5\20\t\2lj\3\2\2\2mp\3\2\2\2nl\3\2\2\2")
-        buf.write("no\3\2\2\2oq\3\2\2\2pn\3\2\2\2qt\7\7\2\2rs\7\t\2\2su\5")
-        buf.write("\f\7\2tr\3\2\2\2tu\3\2\2\2uv\3\2\2\2vw\5\6\4\2w\17\3\2")
-        buf.write("\2\2xy\5\36\20\2yz\7\27\2\2z}\5\f\7\2{|\7\26\2\2|~\5\b")
-        buf.write("\5\2}{\3\2\2\2}~\3\2\2\2~\21\3\2\2\2\177\u0080\5\36\20")
-        buf.write("\2\u0080\u0082\7\6\2\2\u0081\u0083\5\24\13\2\u0082\u0081")
-        buf.write("\3\2\2\2\u0082\u0083\3\2\2\2\u0083\u0088\3\2\2\2\u0084")
-        buf.write("\u0085\7\b\2\2\u0085\u0087\5\24\13\2\u0086\u0084\3\2\2")
-        buf.write("\2\u0087\u008a\3\2\2\2\u0088\u0086\3\2\2\2\u0088\u0089")
-        buf.write("\3\2\2\2\u0089\u008b\3\2\2\2\u008a\u0088\3\2\2\2\u008b")
-        buf.write("\u008c\7\7\2\2\u008c\23\3\2\2\2\u008d\u008e\5\36\20\2")
-        buf.write("\u008e\u008f\7\27\2\2\u008f\u0091\3\2\2\2\u0090\u008d")
-        buf.write("\3\2\2\2\u0090\u0091\3\2\2\2\u0091\u0092\3\2\2\2\u0092")
-        buf.write("\u0093\5\b\5\2\u0093\25\3\2\2\2\u0094\u0095\7\n\2\2\u0095")
-        buf.write("\u0097\5\36\20\2\u0096\u0098\5\30\r\2\u0097\u0096\3\2")
-        buf.write("\2\2\u0097\u0098\3\2\2\2\u0098\27\3\2\2\2\u0099\u009a")
-        buf.write("\7\6\2\2\u009a\u009f\5\32\16\2\u009b\u009c\7\b\2\2\u009c")
-        buf.write("\u009e\5\32\16\2\u009d\u009b\3\2\2\2\u009e\u00a1\3\2\2")
-        buf.write("\2\u009f\u009d\3\2\2\2\u009f\u00a0\3\2\2\2\u00a0\u00a2")
-        buf.write("\3\2\2\2\u00a1\u009f\3\2\2\2\u00a2\u00a3\7\7\2\2\u00a3")
-        buf.write("\31\3\2\2\2\u00a4\u00a5\5\36\20\2\u00a5\u00a6\7\27\2\2")
-        buf.write("\u00a6\u00a8\3\2\2\2\u00a7\u00a4\3\2\2\2\u00a7\u00a8\3")
-        buf.write("\2\2\2\u00a8\u00a9\3\2\2\2\u00a9\u00aa\5\34\17\2\u00aa")
-        buf.write("\33\3\2\2\2\u00ab\u00b0\5\36\20\2\u00ac\u00b0\5 \21\2")
-        buf.write("\u00ad\u00b0\5\"\22\2\u00ae\u00b0\5$\23\2\u00af\u00ab")
-        buf.write("\3\2\2\2\u00af\u00ac\3\2\2\2\u00af\u00ad\3\2\2\2\u00af")
-        buf.write("\u00ae\3\2\2\2\u00b0\35\3\2\2\2\u00b1\u00b2\t\2\2\2\u00b2")
-        buf.write("\37\3\2\2\2\u00b3\u00b4\7\17\2\2\u00b4!\3\2\2\2\u00b5")
-        buf.write("\u00b6\7\16\2\2\u00b6#\3\2\2\2\u00b7\u00b8\7\20\2\2\u00b8")
-        buf.write("%\3\2\2\2\27,\60\66<>CISWahnt}\u0082\u0088\u0090\u0097")
-        buf.write("\u009f\u00a7\u00af")
+        buf.write("\3\f\3\16\3K\13\3\3\4\6\4N\n\4\r\4\16\4O\3\4\3\4\5\4T")
+        buf.write("\n\4\3\5\3\5\3\5\3\5\3\5\3\5\3\5\3\5\5\5^\n\5\3\6\3\6")
+        buf.write("\5\6b\n\6\3\6\3\6\7\6f\n\6\f\6\16\6i\13\6\3\6\5\6l\n\6")
+        buf.write("\3\6\3\6\3\6\3\7\3\7\3\b\3\b\3\b\5\bv\n\b\3\b\3\b\7\b")
+        buf.write("z\n\b\f\b\16\b}\13\b\3\b\3\b\3\b\5\b\u0082\n\b\3\b\3\b")
+        buf.write("\3\b\3\b\3\t\3\t\3\t\3\t\3\t\5\t\u008d\n\t\3\n\3\n\3\n")
+        buf.write("\5\n\u0092\n\n\3\n\3\n\7\n\u0096\n\n\f\n\16\n\u0099\13")
+        buf.write("\n\3\n\3\n\3\13\3\13\3\13\5\13\u00a0\n\13\3\13\3\13\3")
+        buf.write("\f\3\f\3\f\5\f\u00a7\n\f\3\r\3\r\3\r\3\r\7\r\u00ad\n\r")
+        buf.write("\f\r\16\r\u00b0\13\r\3\r\3\r\3\16\3\16\3\16\5\16\u00b7")
+        buf.write("\n\16\3\16\3\16\3\17\3\17\3\17\3\17\5\17\u00bf\n\17\3")
+        buf.write("\20\3\20\3\20\3\20\3\20\3\20\3\20\3\20\3\20\3\20\3\20")
+        buf.write("\3\20\5\20\u00cd\n\20\3\21\3\21\3\22\3\22\3\23\3\23\3")
+        buf.write("\23\2\2\24\2\4\6\b\n\f\16\20\22\24\26\30\32\34\36 \"$")
+        buf.write("\2\2\2\u00e7\2&\3\2\2\2\4,\3\2\2\2\6S\3\2\2\2\b]\3\2\2")
+        buf.write("\2\n_\3\2\2\2\fp\3\2\2\2\16r\3\2\2\2\20\u0087\3\2\2\2")
+        buf.write("\22\u008e\3\2\2\2\24\u009f\3\2\2\2\26\u00a3\3\2\2\2\30")
+        buf.write("\u00a8\3\2\2\2\32\u00b6\3\2\2\2\34\u00be\3\2\2\2\36\u00cc")
+        buf.write("\3\2\2\2 \u00ce\3\2\2\2\"\u00d0\3\2\2\2$\u00d2\3\2\2\2")
+        buf.write("&\'\5\4\3\2\'(\7\2\2\3(\3\3\2\2\2)+\7\16\2\2*)\3\2\2\2")
+        buf.write("+.\3\2\2\2,*\3\2\2\2,-\3\2\2\2-\60\3\2\2\2.,\3\2\2\2/")
+        buf.write("\61\5\6\4\2\60/\3\2\2\2\60\61\3\2\2\2\61C\3\2\2\2\62\66")
+        buf.write("\7\31\2\2\63\65\7\16\2\2\64\63\3\2\2\2\658\3\2\2\2\66")
+        buf.write("\64\3\2\2\2\66\67\3\2\2\2\67?\3\2\2\28\66\3\2\2\29;\7")
+        buf.write("\16\2\2:9\3\2\2\2;<\3\2\2\2<:\3\2\2\2<=\3\2\2\2=?\3\2")
+        buf.write("\2\2>\62\3\2\2\2>:\3\2\2\2?@\3\2\2\2@B\5\6\4\2A>\3\2\2")
+        buf.write("\2BE\3\2\2\2CA\3\2\2\2CD\3\2\2\2DI\3\2\2\2EC\3\2\2\2F")
+        buf.write("H\7\16\2\2GF\3\2\2\2HK\3\2\2\2IG\3\2\2\2IJ\3\2\2\2J\5")
+        buf.write("\3\2\2\2KI\3\2\2\2LN\5\b\5\2ML\3\2\2\2NO\3\2\2\2OM\3\2")
+        buf.write("\2\2OP\3\2\2\2PT\3\2\2\2QR\7\3\2\2RT\5\16\b\2SM\3\2\2")
+        buf.write("\2SQ\3\2\2\2T\7\3\2\2\2U^\5\22\n\2V^\5\34\17\2W^\5\n\6")
+        buf.write("\2X^\5\26\f\2YZ\7\4\2\2Z[\5\6\4\2[\\\7\5\2\2\\^\3\2\2")
+        buf.write("\2]U\3\2\2\2]V\3\2\2\2]W\3\2\2\2]X\3\2\2\2]Y\3\2\2\2^")
+        buf.write("\t\3\2\2\2_k\7\6\2\2`b\5\36\20\2a`\3\2\2\2ab\3\2\2\2b")
+        buf.write("g\3\2\2\2cd\7\7\2\2df\5\36\20\2ec\3\2\2\2fi\3\2\2\2ge")
+        buf.write("\3\2\2\2gh\3\2\2\2hj\3\2\2\2ig\3\2\2\2jl\7\32\2\2ka\3")
+        buf.write("\2\2\2kl\3\2\2\2lm\3\2\2\2mn\5\4\3\2no\7\b\2\2o\13\3\2")
+        buf.write("\2\2pq\5\36\20\2q\r\3\2\2\2rs\5\36\20\2su\7\4\2\2tv\5")
+        buf.write("\20\t\2ut\3\2\2\2uv\3\2\2\2v{\3\2\2\2wx\7\7\2\2xz\5\20")
+        buf.write("\t\2yw\3\2\2\2z}\3\2\2\2{y\3\2\2\2{|\3\2\2\2|~\3\2\2\2")
+        buf.write("}{\3\2\2\2~\u0081\7\5\2\2\177\u0080\7\t\2\2\u0080\u0082")
+        buf.write("\5\f\7\2\u0081\177\3\2\2\2\u0081\u0082\3\2\2\2\u0082\u0083")
+        buf.write("\3\2\2\2\u0083\u0084\7\6\2\2\u0084\u0085\5\4\3\2\u0085")
+        buf.write("\u0086\7\b\2\2\u0086\17\3\2\2\2\u0087\u0088\5\36\20\2")
+        buf.write("\u0088\u0089\7\30\2\2\u0089\u008c\5\f\7\2\u008a\u008b")
+        buf.write("\7\27\2\2\u008b\u008d\5\6\4\2\u008c\u008a\3\2\2\2\u008c")
+        buf.write("\u008d\3\2\2\2\u008d\21\3\2\2\2\u008e\u008f\5\36\20\2")
+        buf.write("\u008f\u0091\7\4\2\2\u0090\u0092\5\24\13\2\u0091\u0090")
+        buf.write("\3\2\2\2\u0091\u0092\3\2\2\2\u0092\u0097\3\2\2\2\u0093")
+        buf.write("\u0094\7\7\2\2\u0094\u0096\5\24\13\2\u0095\u0093\3\2\2")
+        buf.write("\2\u0096\u0099\3\2\2\2\u0097\u0095\3\2\2\2\u0097\u0098")
+        buf.write("\3\2\2\2\u0098\u009a\3\2\2\2\u0099\u0097\3\2\2\2\u009a")
+        buf.write("\u009b\7\5\2\2\u009b\23\3\2\2\2\u009c\u009d\5\36\20\2")
+        buf.write("\u009d\u009e\7\30\2\2\u009e\u00a0\3\2\2\2\u009f\u009c")
+        buf.write("\3\2\2\2\u009f\u00a0\3\2\2\2\u00a0\u00a1\3\2\2\2\u00a1")
+        buf.write("\u00a2\5\6\4\2\u00a2\25\3\2\2\2\u00a3\u00a4\7\n\2\2\u00a4")
+        buf.write("\u00a6\5\36\20\2\u00a5\u00a7\5\30\r\2\u00a6\u00a5\3\2")
+        buf.write("\2\2\u00a6\u00a7\3\2\2\2\u00a7\27\3\2\2\2\u00a8\u00a9")
+        buf.write("\7\4\2\2\u00a9\u00ae\5\32\16\2\u00aa\u00ab\7\7\2\2\u00ab")
+        buf.write("\u00ad\5\32\16\2\u00ac\u00aa\3\2\2\2\u00ad\u00b0\3\2\2")
+        buf.write("\2\u00ae\u00ac\3\2\2\2\u00ae\u00af\3\2\2\2\u00af\u00b1")
+        buf.write("\3\2\2\2\u00b0\u00ae\3\2\2\2\u00b1\u00b2\7\5\2\2\u00b2")
+        buf.write("\31\3\2\2\2\u00b3\u00b4\5\36\20\2\u00b4\u00b5\7\30\2\2")
+        buf.write("\u00b5\u00b7\3\2\2\2\u00b6\u00b3\3\2\2\2\u00b6\u00b7\3")
+        buf.write("\2\2\2\u00b7\u00b8\3\2\2\2\u00b8\u00b9\5\34\17\2\u00b9")
+        buf.write("\33\3\2\2\2\u00ba\u00bf\5\36\20\2\u00bb\u00bf\5 \21\2")
+        buf.write("\u00bc\u00bf\5\"\22\2\u00bd\u00bf\5$\23\2\u00be\u00ba")
+        buf.write("\3\2\2\2\u00be\u00bb\3\2\2\2\u00be\u00bc\3\2\2\2\u00be")
+        buf.write("\u00bd\3\2\2\2\u00bf\35\3\2\2\2\u00c0\u00cd\7\23\2\2\u00c1")
+        buf.write("\u00cd\7\33\2\2\u00c2\u00cd\7\32\2\2\u00c3\u00cd\7\26")
+        buf.write("\2\2\u00c4\u00cd\7\30\2\2\u00c5\u00cd\7\27\2\2\u00c6\u00cd")
+        buf.write("\7\24\2\2\u00c7\u00cd\7\25\2\2\u00c8\u00c9\7\13\2\2\u00c9")
+        buf.write("\u00ca\5\36\20\2\u00ca\u00cb\7\13\2\2\u00cb\u00cd\3\2")
+        buf.write("\2\2\u00cc\u00c0\3\2\2\2\u00cc\u00c1\3\2\2\2\u00cc\u00c2")
+        buf.write("\3\2\2\2\u00cc\u00c3\3\2\2\2\u00cc\u00c4\3\2\2\2\u00cc")
+        buf.write("\u00c5\3\2\2\2\u00cc\u00c6\3\2\2\2\u00cc\u00c7\3\2\2\2")
+        buf.write("\u00cc\u00c8\3\2\2\2\u00cd\37\3\2\2\2\u00ce\u00cf\7\20")
+        buf.write("\2\2\u00cf!\3\2\2\2\u00d0\u00d1\7\17\2\2\u00d1#\3\2\2")
+        buf.write("\2\u00d2\u00d3\7\21\2\2\u00d3%\3\2\2\2\33,\60\66<>CIO")
+        buf.write("S]agku{\u0081\u008c\u0091\u0097\u009f\u00a6\u00ae\u00b6")
+        buf.write("\u00be\u00cc")
         return buf.getvalue()
 
 
@@ -91,22 +108,24 @@ class VitaminCParser ( Parser ):
 
     sharedContextCache = PredictionContextCache()
 
-    literalNames = [ "<INVALID>", "'{'", "'}'", "'fun'", "'('", "')'", "','", 
-                     "'->'", "'#'", "<INVALID>", "<INVALID>", "<INVALID>", 
+    literalNames = [ "<INVALID>", "'fun'", "'('", "')'", "'{'", "','", "'}'", 
+                     "'->'", "'#'", "'`'", "<INVALID>", "<INVALID>", "<INVALID>", 
                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
-                     "<INVALID>", "'<'", "'>'", "'''", "'='", "':'", "';'" ]
+                     "<INVALID>", "'<'", "'>'", "'''", "'='", "':'", "';'", 
+                     "'|'" ]
 
     symbolicNames = [ "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
                       "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
-                      "<INVALID>", "ShebangLine", "WS", "NL", "Real", "Int", 
-                      "String", "Comment", "Name", "LANGLE", "RANGLE", "QUOTE", 
-                      "EQUAL", "COLON", "SEMI", "Symbol" ]
+                      "<INVALID>", "<INVALID>", "ShebangLine", "WS", "NL", 
+                      "Real", "Int", "String", "Comment", "Name", "LANGLE", 
+                      "RANGLE", "QUOTE", "EQUAL", "COLON", "SEMI", "PIPE", 
+                      "Symbol" ]
 
     RULE_program = 0
     RULE_chunk = 1
-    RULE_block = 2
-    RULE_expr = 3
-    RULE_primary = 4
+    RULE_expr = 2
+    RULE_primary = 3
+    RULE_function = 4
     RULE_typ = 5
     RULE_fun = 6
     RULE_funParam = 7
@@ -121,7 +140,7 @@ class VitaminCParser ( Parser ):
     RULE_real = 16
     RULE_string = 17
 
-    ruleNames =  [ "program", "chunk", "block", "expr", "primary", "typ", 
+    ruleNames =  [ "program", "chunk", "expr", "primary", "function", "typ", 
                    "fun", "funParam", "call", "callArg", "pragma", "pragmaFun", 
                    "pragmaArg", "constant", "atom", "intn", "real", "string" ]
 
@@ -134,21 +153,23 @@ class VitaminCParser ( Parser ):
     T__5=6
     T__6=7
     T__7=8
-    ShebangLine=9
-    WS=10
-    NL=11
-    Real=12
-    Int=13
-    String=14
-    Comment=15
-    Name=16
-    LANGLE=17
-    RANGLE=18
-    QUOTE=19
-    EQUAL=20
-    COLON=21
-    SEMI=22
-    Symbol=23
+    T__8=9
+    ShebangLine=10
+    WS=11
+    NL=12
+    Real=13
+    Int=14
+    String=15
+    Comment=16
+    Name=17
+    LANGLE=18
+    RANGLE=19
+    QUOTE=20
+    EQUAL=21
+    COLON=22
+    SEMI=23
+    PIPE=24
+    Symbol=25
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
@@ -263,7 +284,7 @@ class VitaminCParser ( Parser ):
             self.state = 46
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__0) | (1 << VitaminCParser.T__2) | (1 << VitaminCParser.T__3) | (1 << VitaminCParser.T__7) | (1 << VitaminCParser.Real) | (1 << VitaminCParser.Int) | (1 << VitaminCParser.String) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.Symbol))) != 0):
+            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__0) | (1 << VitaminCParser.T__1) | (1 << VitaminCParser.T__3) | (1 << VitaminCParser.T__7) | (1 << VitaminCParser.T__8) | (1 << VitaminCParser.Real) | (1 << VitaminCParser.Int) | (1 << VitaminCParser.String) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.PIPE) | (1 << VitaminCParser.Symbol))) != 0):
                 self.state = 45
                 self.expr()
 
@@ -331,50 +352,6 @@ class VitaminCParser ( Parser ):
             self.exitRule()
         return localctx
 
-    class BlockContext(ParserRuleContext):
-
-        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
-            super().__init__(parent, invokingState)
-            self.parser = parser
-
-        def chunk(self):
-            return self.getTypedRuleContext(VitaminCParser.ChunkContext,0)
-
-
-        def getRuleIndex(self):
-            return VitaminCParser.RULE_block
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterBlock" ):
-                listener.enterBlock(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitBlock" ):
-                listener.exitBlock(self)
-
-
-
-
-    def block(self):
-
-        localctx = VitaminCParser.BlockContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 4, self.RULE_block)
-        try:
-            self.enterOuterAlt(localctx, 1)
-            self.state = 74
-            self.match(VitaminCParser.T__0)
-            self.state = 75
-            self.chunk()
-            self.state = 76
-            self.match(VitaminCParser.T__1)
-        except RecognitionException as re:
-            localctx.exception = re
-            self._errHandler.reportError(self, re)
-            self._errHandler.recover(self, re)
-        finally:
-            self.exitRule()
-        return localctx
-
     class ExprContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -409,32 +386,32 @@ class VitaminCParser ( Parser ):
     def expr(self):
 
         localctx = VitaminCParser.ExprContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 6, self.RULE_expr)
+        self.enterRule(localctx, 4, self.RULE_expr)
         self._la = 0 # Token type
         try:
-            self.state = 85
+            self.state = 81
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [VitaminCParser.T__0, VitaminCParser.T__3, VitaminCParser.T__7, VitaminCParser.Real, VitaminCParser.Int, VitaminCParser.String, VitaminCParser.Name, VitaminCParser.LANGLE, VitaminCParser.RANGLE, VitaminCParser.QUOTE, VitaminCParser.EQUAL, VitaminCParser.COLON, VitaminCParser.Symbol]:
+            if token in [VitaminCParser.T__1, VitaminCParser.T__3, VitaminCParser.T__7, VitaminCParser.T__8, VitaminCParser.Real, VitaminCParser.Int, VitaminCParser.String, VitaminCParser.Name, VitaminCParser.LANGLE, VitaminCParser.RANGLE, VitaminCParser.QUOTE, VitaminCParser.EQUAL, VitaminCParser.COLON, VitaminCParser.PIPE, VitaminCParser.Symbol]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 79 
+                self.state = 75 
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
                 while True:
-                    self.state = 78
+                    self.state = 74
                     self.primary()
-                    self.state = 81 
+                    self.state = 77 
                     self._errHandler.sync(self)
                     _la = self._input.LA(1)
-                    if not ((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__0) | (1 << VitaminCParser.T__3) | (1 << VitaminCParser.T__7) | (1 << VitaminCParser.Real) | (1 << VitaminCParser.Int) | (1 << VitaminCParser.String) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.Symbol))) != 0)):
+                    if not ((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__1) | (1 << VitaminCParser.T__3) | (1 << VitaminCParser.T__7) | (1 << VitaminCParser.T__8) | (1 << VitaminCParser.Real) | (1 << VitaminCParser.Int) | (1 << VitaminCParser.String) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.PIPE) | (1 << VitaminCParser.Symbol))) != 0)):
                         break
 
                 pass
-            elif token in [VitaminCParser.T__2]:
+            elif token in [VitaminCParser.T__0]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 83
-                self.match(VitaminCParser.T__2)
-                self.state = 84
+                self.state = 79
+                self.match(VitaminCParser.T__0)
+                self.state = 80
                 self.fun()
                 pass
             else:
@@ -462,8 +439,8 @@ class VitaminCParser ( Parser ):
             return self.getTypedRuleContext(VitaminCParser.ConstantContext,0)
 
 
-        def block(self):
-            return self.getTypedRuleContext(VitaminCParser.BlockContext,0)
+        def function(self):
+            return self.getTypedRuleContext(VitaminCParser.FunctionContext,0)
 
 
         def pragma(self):
@@ -491,46 +468,129 @@ class VitaminCParser ( Parser ):
     def primary(self):
 
         localctx = VitaminCParser.PrimaryContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 8, self.RULE_primary)
+        self.enterRule(localctx, 6, self.RULE_primary)
         try:
-            self.state = 95
+            self.state = 91
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,9,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 87
+                self.state = 83
                 self.call()
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 88
+                self.state = 84
                 self.constant()
                 pass
 
             elif la_ == 3:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 89
-                self.block()
+                self.state = 85
+                self.function()
                 pass
 
             elif la_ == 4:
                 self.enterOuterAlt(localctx, 4)
-                self.state = 90
+                self.state = 86
                 self.pragma()
                 pass
 
             elif la_ == 5:
                 self.enterOuterAlt(localctx, 5)
-                self.state = 91
-                self.match(VitaminCParser.T__3)
-                self.state = 92
+                self.state = 87
+                self.match(VitaminCParser.T__1)
+                self.state = 88
                 self.expr()
-                self.state = 93
-                self.match(VitaminCParser.T__4)
+                self.state = 89
+                self.match(VitaminCParser.T__2)
                 pass
 
 
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+    class FunctionContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def chunk(self):
+            return self.getTypedRuleContext(VitaminCParser.ChunkContext,0)
+
+
+        def PIPE(self):
+            return self.getToken(VitaminCParser.PIPE, 0)
+
+        def atom(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(VitaminCParser.AtomContext)
+            else:
+                return self.getTypedRuleContext(VitaminCParser.AtomContext,i)
+
+
+        def getRuleIndex(self):
+            return VitaminCParser.RULE_function
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFunction" ):
+                listener.enterFunction(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFunction" ):
+                listener.exitFunction(self)
+
+
+
+
+    def function(self):
+
+        localctx = VitaminCParser.FunctionContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 8, self.RULE_function)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 93
+            self.match(VitaminCParser.T__3)
+            self.state = 105
+            self._errHandler.sync(self)
+            la_ = self._interp.adaptivePredict(self._input,12,self._ctx)
+            if la_ == 1:
+                self.state = 95
+                self._errHandler.sync(self)
+                la_ = self._interp.adaptivePredict(self._input,10,self._ctx)
+                if la_ == 1:
+                    self.state = 94
+                    self.atom()
+
+
+                self.state = 101
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+                while _la==VitaminCParser.T__4:
+                    self.state = 97
+                    self.match(VitaminCParser.T__4)
+                    self.state = 98
+                    self.atom()
+                    self.state = 103
+                    self._errHandler.sync(self)
+                    _la = self._input.LA(1)
+
+                self.state = 104
+                self.match(VitaminCParser.PIPE)
+
+
+            self.state = 107
+            self.chunk()
+            self.state = 108
+            self.match(VitaminCParser.T__5)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -569,7 +629,7 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 10, self.RULE_typ)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 97
+            self.state = 110
             self.atom()
         except RecognitionException as re:
             localctx.exception = re
@@ -589,8 +649,8 @@ class VitaminCParser ( Parser ):
             return self.getTypedRuleContext(VitaminCParser.AtomContext,0)
 
 
-        def block(self):
-            return self.getTypedRuleContext(VitaminCParser.BlockContext,0)
+        def chunk(self):
+            return self.getTypedRuleContext(VitaminCParser.ChunkContext,0)
 
 
         def funParam(self, i:int=None):
@@ -625,44 +685,48 @@ class VitaminCParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 99
+            self.state = 112
             self.atom()
-            self.state = 100
-            self.match(VitaminCParser.T__3)
-            self.state = 102
+            self.state = 113
+            self.match(VitaminCParser.T__1)
+            self.state = 115
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.Symbol))) != 0):
-                self.state = 101
+            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__8) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.PIPE) | (1 << VitaminCParser.Symbol))) != 0):
+                self.state = 114
                 self.funParam()
 
 
-            self.state = 108
+            self.state = 121
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==VitaminCParser.T__5:
-                self.state = 104
-                self.match(VitaminCParser.T__5)
-                self.state = 105
+            while _la==VitaminCParser.T__4:
+                self.state = 117
+                self.match(VitaminCParser.T__4)
+                self.state = 118
                 self.funParam()
-                self.state = 110
+                self.state = 123
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 111
-            self.match(VitaminCParser.T__4)
-            self.state = 114
+            self.state = 124
+            self.match(VitaminCParser.T__2)
+            self.state = 127
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==VitaminCParser.T__6:
-                self.state = 112
+                self.state = 125
                 self.match(VitaminCParser.T__6)
-                self.state = 113
+                self.state = 126
                 self.typ()
 
 
-            self.state = 116
-            self.block()
+            self.state = 129
+            self.match(VitaminCParser.T__3)
+            self.state = 130
+            self.chunk()
+            self.state = 131
+            self.match(VitaminCParser.T__5)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -716,19 +780,19 @@ class VitaminCParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 118
+            self.state = 133
             self.atom()
-            self.state = 119
+            self.state = 134
             self.match(VitaminCParser.COLON)
-            self.state = 120
+            self.state = 135
             self.typ()
-            self.state = 123
+            self.state = 138
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             if _la==VitaminCParser.EQUAL:
-                self.state = 121
+                self.state = 136
                 self.match(VitaminCParser.EQUAL)
-                self.state = 122
+                self.state = 137
                 self.expr()
 
 
@@ -778,32 +842,32 @@ class VitaminCParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 125
+            self.state = 140
             self.atom()
-            self.state = 126
-            self.match(VitaminCParser.T__3)
-            self.state = 128
+            self.state = 141
+            self.match(VitaminCParser.T__1)
+            self.state = 143
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__0) | (1 << VitaminCParser.T__2) | (1 << VitaminCParser.T__3) | (1 << VitaminCParser.T__7) | (1 << VitaminCParser.Real) | (1 << VitaminCParser.Int) | (1 << VitaminCParser.String) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.Symbol))) != 0):
-                self.state = 127
+            if (((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.T__0) | (1 << VitaminCParser.T__1) | (1 << VitaminCParser.T__3) | (1 << VitaminCParser.T__7) | (1 << VitaminCParser.T__8) | (1 << VitaminCParser.Real) | (1 << VitaminCParser.Int) | (1 << VitaminCParser.String) | (1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.PIPE) | (1 << VitaminCParser.Symbol))) != 0):
+                self.state = 142
                 self.callArg()
 
 
-            self.state = 134
+            self.state = 149
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==VitaminCParser.T__5:
-                self.state = 130
-                self.match(VitaminCParser.T__5)
-                self.state = 131
+            while _la==VitaminCParser.T__4:
+                self.state = 145
+                self.match(VitaminCParser.T__4)
+                self.state = 146
                 self.callArg()
-                self.state = 136
+                self.state = 151
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 137
-            self.match(VitaminCParser.T__4)
+            self.state = 152
+            self.match(VitaminCParser.T__2)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -849,17 +913,17 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 18, self.RULE_callArg)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 142
+            self.state = 157
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,16,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,19,self._ctx)
             if la_ == 1:
-                self.state = 139
+                self.state = 154
                 self.atom()
-                self.state = 140
+                self.state = 155
                 self.match(VitaminCParser.COLON)
 
 
-            self.state = 144
+            self.state = 159
             self.expr()
         except RecognitionException as re:
             localctx.exception = re
@@ -903,15 +967,15 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 20, self.RULE_pragma)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 146
+            self.state = 161
             self.match(VitaminCParser.T__7)
-            self.state = 147
+            self.state = 162
             self.atom()
-            self.state = 149
+            self.state = 164
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,17,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,20,self._ctx)
             if la_ == 1:
-                self.state = 148
+                self.state = 163
                 self.pragmaFun()
 
 
@@ -957,24 +1021,24 @@ class VitaminCParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 151
-            self.match(VitaminCParser.T__3)
-            self.state = 152
+            self.state = 166
+            self.match(VitaminCParser.T__1)
+            self.state = 167
             self.pragmaArg()
-            self.state = 157
+            self.state = 172
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==VitaminCParser.T__5:
-                self.state = 153
-                self.match(VitaminCParser.T__5)
-                self.state = 154
+            while _la==VitaminCParser.T__4:
+                self.state = 168
+                self.match(VitaminCParser.T__4)
+                self.state = 169
                 self.pragmaArg()
-                self.state = 159
+                self.state = 174
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 160
-            self.match(VitaminCParser.T__4)
+            self.state = 175
+            self.match(VitaminCParser.T__2)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -1020,17 +1084,17 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 24, self.RULE_pragmaArg)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 165
+            self.state = 180
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,19,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,22,self._ctx)
             if la_ == 1:
-                self.state = 162
+                self.state = 177
                 self.atom()
-                self.state = 163
+                self.state = 178
                 self.match(VitaminCParser.COLON)
 
 
-            self.state = 167
+            self.state = 182
             self.constant()
         except RecognitionException as re:
             localctx.exception = re
@@ -1081,27 +1145,27 @@ class VitaminCParser ( Parser ):
         localctx = VitaminCParser.ConstantContext(self, self._ctx, self.state)
         self.enterRule(localctx, 26, self.RULE_constant)
         try:
-            self.state = 173
+            self.state = 188
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [VitaminCParser.Name, VitaminCParser.LANGLE, VitaminCParser.RANGLE, VitaminCParser.QUOTE, VitaminCParser.EQUAL, VitaminCParser.COLON, VitaminCParser.Symbol]:
+            if token in [VitaminCParser.T__8, VitaminCParser.Name, VitaminCParser.LANGLE, VitaminCParser.RANGLE, VitaminCParser.QUOTE, VitaminCParser.EQUAL, VitaminCParser.COLON, VitaminCParser.PIPE, VitaminCParser.Symbol]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 169
+                self.state = 184
                 self.atom()
                 pass
             elif token in [VitaminCParser.Int]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 170
+                self.state = 185
                 self.intn()
                 pass
             elif token in [VitaminCParser.Real]:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 171
+                self.state = 186
                 self.real()
                 pass
             elif token in [VitaminCParser.String]:
                 self.enterOuterAlt(localctx, 4)
-                self.state = 172
+                self.state = 187
                 self.string()
                 pass
             else:
@@ -1127,6 +1191,9 @@ class VitaminCParser ( Parser ):
         def Symbol(self):
             return self.getToken(VitaminCParser.Symbol, 0)
 
+        def PIPE(self):
+            return self.getToken(VitaminCParser.PIPE, 0)
+
         def QUOTE(self):
             return self.getToken(VitaminCParser.QUOTE, 0)
 
@@ -1141,6 +1208,10 @@ class VitaminCParser ( Parser ):
 
         def RANGLE(self):
             return self.getToken(VitaminCParser.RANGLE, 0)
+
+        def atom(self):
+            return self.getTypedRuleContext(VitaminCParser.AtomContext,0)
+
 
         def getRuleIndex(self):
             return VitaminCParser.RULE_atom
@@ -1160,16 +1231,62 @@ class VitaminCParser ( Parser ):
 
         localctx = VitaminCParser.AtomContext(self, self._ctx, self.state)
         self.enterRule(localctx, 28, self.RULE_atom)
-        self._la = 0 # Token type
         try:
-            self.enterOuterAlt(localctx, 1)
-            self.state = 175
-            _la = self._input.LA(1)
-            if not((((_la) & ~0x3f) == 0 and ((1 << _la) & ((1 << VitaminCParser.Name) | (1 << VitaminCParser.LANGLE) | (1 << VitaminCParser.RANGLE) | (1 << VitaminCParser.QUOTE) | (1 << VitaminCParser.EQUAL) | (1 << VitaminCParser.COLON) | (1 << VitaminCParser.Symbol))) != 0)):
-                self._errHandler.recoverInline(self)
+            self.state = 202
+            self._errHandler.sync(self)
+            token = self._input.LA(1)
+            if token in [VitaminCParser.Name]:
+                self.enterOuterAlt(localctx, 1)
+                self.state = 190
+                self.match(VitaminCParser.Name)
+                pass
+            elif token in [VitaminCParser.Symbol]:
+                self.enterOuterAlt(localctx, 2)
+                self.state = 191
+                self.match(VitaminCParser.Symbol)
+                pass
+            elif token in [VitaminCParser.PIPE]:
+                self.enterOuterAlt(localctx, 3)
+                self.state = 192
+                self.match(VitaminCParser.PIPE)
+                pass
+            elif token in [VitaminCParser.QUOTE]:
+                self.enterOuterAlt(localctx, 4)
+                self.state = 193
+                self.match(VitaminCParser.QUOTE)
+                pass
+            elif token in [VitaminCParser.COLON]:
+                self.enterOuterAlt(localctx, 5)
+                self.state = 194
+                self.match(VitaminCParser.COLON)
+                pass
+            elif token in [VitaminCParser.EQUAL]:
+                self.enterOuterAlt(localctx, 6)
+                self.state = 195
+                self.match(VitaminCParser.EQUAL)
+                pass
+            elif token in [VitaminCParser.LANGLE]:
+                self.enterOuterAlt(localctx, 7)
+                self.state = 196
+                self.match(VitaminCParser.LANGLE)
+                pass
+            elif token in [VitaminCParser.RANGLE]:
+                self.enterOuterAlt(localctx, 8)
+                self.state = 197
+                self.match(VitaminCParser.RANGLE)
+                pass
+            elif token in [VitaminCParser.T__8]:
+                self.enterOuterAlt(localctx, 9)
+                self.state = 198
+                self.match(VitaminCParser.T__8)
+                self.state = 199
+                self.atom()
+                self.state = 200
+                self.match(VitaminCParser.T__8)
+                pass
             else:
-                self._errHandler.reportMatch(self)
-                self.consume()
+                raise NoViableAltException(self)
+
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -1207,7 +1324,7 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 30, self.RULE_intn)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 177
+            self.state = 204
             self.match(VitaminCParser.Int)
         except RecognitionException as re:
             localctx.exception = re
@@ -1246,7 +1363,7 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 32, self.RULE_real)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 179
+            self.state = 206
             self.match(VitaminCParser.Real)
         except RecognitionException as re:
             localctx.exception = re
@@ -1285,7 +1402,7 @@ class VitaminCParser ( Parser ):
         self.enterRule(localctx, 34, self.RULE_string)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 181
+            self.state = 208
             self.match(VitaminCParser.String)
         except RecognitionException as re:
             localctx.exception = re

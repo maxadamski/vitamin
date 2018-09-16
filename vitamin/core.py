@@ -4,6 +4,7 @@ from typing import *
 
 from vitamin.structure import Context, C_TRUE, C_VOID, Obj
 import vitamin.structure as structure
+from vitamin.reporting import *
 
 
 class CoreObj(Obj):
@@ -60,18 +61,19 @@ class Lambda(Expr):
     body: List[Expr]
 
 
-def core_eval(ctx: Context, expr: Obj) -> Obj:
+def core_eval(ctx: Context, expr: Obj, tail_call=False) -> Obj:
     if isinstance(expr, Call):
         head = core_eval(ctx, expr.head)
         if isinstance(head, Lambda):
             assert len(head.head) == len(expr.tail)
-            ctx.push_scope()
+            if not tail_call: ctx.push_scope()
             for arg, exp in zip(head.head, expr.tail):
-                ctx.set_slot(arg, core_eval(ctx, exp))
+                ctx.scope.let(arg, core_eval(ctx, exp))
             result = C_VOID
-            for lambda_expr in head.body:
-                result = core_eval(ctx, lambda_expr)
-            ctx.pop_scope()
+            N = len(head.body)
+            for i, lambda_expr in enumerate(head.body):
+                result = core_eval(ctx, lambda_expr, tail_call=i == N - 1)
+            if not tail_call: ctx.pop_scope()
             return result
         elif isinstance(head, structure.Lambda):
             args = [core_eval(ctx, arg) for arg in expr.tail]
@@ -81,23 +83,32 @@ def core_eval(ctx: Context, expr: Obj) -> Obj:
     elif isinstance(expr, Cond):
         result = core_eval(ctx, expr.cond)
         if result == C_TRUE:
-            return core_eval(ctx, expr.if_t)
+            return core_eval(ctx, expr.if_t, tail_call=tail_call)
         else:
-            return core_eval(ctx, expr.if_f)
+            return core_eval(ctx, expr.if_f, tail_call=tail_call)
     elif isinstance(expr, Let):
+        name = expr.name[1:-1] if expr.name.startswith("`") else expr.name
         result = core_eval(ctx, expr.expr)
-        ctx.set_slot(expr.name, result)
+        ctx.scope.let(name, result)
         return result
     elif isinstance(expr, Set):
+        name = expr.name[1:-1] if expr.name.startswith("`") else expr.name
         result = core_eval(ctx, expr.expr)
-        ctx.set_slot(expr.name, result)
+        status = ctx.scope.set(name, result)
+        if status is None:
+            raise SemError(err_unknown_symbol(ctx, ctx.expr) + f"({name})")
         return result
     elif isinstance(expr, Get):
-        result = ctx.get_slot(expr.name)
+        name = expr.name[1:-1] if expr.name.startswith("`") else expr.name
+        result = ctx.scope.get(name)
+        if result is None:
+            raise SemError(err_unknown_symbol(ctx, ctx.expr) + f"({name})")
         return result
     elif isinstance(expr, Quote):
         return expr.expr
     elif isinstance(expr, Lambda):
         return expr
-    else:  # A leaf value
+    elif isinstance(expr, Obj):  # A leaf value
         return expr
+
+    assert False

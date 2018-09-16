@@ -26,15 +26,6 @@ class VitaminCListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by VitaminCParser#block.
-    def enterBlock(self, ctx:VitaminCParser.BlockContext):
-        pass
-
-    # Exit a parse tree produced by VitaminCParser#block.
-    def exitBlock(self, ctx:VitaminCParser.BlockContext):
-        pass
-
-
     # Enter a parse tree produced by VitaminCParser#expr.
     def enterExpr(self, ctx:VitaminCParser.ExprContext):
         pass
@@ -50,6 +41,15 @@ class VitaminCListener(ParseTreeListener):
 
     # Exit a parse tree produced by VitaminCParser#primary.
     def exitPrimary(self, ctx:VitaminCParser.PrimaryContext):
+        pass
+
+
+    # Enter a parse tree produced by VitaminCParser#function.
+    def enterFunction(self, ctx:VitaminCParser.FunctionContext):
+        pass
+
+    # Exit a parse tree produced by VitaminCParser#function.
+    def exitFunction(self, ctx:VitaminCParser.FunctionContext):
         pass
 
 

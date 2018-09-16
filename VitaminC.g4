@@ -38,7 +38,6 @@ exprs : expr (',' expr)* ;
 
 program : chunk EOF ;
 chunk : NL* expr? ((SEMI NL* | NL+) expr)* NL* ;
-block : '{' chunk '}' ;
 
 expr
     : primary+
@@ -48,14 +47,18 @@ expr
 primary
     : call
     | constant
-    | block
+    | function
     | pragma
     | '(' expr ')'
     ;
 
+function
+    : '{' (atom? (',' atom)* PIPE)? chunk '}'
+    ;
+
 //typ : atom | atom LANGLE typ (',' typ)* RANGLE | '_' ;
 typ : atom ;
-fun : atom '(' funParam? (',' funParam)* ')' ('->' typ)? block ;
+fun : atom '(' funParam? (',' funParam)* ')' ('->' typ)? '{' chunk '}' ;
 funParam : atom COLON typ (EQUAL expr)? ;
 
 // combine callArg and pragmaArg after creating the first compiler
@@ -68,7 +71,7 @@ pragmaArg : (atom COLON)? constant ;
 
 // boilerplate
 constant : atom | intn | real | string ;
-atom : Name | Symbol | QUOTE | COLON | EQUAL | LANGLE | RANGLE ;
+atom : Name | Symbol | PIPE | QUOTE | COLON | EQUAL | LANGLE | RANGLE | '`' atom '`' ;
 intn : Int ;
 real : Real ;
 string : String ;
@@ -131,6 +134,7 @@ QUOTE : '\'' ;
 EQUAL : '=' ;
 COLON : ':' ;
 SEMI : ';' ;
+PIPE : '|' ;
 
 //fragment OpHead : [\p{Sm}\p{Po}] ;
 //fragment OpTail : OpHead ;
