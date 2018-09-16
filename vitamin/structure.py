@@ -174,6 +174,10 @@ C_VOID = Obj(T_VOID, '()', constant=True)
 
 
 class Expr(Obj):
+    is_ready: bool = False
+    is_called: bool = False
+    symbol: 'Lambda' = None
+
     def __init__(self, head, args, span):
         mem = {'head': head, 'args': args}
         super().__init__(T_EXPR, mem, span=span, leaf=False, literal=False)
@@ -313,6 +317,9 @@ class Scope:
             self.symbols[key] = []
         self.symbols[key].append(obj)
 
+    def set_sym(self, key, obj):
+        self.symbols[key] = [obj]
+
 
 @dataclass
 class Context:
@@ -320,7 +327,7 @@ class Context:
     opdirs: List[OpDir] = field(default_factory=list)
     ops: List[Op] = field(default_factory=list)
     pragmas: Dict[str, Lambda] = field(default_factory=dict)
-    scope: Scope = None
+    scope: Scope = field(default_factory=lambda: Scope({}))
     path: List[str] = None
     file: Any = None
     node: Expr = None
@@ -343,6 +350,12 @@ class Context:
 
     def pop_scope(self):
         self.scope = self.scope.parent
+
+    def set_slot(self, name: str, value):
+        self.scope.set_sym(name, value)
+
+    def get_slot(self, name: str):
+        return self.scope.get_sym_next(name)
 
 
 def unpack_args(args: Dict[str, Obj], names: Iterator[str]) -> Iterator[Obj]:
@@ -385,9 +398,9 @@ def paren(string: str):
 
 
 def sexpr(obj: Obj):
-    mem = obj.mem
+    mem = obj.mem if hasattr(obj, 'mem') else obj
 
-    if isinstance(obj, Obj) and obj.typ == T_ATOM:
+    if hasattr(obj, 'typ') and obj.typ == T_ATOM:
         return obj.mem
     elif isinstance(obj, Lambda):
         return obj.name + '(' + ', '.join(map(str, obj.param)) + ')'
@@ -397,7 +410,7 @@ def sexpr(obj: Obj):
         if key is None: return val
         return f"{key}: {val}"
     elif isinstance(obj, Expr):
-        #head = str(obj.head).split('.')[-1]
+        # head = str(obj.head).split('.')[-1]
         args = list(map(str, obj.args))
         return paren(', '.join(args))
     elif isinstance(mem, dict):
@@ -407,4 +420,4 @@ def sexpr(obj: Obj):
     elif isinstance(mem, str):
         return f'"{mem}"'
     else:
-        return str(mem)
+        return mem

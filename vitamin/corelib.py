@@ -34,8 +34,10 @@ def f_printr(ctx, args: Dict[str, Obj]):
     x, = unpack_args(args, ['x'])
     if isinstance(x, Expr):
         print(str(x), end='')
-    else:
+    elif hasattr(x, 'mem'):
         print(x.mem, end='')
+    else:
+        print(x)
     return C_VOID
 
 

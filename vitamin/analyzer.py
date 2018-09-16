@@ -26,6 +26,7 @@ def process_lambda_args(ctx: Context, spec: Lambda, name: str, args: List[Lambda
         res[spec.variadic] = Obj(T_ARRAY, [])
 
     for i, arg in enumerate(args):
+        # fixme: implement keyword arguments
         if p < P:
             # first parse only positional arguments
             if arg.is_keyword:

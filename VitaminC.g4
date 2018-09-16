@@ -25,7 +25,7 @@ parameter : name (':' name ('=' expr)? | '=' expr) ;
 parameters :  '(' ( parameter (',' parameter)* )? ')' ;
 
 argument : (name ':')? expr ;
-arguments : '(' ( argument (',' argument)* ','? )? ')' ;
+arguments : '(' ( argument (',' argument)* ','? )? ')f' ;
 
 exprs : expr (',' expr)* ;
 */

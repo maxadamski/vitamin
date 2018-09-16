@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 from os import path as path
 
 from vitamin.corelib import *
@@ -51,6 +52,7 @@ def operator_parse(groups: Dict[str, OpGroupDir], ops: List[OpDir]) -> List[Op]:
 
 
 def main(argv):
+    sys.setrecursionlimit(10000)
     input_path = argv[1]
     ast = parse_file(input_path)
 
@@ -75,6 +77,8 @@ def main(argv):
 
     G_NUMERIC = Typ('T', gen=['T'])
     G_ANY = Typ('T', gen=['T'])
+
+    import vitamin.core as core
 
     def add_fun(name, func, args, ret=T_VOID, var=None):
         obj = Lambda(name, func, args, returns=ret, variadic=var)
@@ -129,9 +133,10 @@ def main(argv):
         finally:
             ctx.pop_expr()
 
+        ctx.push_expr(expr)
+        eval_transform(ctx, ctx.expr)
         try:
-            ctx.push_expr(expr)
-            eval_obj(ctx, ctx.expr)
+            pass
         except SemError as e:
             print(e)
             return 1
