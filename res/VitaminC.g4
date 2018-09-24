@@ -41,33 +41,36 @@ chunk : NL* expr? ((SEMI NL* | NL+) expr)* NL* ;
 
 expr
     : primary+
-    | 'fun' fun
     ;
 
 primary
     : call
     | constant
-    | function
     | pragma
-    | '(' expr ')'
+    | ifexpr
+    | fun
+    | '(' NL* expr NL* ')'
     ;
 
-function
+ifexpr : 'if' '(' NL* expr NL* ')' NL* expr NL* ('else' NL* expr)? ;
+
+fun
     : '{' (atom? (',' atom)* PIPE)? chunk '}'
     ;
 
 //typ : atom | atom LANGLE typ (',' typ)* RANGLE | '_' ;
+/*
 typ : atom ;
 fun : atom '(' funParam? (',' funParam)* ')' ('->' typ)? '{' chunk '}' ;
 funParam : atom COLON typ (EQUAL expr)? ;
+*/
 
 // combine callArg and pragmaArg after creating the first compiler
 call : atom '(' callArg? (',' callArg)* ')' ;
 callArg : (atom COLON)? expr ;
-pragma : '#' atom pragmaFun? ;
-pragmaFun : '(' pragmaArg (',' pragmaArg)* ')' ;
-pragmaArg : (atom COLON)? constant ;
+pragma : '#' (atom | call) ;
 
+// qualified operators could be called like functions without quoting
 
 // boilerplate
 constant : atom | intn | real | string ;
