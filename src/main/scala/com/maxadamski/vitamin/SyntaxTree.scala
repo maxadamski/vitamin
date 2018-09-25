@@ -10,7 +10,9 @@ import ASTUtils._
 case class Span(start: Int, stop: Int)
 
 object Tag extends Enumeration {
-  val Pragma, Lambda, Block, Call, Arg, Flat, Array, Atom, Int, Real, String = Value
+  val Pragma, Lambda, Block, Call, Arg, Flat, Array,
+      Let, Set, Quote,
+      Atom, Int, Real, String, Null = Value
   type Tag = Value
 
 }
@@ -34,13 +36,13 @@ case class AST(tag: Tag, data: Expr, meta: Map[String, Any] = Map()) {
     case _ => false
   }
 
-  def child: Iterator[AST] = data match {
-    case Node(children) => Iterator(children).flatten
-    case Leaf(_) => Iterator()
+  def child: Iterable[AST] = data match {
+    case Node(children) => children.filterNot(it => it.tag == Tag.Null)
+    case Leaf(_) => Seq()
   }
 
   def depth: Int = data match {
-    case Node(children) => 1 + children.map(_.depth).max
+    case Node(children) => 1 + (if (children.isEmpty) 0 else children.map(_.depth).max)
     case Leaf(_) => 0
   }
 
@@ -125,7 +127,8 @@ object ASTUtils {
       val top = b.pop()
       top match {
         case AST(_, Node(oldChildren), _) =>
-          val children = oldChildren.toList.indices.map(_ => c.pop()).reverse
+          val children = oldChildren.toList.indices
+            .map(_ => c.pop()).filterNot(it => it.tag == Tag.Null).reverse
           c.add(f(top.copy(data = Node(children))))
         case AST(_, Leaf(_), _) =>
           c.add(f(top))
@@ -141,12 +144,12 @@ object ASTUtils {
       case AST(Tag.Lambda, Node(data), _) =>
         val bodyStr = repr(data.last, lvl, multi)
         val initStr = data.dropRight(1).map(repr(_, lvl, multi)).mkString(" ")
-        s"(λ $initStr $bodyStr)"
-      case AST(Tag.Call, Node(data@Seq(_, _, _)), _) =>
-        val d = data.map(repr(_, lvl, multi))
-        s"(${d(0)} ${d(1)} ${d(2)})"
-      case AST(Tag.Arg, Node(Seq(data)), _) =>
-        s"${repr(data, lvl, multi)}"
+        s"(:λ $initStr $bodyStr)"
+      case AST(Tag.Call, Node(data), _) =>
+        val d = data.map(repr(_, lvl, multi)).mkString(" ")
+        s"(.$d)"
+      case AST(Tag.Quote, Node(data +: _), _) =>
+        s"'$data"
       case AST(tag, Node(data), _) if node.depth > 4 =>
         lvl += 1
         val sep = if (multi) "\n" + "\t" * lvl else ""

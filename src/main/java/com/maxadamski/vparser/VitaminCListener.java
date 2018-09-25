@@ -58,6 +58,16 @@ public interface VitaminCListener extends ParseTreeListener {
 	 */
 	void exitIfexpr(VitaminCParser.IfexprContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#whexpr}.
+	 * @param ctx the parse tree
+	 */
+	void enterWhexpr(VitaminCParser.WhexprContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#whexpr}.
+	 * @param ctx the parse tree
+	 */
+	void exitWhexpr(VitaminCParser.WhexprContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link VitaminCParser#fun}.
 	 * @param ctx the parse tree
 	 */

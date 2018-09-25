@@ -110,7 +110,7 @@ class PrattParser(
 
 object PrattFunctions {
   def mkArg(arg: AST): AST = {
-    AST(Tag.Arg, Node(Array(arg)))
+    arg
   }
 
   def mkCall(args: AST*): AST = {

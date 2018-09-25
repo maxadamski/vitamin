@@ -76,6 +76,18 @@ public class VitaminCBaseListener implements VitaminCListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterWhexpr(VitaminCParser.WhexprContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitWhexpr(VitaminCParser.WhexprContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterFun(VitaminCParser.FunContext ctx) { }
 	/**
 	 * {@inheritDoc}

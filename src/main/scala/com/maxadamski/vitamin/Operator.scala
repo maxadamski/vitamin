@@ -140,3 +140,8 @@ case class Op(name: String, prec: Int, fix: Fixity, ass: Assoc)
 case class Arg(key: Option[String], value: AST)
 
 case class Param(key: String, default: Option[AST] = None, list: Boolean = false)
+
+case class Lambda(
+  param: List[String],
+  body: AST,
+)

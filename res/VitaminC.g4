@@ -48,11 +48,13 @@ primary
     | constant
     | pragma
     | ifexpr
+    | whexpr
     | fun
     | '(' NL* expr NL* ')'
     ;
 
 ifexpr : 'if' '(' NL* expr NL* ')' NL* expr NL* ('else' NL* expr)? ;
+whexpr : 'while' '(' NL* expr NL* ')' NL* expr ;
 
 fun
     : '{' (atom? (',' atom)* PIPE)? chunk '}'
@@ -66,7 +68,7 @@ funParam : atom COLON typ (EQUAL expr)? ;
 */
 
 // combine callArg and pragmaArg after creating the first compiler
-call : atom '(' callArg? (',' callArg)* ')' ;
+call : (atom | fun) '(' callArg? (',' callArg)* ')' ;
 callArg : (atom COLON)? expr ;
 pragma : '#' (atom | call) ;
 

@@ -77,6 +77,8 @@ class Listener extends VitaminCBaseListener {
       getPragma(ctx.pragma)
     else if (ctx.ifexpr != null)
       getIf(ctx.ifexpr)
+    else if (ctx.whexpr != null)
+      getWh(ctx.whexpr)
     else if (ctx.expr != null)
       getExpr(ctx.expr)
     else
@@ -90,18 +92,32 @@ class Listener extends VitaminCBaseListener {
     AST(Tag.Call, Node(Array(func, args(0), args(1), args(2))), ctx.meta)
   }
 
+  def getWh(ctx: WhexprContext): AST = {
+    val func = AST(Tag.Atom, Leaf("while"))
+    val args = ctx.expr.mapArray(getExpr)
+    AST(Tag.Call, Node(Array(func, args(0), args(1))), ctx.meta)
+  }
+
+
   def getFun(ctx: FunContext): AST = {
     AST(Tag.Lambda, Node(ctx.atom.mapArray(getAtom) :+ getChunk(ctx.chunk)), ctx.meta)
   }
 
   def getCall(ctx: CallContext): AST = {
-    AST(Tag.Call, Node(getAtom(ctx.atom) +: ctx.callArg.mapArray(getCallArg)), ctx.meta)
+    val head = if (ctx.atom != null)
+      getAtom(ctx.atom)
+    else
+      getFun(ctx.fun)
+
+    AST(Tag.Call, Node(head +: ctx.callArg.mapArray(getCallArg)), ctx.meta)
   }
 
   def getCallArg(ctx: CallArgContext): AST = {
-    var data = Array(getExpr(ctx.expr))
-    if (ctx.atom != null) data +:= getAtom(ctx.atom)
-    AST(Tag.Arg, Node(data), ctx.meta)
+    val expr = getExpr(ctx.expr)
+    if (ctx.atom != null)
+      AST(Tag.Arg, Node(Array(getAtom(ctx.atom), expr)))
+    else
+      expr
   }
 
   def getPragma(ctx: PragmaContext): AST = {
