@@ -133,19 +133,26 @@ object Source {
 object Report {
   def error(
     name: String, comment: String, hints: Array[String],
-    file: String, code: String, line: Int, char: Int,
+    file: String, code: Option[String], line: Option[Int], char: Option[Int],
   ): String = {
     val head = s"-- ${name.toUpperCase} "
-    val tail = s" [$file:$line:$char]"
+    val loc = if (line.isDefined && char.isDefined) s":${line.get}:${char.get}" else ""
+    val tail = s" [$file$loc]"
     val padding = "-" * (80 - head.length - tail.length)
-    var result = s"$head$padding$tail\n\n$comment\n\n$code\n"
+    val hintpad = "\n" + " " * 6
+
+    var result = s"$head$padding$tail\n\n$comment\n"
+
+    if (code.isDefined) {
+      result += s"\n${code.get}\n"
+    }
+
     if (hints.nonEmpty) {
-      result += "\n"
-      for (hint <- hints) {
-        val fmt = hint.lines.mkString("\n      ")
-        result += s"hint: $fmt\n"
+      result += hints.fold("\n") { case (sum, it) =>
+        sum + s"hint: ${it.lines.mkString(hintpad)}\n"
       }
     }
+
     result
   }
 
@@ -156,12 +163,15 @@ object Report {
   ): String = {
     val node2 = if (node != null) node else c.node
     val high2 = if (high != null) high else node2
-    assert(node2.span.isDefined)
-    assert(node2.line.isDefined)
-    assert(node2.char.isDefined)
     val file = c.file
-    val code = Source.errorExcerpt(file, node2.span.get, node2.line.get)
-    error(name, comment, hints, file, code, node2.line.get, node2.char.get)
+
+    val (span, line, char) = (node2.span, node2.line, node2.char)
+    val code = (span, line) match {
+      case (Some(sp), Some(ln)) => Some(Source.errorExcerpt(file, sp, ln))
+      case _ => None
+    }
+
+    error(name, comment, hints, file, code, line, char)
   }
 
   def error__parser__null_unexpected_token(c: Ctx, token: Token): String =
@@ -224,4 +234,25 @@ object Report {
       s"expected: ${args.mkString(", ")}\n" +
       s"but was:  ${got.mkString(", ")}\n"
     )
+
+  def error__eval__set_undefined(c: Ctx, name: String): String = {
+    compileError(c, "runtime error",
+      s"attempting to assign to an undefined variable '$name'.")
+  }
+
+  def error__eval__get_undefined(c: Ctx, name: String): String = {
+    compileError(c, "runtime error",
+      s"attempting to use an undefined variable '$name'.")
+  }
+
+  def error__eval__let_defined(c: Ctx, name: String): String = {
+    compileError(c, "runtime error",
+      s"attempting to redefine a variable '$name' in current scope.")
+  }
+
+  def error__eval__div_zero(c: Ctx): String = {
+    compileError(c, "runtime error",
+      s"cannot divide by zero.")
+  }
 }
+

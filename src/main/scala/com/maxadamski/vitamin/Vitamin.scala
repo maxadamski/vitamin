@@ -55,26 +55,34 @@ object Vitamin {
       names.mkString("/")
     }
 
-    def let(name: String, value: Any): Unit = {
-      env.vars.put(name, value)
-    }
-
-    def set(name: String, value: Any): Unit = {
-      val (dst, old) = get(name)
-      dst.vars(name) = value
-    }
-
-    def get(name: String): (Env, Any) = {
+    def lookup(name: String): Option[Env] = {
       var local: Option[Env] = Some(env)
       while (local.isDefined) {
         if (local.get.vars.contains(name))
-          return (local.get, local.get.vars(name))
+          return local
         else
           local = local.get.parent
       }
-      throw new Exception(s"no variable $name")
+      None
     }
 
+    def let(name: String, value: Any): Unit = {
+      if (env.vars.contains(name))
+        throw new RuntimeException(error__eval__let_defined(this, name))
+      env.vars.put(name, value)
+    }
+
+    def set(name: String, value: Any): Unit = lookup(name) match {
+      case Some(dst) => dst.vars(name) = value
+      case None =>
+        throw new RuntimeException(error__eval__set_undefined(this, name))
+    }
+
+    def get(name: String): Any = lookup(name) match {
+      case Some(dst) => dst.vars(name)
+      case None =>
+        throw new RuntimeException(error__eval__get_undefined(this, name))
+    }
   }
 
   def main(args: Array[String]): Unit = {
@@ -147,31 +155,12 @@ object Vitamin {
       res
     }
 
-    def mkAtom(value: String): AST =
-      AST(Tag.Atom, Leaf(value))
-
-    def mkCall(func: AST, args: AST*): AST =
-      AST(Tag.Call, Node(func +: args.toArray))
-
-    def mkNode(args: AST*): Node = Node(args)
-
-    def mkBlock(args: AST*): AST = AST(Tag.Block, Node(args))
-
-    def mkLet(name: String, arg: AST): AST =
-      AST(Tag.Let, mkNode(AST(Tag.Quote, Leaf(name)), arg))
-
-    def mkNull: AST = AST(Tag.Null, Leaf(null))
-
-    def mkQuote(arg: AST): AST = AST(Tag.Quote, mkNode(arg))
-
     def exIf(it: AST): AST = it match {
       case AST(Tag.Call, Node(AST(Tag.Atom, Leaf(op), _) +: args), _) =>
         val quoted = args.toList
         AST(Tag.Call, mkNode(mkAtom("if") +: quoted: _*))
       case _ => throw new Exception()
     }
-
-    def mkCall2(key: String, values: AST*): AST = mkCall(mkAtom(key), values:_*)
 
     // 2. expand macros
     program = program.map(next = {
@@ -190,8 +179,6 @@ object Vitamin {
           case ("'", Seq(arg: AST)) =>
             AST(Tag.Quote, mkNode(arg))
           case ("if", args) =>
-            //val quoted = args.map(mkQuote).toList
-            //AST(Tag.Call, mkNode(mkAtom("if") +: quoted: _*))
             exIf(it)
           case ("while", Seq(cond: AST, AST(Tag.Lambda, Node(Seq(AST(Tag.Block, Node(body), _))), _))) =>
             val call = AST(Tag.Call, mkNode(mkAtom("if"), cond, mkBlock(
@@ -220,154 +207,163 @@ object Vitamin {
     }
 
 
-    val builtins = Seq("+", "*", "-", "=", "==", ">", "printr", "newline", "if", "eval")
+    val builtins = Seq("+", "-", "*", "/", "=", "==", ">", "printr", "newline", "if", "eval")
 
     // 3. run interpreter
-    def eval(node: AST): Any = node match {
-      case AST(Tag.Block, Node(children), _) =>
-        var last: Any = None
-        for (child <- children) {
-          last = eval(child)
-        }
-        last
-      case AST(Tag.Let, Node(Seq(AST(_, Leaf(name: String), _), value)), _) =>
-        val res = eval(value)
-        ctx.let(name, res)
-        res
-      case AST(Tag.Set, Node(Seq(AST(_, Leaf(name: String), _), value)), _) =>
-        val res = eval(value)
-        ctx.set(name, res)
-        res
-      case AST(Tag.Atom, Leaf(name: String), _) =>
-        val (env, res) = ctx.get(name)
-        res
-      case AST(Tag.Quote, Node(Seq(quoted)), _) =>
-        quoted
-      case AST(Tag.Call, Node(AST(Tag.Atom, Leaf(name: String), _) +: args), _)
-                             if builtins contains name =>
-
-        if (name == "if") {
-          val arg = args.toList
-          val (cond, t, f) = (eval(arg(0)), arg(1), arg(2))
-
-          (cond, t, f) match {
-            case (cond: Boolean, t: AST, f: AST) =>
-              return if (cond) eval(t) else eval(f)
-            case _ =>
-              throw new Exception()
+    def eval(node: AST): Any = {
+      ctx.nodeStack.push(node)
+      val ret = node match {
+        case AST(Tag.Block, Node(children), _) =>
+          var last: Any = None
+          for (child <- children) {
+            last = eval(child)
           }
-        }
+          last
+        case AST(Tag.Let, Node(Seq(AST(_, Leaf(name: String), _), value)), _) =>
+          val res = eval(value)
+          ctx.let(name, res)
+          res
+        case AST(Tag.Set, Node(Seq(AST(_, Leaf(name: String), _), value)), _) =>
+          val res = eval(value)
+          ctx.set(name, res)
+          res
+        case AST(Tag.Atom, Leaf(name: String), _) =>
+          ctx.get(name)
+        case AST(Tag.Quote, Node(Seq(quoted)), _) =>
+          quoted
+        case AST(Tag.Call, Node(AST(Tag.Atom, Leaf(name: String), _) +: args), _)
+          if builtins contains name =>
 
-        def t(v: Any): String = v.getClass.getClasses.map(_.getSimpleName).mkString("/")
+          if (name == "if") {
+            val arg = args.toList
+            val (cond, t, f) = (eval(arg(0)), arg(1), arg(2))
 
-        val arg = (args map eval).toList
-        ctx.nodeStack.push(node)
-        val res = name match {
-          case "+" =>
-            arg match {
-              case Seq(x: Int, y: Int) => x + y
-              case Seq(x: Double, y: Double) => x + y
-              case Seq(x, y) =>
+            (cond, t, f) match {
+              case (cond: Boolean, t: AST, f: AST) =>
+                return if (cond) eval(t) else eval(f)
+              case _ =>
                 throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "+", Array("Num", "Num"), Array(t(x), t(y))))
+                  ctx, "if", Array("Bool", "AST", "AST"), Array()))
             }
-          case "*" =>
-            arg match {
-              case Seq(x: Int, y: Int) => x * y
-              case Seq(x: Double, y: Double) => x * y
-              case Seq(x, y) =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "*", Array("Num", "Num"), Array(t(x), t(y))))
-            }
-          case "-" =>
-            arg match {
-              case Seq(x: Int) => -x
-              case Seq(x: Double) => -x
-              case Seq(x: Int, y: Int) => x - y
-              case Seq(x: Double, y: Double) => x - y
-              case Seq(x, y) =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "-", Array("Num", "Num"), Array(t(x), t(y))))
-              case Seq(x) =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "-", Array("Num"), Array(t(x))))
-            }
-          case "==" =>
-            arg match {
-              case Seq(x: Boolean, y: Boolean) => x == y
-              case Seq(x: Int, y: Int) => x == y
-              case Seq(x: Double, y: Double) => x == y
-              case Seq(x: String, y: String) => x == y
-              case Seq(x, y) =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "==", Array("Eq", "Eq"), Array(t(x), t(y))))
-            }
-          case ">" =>
-            arg match {
-              case Seq(x: Int, y: Int) => x > y
-              case Seq(x: Double, y: Double) => x > y
-              case Seq(x, y) =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, ">", Array("Num", "Num"), Array(t(x), t(y))))
-            }
-          case "eval" =>
-            arg match {
-              case Seq(x: AST) => eval(x)
-              case Seq(x) =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "eval", Array("AST"), Array(t(x))))
-            }
-          case "printr" =>
-            print(arg(0).toString)
-          case "newline" =>
-            println()
-        }
-        ctx.nodeStack.pop()
-        res
+          }
 
-      case AST(Tag.Call, Node((head: AST) +: args), _) =>
-        val lambda = eval(head)
-        val arg = (args map eval).toList
-        lambda match {
-          case AST(Tag.Lambda, Node(body), _) if body.toList.length == 1 =>
-            ctx.pushEnv()
-            ctx.nodeStack.push(node)
-            ctx.env.name = head.toString
-            if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
-            val ret = eval(body.toList(0))
-            ctx.nodeStack.pop()
-            ctx.popEnv()
-            ret
+          def t(v: Any): String = v.getClass.getClasses.map(_.getSimpleName).mkString("/")
 
-          case AST(Tag.Lambda, Node(kids), _) if kids.toList.length > 1 =>
-            val body = kids.last
-            val param = kids.dropRight(1)
-            ctx.pushEnv()
-            ctx.nodeStack.push(node)
-            ctx.env.name = head.toString
-            if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
-            val par = param.map { it => it.data.asInstanceOf[Leaf].data.asInstanceOf[String] }
-            (par zip arg) foreach { case (k, v) => ctx.let(k, v) }
-            val ret = eval(body)
-            ctx.nodeStack.pop()
-            ctx.popEnv()
-            ret
+          val arg = (args map eval).toList
+          val res = name match {
+            case "+" =>
+              arg match {
+                case Seq(x: Int, y: Int) => x + y
+                case Seq(x: Double, y: Double) => x + y
+                case Seq(x, y) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "+", Array("Num", "Num"), Array(t(x), t(y))))
+              }
+            case "*" =>
+              arg match {
+                case Seq(x: Int, y: Int) => x * y
+                case Seq(x: Double, y: Double) => x * y
+                case Seq(x, y) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "*", Array("Num", "Num"), Array(t(x), t(y))))
+              }
+            case "/" =>
+              arg match {
+                case Seq(_, 0) =>
+                  throw new RuntimeException(error__eval__div_zero(ctx))
+                case Seq(x: Int, y: Int) => x.toDouble / y.toDouble
+                case Seq(x: Double, y: Double) => x / y
+                case Seq(x, y) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "/", Array("Num", "Num"), Array(t(x), t(y))))
+              }
+            case "-" =>
+              arg match {
+                case Seq(x: Int) => -x
+                case Seq(x: Double) => -x
+                case Seq(x: Int, y: Int) => x - y
+                case Seq(x: Double, y: Double) => x - y
+                case Seq(x, y) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "-", Array("Num", "Num"), Array(t(x), t(y))))
+                case Seq(x) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "-", Array("Num"), Array(t(x))))
+              }
+            case "==" =>
+              arg match {
+                case Seq(x: Boolean, y: Boolean) => x == y
+                case Seq(x: Int, y: Int) => x == y
+                case Seq(x: Double, y: Double) => x == y
+                case Seq(x: String, y: String) => x == y
+                case Seq(x, y) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "==", Array("Eq", "Eq"), Array(t(x), t(y))))
+              }
+            case ">" =>
+              arg match {
+                case Seq(x: Int, y: Int) => x > y
+                case Seq(x: Double, y: Double) => x > y
+                case Seq(x, y) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, ">", Array("Num", "Num"), Array(t(x), t(y))))
+              }
+            case "eval" =>
+              arg match {
+                case Seq(x: AST) => eval(x)
+                case Seq(x) =>
+                  throw new RuntimeException(error__type__call_mismatch(
+                    ctx, "eval", Array("AST"), Array(t(x))))
+              }
+            case "printr" =>
+              print(arg(0).toString)
+            case "newline" =>
+              println()
+          }
+          res
 
-          case _ =>
-            throw new Exception("cannot call non lambda!")
-        }
+        case AST(Tag.Call, Node((head: AST) +: args), _) =>
+          val lambda = eval(head)
+          val arg = (args map eval).toList
+          lambda match {
+            case AST(Tag.Lambda, Node(body), _) if body.toList.length == 1 =>
+              ctx.pushEnv()
+              ctx.env.name = head.toString
+              if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
+              val ret = eval(body.toList(0))
+              ctx.popEnv()
+              ret
 
-      case it@AST(Tag.Lambda, _, _) =>
-        it
+            case AST(Tag.Lambda, Node(kids), _) if kids.toList.length > 1 =>
+              val body = kids.last
+              val param = kids.dropRight(1)
+              ctx.pushEnv()
+              ctx.env.name = head.toString
+              if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
+              val par = param.map { it => it.data.asInstanceOf[Leaf].data.asInstanceOf[String] }
+              (par zip arg) foreach { case (k, v) => ctx.let(k, v) }
+              val ret = eval(body)
+              ctx.popEnv()
+              ret
 
-      case AST(_, Leaf(value), _) =>
-        value
+            case _ =>
+              throw new Exception("cannot call non lambda!")
+          }
 
+        case it@AST(Tag.Lambda, _, _) =>
+          it
 
+        case AST(_, Leaf(value), _) =>
+          value
+      }
+
+      ctx.nodeStack.pop()
+      ret
     }
 
 
-    println(repr(program, multi = true))
+
+    //println(repr(program, multi = true))
     try {
       eval(program)
     } catch {

@@ -172,5 +172,20 @@ object ASTUtils {
     }
   }
 
+  def mkAtom(value: String): AST = AST(Tag.Atom, Leaf(value))
+
+  def mkCall(func: AST, args: AST*): AST = AST(Tag.Call, Node(func +: args.toArray))
+
+  def mkCall2(key: String, values: AST*): AST = mkCall(mkAtom(key), values:_*)
+
+  def mkNode(args: AST*): Node = Node(args)
+
+  def mkBlock(args: AST*): AST = AST(Tag.Block, Node(args))
+
+  def mkLet(name: String, arg: AST): AST = AST(Tag.Let, mkNode(AST(Tag.Quote, Leaf(name)), arg))
+
+  def mkNull: AST = AST(Tag.Null, Leaf(null))
+
+  def mkQuote(arg: AST): AST = AST(Tag.Quote, mkNode(arg))
 }
 
