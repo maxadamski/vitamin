@@ -1,7 +1,8 @@
 package com.maxadamski.vitamin
 
-import ASTUtils._
 import OpUtils.{getArgs, mkGroup}
+import ASTUtils._
+import Report._
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -26,7 +27,12 @@ object Vitamin {
 
   class Ctx(
     var env: Env = new Env(),
+    var fileStack: mutable.Stack[String] = mutable.Stack(),
+    var nodeStack: mutable.Stack[AST] = mutable.Stack(),
   ) {
+    def node: AST = nodeStack.top
+    def file: String = fileStack.top
+
     def pushEnv(): Unit = {
       val newEnv = new Env(parent = Some(env))
       env = newEnv
@@ -72,16 +78,27 @@ object Vitamin {
   }
 
   def main(args: Array[String]): Unit = {
-    var program: AST = Parser.parseFile("res/main.vc")
-    var parser = PrattTools.makeParser(Array[Op]())
-    var env = new Env()
+    val mainFile = "res/main.vc"
+    var program: AST = Parser.parseFile(mainFile)
+    val ctx = new Ctx(env = new Env())
+    ctx.fileStack.push(mainFile)
+    ctx.let("true", true)
+    ctx.let("false", false)
+    ctx.let("()", false)
+    var parser = PrattTools.makeParser(ctx, Array[Op]())
     //println(program)
 
     // 1. parse expressions
     program = program.map() { it =>
       val res = it match {
         case AST(Tag.Flat, _, _) =>
-          parser.parse(it)
+          try {
+            parser.parse(it)
+          } catch {
+            case e: ParserException =>
+              println(e.message)
+              it
+          }
         case _ =>
           it
       }
@@ -104,7 +121,7 @@ object Vitamin {
                 val args = getArgs(defn, arguments).map(_.data.asInstanceOf[Leaf].data.asInstanceOf[String])
                 val gt = if (args(2) != "nil") Some(args(2)) else None
                 val lt = if (args(3) != "nil") Some(args(3)) else None
-                env.opGroups += args(0) -> mkGroup(args(0), args(1), gt, lt)
+                ctx.env.opGroups += args(0) -> mkGroup(args(0), args(1), gt, lt)
               case "operator" =>
                 val defn = Seq(Param("group"), Param("name", list = true))
                 val args = getArgs(defn, arguments)
@@ -113,12 +130,12 @@ object Vitamin {
                   name.data.asInstanceOf[Leaf].data.asInstanceOf[String]
                 }
                 for (name <- names) {
-                  env.opNames :+= OpName(group, name)
+                  ctx.env.opNames :+= OpName(group, name)
                 }
               case "operatorcompile" =>
-                env.opGroups = OpUtils.updateGroups(env.opGroups)
-                val ops = OpUtils.mkOps(env.opNames, env.opGroups)
-                parser = PrattTools.makeParser(ops)
+                ctx.env.opGroups = OpUtils.updateGroups(ctx.env.opGroups)
+                val ops = OpUtils.mkOps(ctx.env.opNames, ctx.env.opGroups)
+                parser = PrattTools.makeParser(ctx, ops)
               case _ =>
                 println(s"unknown pragma $res")
             }
@@ -204,10 +221,6 @@ object Vitamin {
 
 
     val builtins = Seq("+", "*", "-", "=", "==", ">", "printr", "newline", "if", "eval")
-    val ctx = new Ctx(env = env)
-    ctx.let("true", true)
-    ctx.let("false", false)
-    ctx.let("()", false)
 
     // 3. run interpreter
     def eval(node: AST): Any = node match {
@@ -231,48 +244,98 @@ object Vitamin {
       case AST(Tag.Quote, Node(Seq(quoted)), _) =>
         quoted
       case AST(Tag.Call, Node(AST(Tag.Atom, Leaf(name: String), _) +: args), _)
-        if builtins contains name =>
+                             if builtins contains name =>
+
         if (name == "if") {
           val arg = args.toList
-          val cond = eval(arg(0))
-          if (!cond.isInstanceOf[Boolean])
-            throw new Exception()
-          return if (cond.asInstanceOf[Boolean]) eval(arg(1)) else eval(arg(2))
+          val (cond, t, f) = (eval(arg(0)), arg(1), arg(2))
+
+          (cond, t, f) match {
+            case (cond: Boolean, t: AST, f: AST) =>
+              return if (cond) eval(t) else eval(f)
+            case _ =>
+              throw new Exception()
+          }
         }
 
+        def t(v: Any): String = v.getClass.getClasses.map(_.getSimpleName).mkString("/")
+
         val arg = (args map eval).toList
-        name match {
+        ctx.nodeStack.push(node)
+        val res = name match {
           case "+" =>
-            if (!(arg(0).isInstanceOf[Int] && arg(1).isInstanceOf[Int])) throw new Exception()
-            arg(0).asInstanceOf[Int] + arg(1).asInstanceOf[Int]
-          case "-" =>
-            if (!(arg(0).isInstanceOf[Int] && arg(1).isInstanceOf[Int])) throw new Exception()
-            arg(0).asInstanceOf[Int] - arg(1).asInstanceOf[Int]
+            arg match {
+              case Seq(x: Int, y: Int) => x + y
+              case Seq(x: Double, y: Double) => x + y
+              case Seq(x, y) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, "+", Array("Num", "Num"), Array(t(x), t(y))))
+            }
           case "*" =>
-            if (!(arg(0).isInstanceOf[Int] && arg(1).isInstanceOf[Int])) throw new Exception()
-            arg(0).asInstanceOf[Int] * arg(1).asInstanceOf[Int]
+            arg match {
+              case Seq(x: Int, y: Int) => x * y
+              case Seq(x: Double, y: Double) => x * y
+              case Seq(x, y) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, "*", Array("Num", "Num"), Array(t(x), t(y))))
+            }
+          case "-" =>
+            arg match {
+              case Seq(x: Int) => -x
+              case Seq(x: Double) => -x
+              case Seq(x: Int, y: Int) => x - y
+              case Seq(x: Double, y: Double) => x - y
+              case Seq(x, y) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, "-", Array("Num", "Num"), Array(t(x), t(y))))
+              case Seq(x) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, "-", Array("Num"), Array(t(x))))
+            }
+          case "==" =>
+            arg match {
+              case Seq(x: Boolean, y: Boolean) => x == y
+              case Seq(x: Int, y: Int) => x == y
+              case Seq(x: Double, y: Double) => x == y
+              case Seq(x: String, y: String) => x == y
+              case Seq(x, y) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, "==", Array("Eq", "Eq"), Array(t(x), t(y))))
+            }
+          case ">" =>
+            arg match {
+              case Seq(x: Int, y: Int) => x > y
+              case Seq(x: Double, y: Double) => x > y
+              case Seq(x, y) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, ">", Array("Num", "Num"), Array(t(x), t(y))))
+            }
+          case "eval" =>
+            arg match {
+              case Seq(x: AST) => eval(x)
+              case Seq(x) =>
+                throw new RuntimeException(error__type__call_mismatch(
+                  ctx, "eval", Array("AST"), Array(t(x))))
+            }
           case "printr" =>
             print(arg(0).toString)
-          case "==" =>
-            arg(0) == arg(1)
-          case ">" =>
-            arg(0).asInstanceOf[Int] > arg(1).asInstanceOf[Int]
           case "newline" =>
             println()
-          case "eval" =>
-            if (!arg(0).isInstanceOf[AST])
-              throw new Exception()
-            eval(arg(0).asInstanceOf[AST])
         }
+        ctx.nodeStack.pop()
+        res
+
       case AST(Tag.Call, Node((head: AST) +: args), _) =>
         val lambda = eval(head)
         val arg = (args map eval).toList
         lambda match {
           case AST(Tag.Lambda, Node(body), _) if body.toList.length == 1 =>
             ctx.pushEnv()
+            ctx.nodeStack.push(node)
             ctx.env.name = head.toString
             if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
             val ret = eval(body.toList(0))
+            ctx.nodeStack.pop()
             ctx.popEnv()
             ret
 
@@ -280,11 +343,13 @@ object Vitamin {
             val body = kids.last
             val param = kids.dropRight(1)
             ctx.pushEnv()
+            ctx.nodeStack.push(node)
             ctx.env.name = head.toString
             if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
             val par = param.map { it => it.data.asInstanceOf[Leaf].data.asInstanceOf[String] }
             (par zip arg) foreach { case (k, v) => ctx.let(k, v) }
             val ret = eval(body)
+            ctx.nodeStack.pop()
             ctx.popEnv()
             ret
 
@@ -302,8 +367,16 @@ object Vitamin {
     }
 
 
-    //println(repr(program, multi = true))
-    eval(program)
+    println(repr(program, multi = true))
+    try {
+      eval(program)
+    } catch {
+      case e: RuntimeException =>
+        println(e.message)
+      case e =>
+        e.printStackTrace()
+        print(e)
+    }
 
     /*
     val noPragma = nextExcept(it => it.tag == Tag.Pragma)(_)

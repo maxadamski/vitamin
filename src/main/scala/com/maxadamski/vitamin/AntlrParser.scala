@@ -32,7 +32,12 @@ class Listener extends VitaminCBaseListener {
     def meta: Map[String, Any] = {
       val start = ctx.start.getStartIndex
       val stop = max(ctx.start.getStopIndex, ctx.stop.getStopIndex)
-      Map(Meta.Span -> Span(start, stop), Meta.Text -> ctx.getText)
+      Map(
+        Meta.Span -> Span(start, stop),
+        Meta.Text -> ctx.getText,
+        Meta.Line -> ctx.start.getLine,
+        Meta.Char -> ctx.start.getCharPositionInLine,
+      )
     }
 
     def text: String = {

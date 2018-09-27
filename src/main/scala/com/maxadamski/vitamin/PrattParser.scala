@@ -2,12 +2,12 @@ package com.maxadamski.vitamin
 
 import PrattTools._
 import PrattFunctions._
+import com.maxadamski.vitamin.Report._
+import com.maxadamski.vitamin.Vitamin.Ctx
 
 import util.control.Breaks._
 
 // TODO: do something about the expr metadata
-
-class ParserException(val message: String) extends Exception
 
 case class Token(key: String, value: AST)
 
@@ -20,6 +20,7 @@ case class Left(
   lbp: Int, rbp: Int, nbp: Int)
 
 class PrattParser(
+  val ctx: Ctx,
   val nud: Map[String, Null],
   val led: Map[String, Left],
   val opNames: Array[String],
@@ -37,7 +38,9 @@ class PrattParser(
         case prim@AST(_, _, _) =>
           Token(LIT, prim)
       }
+      ctx.nodeStack.push(node)
       val parsed = parse(tokens.toIterator)
+      ctx.nodeStack.pop()
       parsed
     case Leaf(value) =>
       throw new Exception("not implemented")
@@ -50,17 +53,17 @@ class PrattParser(
     parseUntil(0)
   }
 
-  def next(): Token = {
+  def next: Token = {
     if (tokens.hasNext) tokens.next() else EOF_TOKEN
   }
 
-  def last(): Token = {
+  def last: Token = {
     history.last
   }
 
   def advance(): Token = {
     history :+= token
-    token = next()
+    token = next
     token
   }
 
@@ -69,14 +72,14 @@ class PrattParser(
     advance()
 
     if (t == EOF_TOKEN)
-      throw new ParserException("err_parser_eof")
+      throw new ParserException(error__parser__unexpected_eof(ctx))
     if (!this.nud.contains(t.key))
-      throw new ParserException("err_parser_null_unexpected_token")
+      throw new ParserException(error__parser__null_unexpected_token(ctx, t))
 
     val nud = this.nud(t.key)
 
     if (!(rbp <= nud.rbp))
-      throw new ParserException("err_parser_null_bad_precedence")
+      throw new ParserException(error__parser__null_bad_precedence(ctx, t, l))
 
     var ast = nud.nud(this, t, nud.rbp)
     var nbp = Int.MaxValue
@@ -86,12 +89,12 @@ class PrattParser(
         val (t, l) = (token, last)
 
         if (!this.led.contains(t.key))
-          throw new ParserException("err_parser_left_unexpected_token")
+          throw new ParserException(error__parser__left_unexpected_token(ctx, t))
 
         val led = this.led(t.key)
 
         if (!(led.lbp <= nbp))
-          throw new ParserException("err_parser_left_bad_precedence")
+          throw new ParserException(error__parser__left_bad_precedence(ctx, t, l))
 
         if (t == EOF_TOKEN)
           break
@@ -113,16 +116,25 @@ object PrattFunctions {
     arg
   }
 
+  def sum(x: Span, y: Span): Span = {
+    Span(Math.min(x.start, y.start), Math.max(x.stop, y.stop))
+  }
+
   def mkCall(args: AST*): AST = {
-    AST(Tag.Call, Node(args))
+    val call = AST(Tag.Call, Node(args), Map(
+      Meta.Span -> args.flatMap(_.span).reduce(sum),
+      Meta.Line -> args(0).line.get,
+      Meta.Char -> args(0).char.get,
+    ))
+    call
   }
 
   def nullError(p: PrattParser, t: Token, rbp: Int): AST = {
-    throw new ParserException("err_parser_null_not_registered")
+    throw new ParserException(error__parser__null_not_registered(p.ctx, t))
   }
 
   def leftError(p: PrattParser, t: Token, rbp: Int, left: AST): AST = {
-    throw new ParserException("err_parser_left_not_registered")
+    throw new ParserException(error__parser__left_not_registered(p.ctx, t))
   }
 
   def literal(p: PrattParser, t: Token, rbp: Int): AST = {
@@ -163,7 +175,7 @@ object PrattTools {
     name -> Null(nud, rbp, nbp.getOrElse(rbp))
   }
 
-  def makeParser(ops: Iterable[Op]): PrattParser = {
+  def makeParser(ctx: Ctx, ops: Iterable[Op]): PrattParser = {
     var max_prec = if (ops.nonEmpty) ops.map(_.prec).max else 0
     val op_names = ops.map(_.name)
     val offset = 10
@@ -198,7 +210,7 @@ object PrattTools {
       }
     }
 
-    new PrattParser(nud, led, op_names.toArray)
+    new PrattParser(ctx, nud, led, op_names.toArray)
   }
 }
 

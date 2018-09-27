@@ -21,6 +21,8 @@ object Meta {
   val Span = "span"
   val Text = "text"
   val QuotedAtom = "quoted_atom"
+  val Line = "line"
+  val Char = "char"
 }
 
 sealed trait Expr
@@ -30,6 +32,10 @@ case class Node(data: Iterable[AST]) extends Expr
 case class Leaf(data: Any) extends Expr
 
 case class AST(tag: Tag, data: Expr, meta: Map[String, Any] = Map()) {
+
+  def span: Option[Span] = meta.get(Meta.Span).map(_.asInstanceOf[Span])
+  def line: Option[Int] = meta.get(Meta.Line).map(_.asInstanceOf[Int])
+  def char: Option[Int] = meta.get(Meta.Char).map(_.asInstanceOf[Int])
 
   def atomic: Boolean = tag match {
     case Tag.Atom | Tag.Int | Tag.Real | Tag.String => true
