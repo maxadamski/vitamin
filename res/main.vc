@@ -1,7 +1,8 @@
 
 #operatorgroup(Declaration, xfx)
 #operatorgroup(Assignment, xfy, gt: Declaration)
-#operatorgroup(Disjunction, yfx, gt: Assignment)
+#operatorgroup(Command, fy, gt: Assignment)
+#operatorgroup(Disjunction, yfx, gt: Command)
 #operatorgroup(Conjunction, yfx, gt: Disjunction)
 #operatorgroup(Negation, fy,  gt: Conjunction)
 #operatorgroup(Comparison, xfx, gt: Negation)
@@ -11,135 +12,50 @@
 #operatorgroup(Quotation, fx, gt: NumberSign)
 
 #operator(Declaration, :=)
+#operator(Command, print)
 #operator(Assignment, =, +=)
 #operator(Disjunction, or)
 #operator(Conjunction, and)
 #operator(Negation, not)
 #operator(Comparison, ==, !=, <, <=, >, >=)
 #operator(Addition, +, -)
-#operator(Multiplication, *)
+#operator(Multiplication, *, /, div, mod)
 #operator(NumberSign, -)
 #operator(Quotation, ')
 
 #operatorcompile
 
-
-
-`!=` := { x, y | !(x == y) }
-`<=` := { x, y | !(x > y) }
-`>=` := { x, y | !(x < y) }
-
-`p` := { str | printr(str); printr("\n") }
-`<` := { x, y | y - x > 0 }
-
-
-fib1 := { n |
-    if (n > 1)
-        fib1(n - 1) + fib1(n - 2)
-    else
-        n
+`print` := { (str: Str) in
+    Core_print(str)
+    Core_print(NL)
 }
 
-
-fib2 := { n |
-    fib := { n, a, b | if (n > 0) fib(n - 1, b, a + b) else a }
-    fib(n, 0, 1)
-}
-
-
-fib3 := { n |
-    a := 0
-    b := 1
-    loop := { n |
-        c := a
-        a = b
-        b = b + c
-        if (n <= 1) a else loop(n - 1)
+countdown_i := { (n: Int) in
+    sum := 0
+    while (n > 0) {
+        sum = sum + n
+        n = n - 1
     }
-    loop(n)
+    sum
 }
 
-
-countdown_t_ := { n, sum | if (n == 0) sum else countdown_t_(n - 1, sum + n) }
-countdown_t  := { n | countdown_t_(n, 0) }
-countdown_r  := { n | if (n == 0) 0 else n + countdown_r(n - 1) }
-
-adder := { a |
-    add := { x |
-        x + a
+countdown_t := { (n: Int) -> Int in
+    go := { (n: Int, sum: Int) -> Int in
+        if (n > 0) go(n - 1, sum + n) else sum
     }
-    add
+    go(n, 0)
 }
 
-add2 := adder(2)
-// this fails for now
-p(add2(0))
+countdown_r := { (n: Int) -> Int in
+    if (n > 0) n + countdown_r(n - 1) else 0
+}
 
-
-
-/*
-
-// this function should increment the global variable `a`
-// each time it is called
-a := 1
-fun inc1() { a = a + 1 }
-inc1()
-expect_equal(a, 1)
-
-// this function should declare a local variable `b`
-// which shadows the global variable `b`, and assign `2` to it
-// after returning the local `b` is destroyed
-b := 1
-fun inc2() { b := b + 1 }
-inc2()
-expect_equal(b, 1)
-
-// this function should declare a local variable `x`, which
-// is destroyed after leaving the function scope
-fun inc3() { x := "leak" }
-inc3()
-// expect_undef('x)
-
-*/
-
-//fun loop(cond: Expr, expr: Expr) {
-//    value := eval(cond)
-//    printr(i)
-//    printr(": ")
-//    printr(value)
-//    printr("\n")
-//    eval(expr)
-//    value then '{ loop(cond, expr) }
-//}
-//
-//i := 0
-//loop('{ i < 10 }, '{
-//    i = i + 1
-//})
-
-/*
 i := 0
-fun loop() {
-    p i
-    loop()
+while (i < 100) {
+    printr(countdown_t(i)); printr(" ")
+    newline()
+    i = i + 1
 }
-loop()
-*/
 
-/*
-p 200
-p 200 + 1
-p 2*2*2*2*2*2*2*2
-p 2 + 3 * 4
-p 3.14
-p 1.41421356237 * 1.41421356237
-*/
+print(Str(3 / 2))
 
-/*
-// this code is broken on purpose
-p foo bar baz
-p - ! x
-p foo == bar == baz
-p foo + * bar
-p == foo
-*/

@@ -6,11 +6,13 @@ import java.util
 import Tag.Tag
 import ASTUtils._
 
+import scala.collection.mutable
+
 
 case class Span(start: Int, stop: Int)
 
 object Tag extends Enumeration {
-  val Pragma, Lambda, Block, Call, Arg, Flat, Array,
+  val Pragma, Lambda, Type, Block, Call, Arg, Flat, Param, Array,
       Let, Set, Quote,
       Atom, Int, Real, String, Null = Value
   type Tag = Value
@@ -25,54 +27,95 @@ object Meta {
   val Char = "char"
 }
 
-sealed trait Expr
+sealed trait Syntax {
 
-case class Node(data: Iterable[AST]) extends Expr
+  var meta: mutable.Map[String, Any] = mutable.Map()
+  def tag: Tag
+  def child: List[Syntax] = Nil
 
-case class Leaf(data: Any) extends Expr
-
-case class AST(tag: Tag, data: Expr, meta: Map[String, Any] = Map()) {
+  def atomic: Boolean = child.nonEmpty
+  def depth: Int = if (atomic) 0 else 1 + child.map(_.depth).max
 
   def span: Option[Span] = meta.get(Meta.Span).map(_.asInstanceOf[Span])
   def line: Option[Int] = meta.get(Meta.Line).map(_.asInstanceOf[Int])
   def char: Option[Int] = meta.get(Meta.Char).map(_.asInstanceOf[Int])
-
-  def atomic: Boolean = tag match {
-    case Tag.Atom | Tag.Int | Tag.Real | Tag.String => true
-    case _ => false
-  }
-
-  def child: Iterable[AST] = data match {
-    case Node(children) => children.filterNot(it => it.tag == Tag.Null)
-    case Leaf(_) => Seq()
-  }
-
-  def depth: Int = data match {
-    case Node(children) => 1 + (if (children.isEmpty) 0 else children.map(_.depth).max)
-    case Leaf(_) => 0
-  }
+  def escaped: Boolean = meta.get(Meta.QuotedAtom).isDefined
 
   def fold[T](
     sum: T,
-    func: Folder[AST, T] = foldDFS[AST, T] _,
-    next: AST => List[AST] = nextAll _,
+    func: Folder[Syntax, T] = foldDFS[Syntax, T] _,
+    next: Syntax => List[Syntax] = nextAll _,
   )(
-    f: (T, AST) => T,
+    f: (T, Syntax) => T,
   ): T = {
     func(this, sum, f, next)
   }
 
-  def map(
-    func: Mapper[AST, AST] = mapPostOrder,
-    next: AST => List[AST] = nextAll _,
-  )(
-    f: AST => AST
-  ): AST = {
-    func(this, f, next)
+  def map(f: Syntax => Syntax): Syntax = {
+    f(this)
   }
 
   override def toString: String = repr(this)
 
+}
+
+
+case class Leaf(tag: Tag, data: Any) extends Syntax {
+
+}
+
+case class Node(tag: Tag, data: List[Syntax]) extends Syntax {
+  override def child: List[Syntax] = data
+}
+
+case class ParNode(id: Atom, typ: TypNode) extends Syntax {
+  override def tag: Tag = Tag.Param
+  override def child: List[Syntax] = List(id, typ)
+}
+
+case class ArgNode(id: Atom, value: Syntax) extends Syntax {
+  override def tag: Tag = Tag.Arg
+  override def child: List[Syntax] = List(id, value)
+}
+
+case class Block(expr: List[Syntax]) extends Syntax {
+  override def tag: Tag = Tag.Block
+  override def child: List[Syntax] = expr
+}
+
+case class Call(head: Syntax, args: List[Syntax] = List()) extends Syntax {
+  override def tag: Tag = Tag.Call
+  override def child: List[Syntax] = head +: args
+}
+
+case class FunNode(body: Block, ret: TypNode, par: List[ParNode]) extends Syntax {
+  override def tag: Tag = Tag.Lambda
+  override def child: List[Syntax] = body +: ret +: par
+}
+
+case class Quote(value: Syntax) extends Syntax {
+  override def tag: Tag = Tag.Quote
+  override def child: List[Syntax] = List(value)
+}
+
+case class TypNode(value: Types.Typ) extends Syntax {
+  override def tag: Tag = Tag.Type
+}
+
+case class Atom(value: String) extends Syntax {
+  override def tag: Tag = Tag.Atom
+}
+
+case class StrLit(value: String) extends Syntax {
+  override def tag: Tag = Tag.String
+}
+
+case class IntLit(value: Int) extends Syntax {
+  override def tag: Tag = Tag.Int
+}
+
+case class RealLit(value: Double) extends Syntax {
+  override def tag: Tag = Tag.Real
 }
 
 object ASTUtils {
@@ -83,15 +126,15 @@ object ASTUtils {
   type Folder[A, B] = (A, B, Fcat[B, A], Walker[A]) => B
   type Mapper[A, B] = (A, A => B, Walker[A]) => B
 
-  def nextAll(node: AST): List[AST] = {
-    node.child.toList
+  def nextAll(node: Syntax): List[Syntax] = {
+    node.child
   }
 
-  def nextFilter(pred: AST => Boolean)(node: AST): List[AST] = {
+  def nextFilter(pred: Syntax => Boolean)(node: Syntax): List[Syntax] = {
     if (pred(node)) nextAll(node) else List()
   }
 
-  def nextExcept(pred: AST => Boolean)(node: AST): List[AST] = {
+  def nextExcept(pred: Syntax => Boolean)(node: Syntax): List[Syntax] = {
     if (!pred(node)) nextAll(node) else List()
   }
 
@@ -117,9 +160,10 @@ object ASTUtils {
     go(Nil, node, sum)
   }
 
-  def mapPostOrder(node: AST, f: AST => AST, next: Walker[AST]): AST = {
-    val a = new util.Stack[AST]
-    val b = new util.Stack[AST]
+  /*
+  def mapPostOrder(node: Syntax, f: Syntax => Syntax, next: Walker[Syntax]): Syntax = {
+    val a = new util.Stack[Syntax]
+    val b = new util.Stack[Syntax]
     a.push(node)
 
     while (!a.empty) {
@@ -128,30 +172,43 @@ object ASTUtils {
       next(top).foreach(a.push)
     }
 
-    val c = new util.Stack[AST]()
+    val c = new util.Stack[Syntax]()
     while (!b.empty) {
       val top = b.pop()
       top match {
-        case AST(_, Node(oldChildren), _) =>
-          val children = oldChildren.toList.indices
-            .map(_ => c.pop()).filterNot(it => it.tag == Tag.Null).reverse
-          c.add(f(top.copy(data = Node(children))))
-        case AST(_, Leaf(_), _) =>
+        case Node(_, oldChildren) =>
+          val children = oldChildren
+            .indices
+            .map(_ => c.pop())
+            .filterNot(it => it.tag == Tag.Null)
+            .reverse
+
+          c.add(f( .copy(data = Node(children))))
+        case Leaf(_, _) =>
           c.add(f(top))
       }
     }
 
     c.pop()
   }
+  */
 
-  def repr(node: AST, level: Int = 0, multi: Boolean = false): String = {
+  def repr(node: Syntax, level: Int = 0, multi: Boolean = false): String = {
     var lvl = level
     node match {
-      case AST(Tag.Lambda, Node(data), _) =>
+      case Node(tag, data) =>
+        "(" + (tag.toString +: data.map(_.toString)).mkString(" ") + ")"
+
+      case Leaf(tag, data) =>
+        data.toString
+
+        /*
+      case FunNode(body, ret, par) =>
+        val d = data.toList
         val bodyStr = repr(data.last, lvl, multi)
         val initStr = data.dropRight(1).map(repr(_, lvl, multi)).mkString(" ")
         s"(:λ $initStr $bodyStr)"
-      case AST(Tag.Call, Node(data), _) =>
+      case Call(data, Nil) =>
         val d = data.map(repr(_, lvl, multi)).mkString(" ")
         s"(.$d)"
       case AST(Tag.Quote, Node(data +: _), _) =>
@@ -169,23 +226,8 @@ object ASTUtils {
         s"'$data'"
       case AST(_, Leaf(data), _) =>
         s"$data"
+        */
     }
   }
-
-  def mkAtom(value: String): AST = AST(Tag.Atom, Leaf(value))
-
-  def mkCall(func: AST, args: AST*): AST = AST(Tag.Call, Node(func +: args.toArray))
-
-  def mkCall2(key: String, values: AST*): AST = mkCall(mkAtom(key), values:_*)
-
-  def mkNode(args: AST*): Node = Node(args)
-
-  def mkBlock(args: AST*): AST = AST(Tag.Block, Node(args))
-
-  def mkLet(name: String, arg: AST): AST = AST(Tag.Let, mkNode(AST(Tag.Quote, Leaf(name)), arg))
-
-  def mkNull: AST = AST(Tag.Null, Leaf(null))
-
-  def mkQuote(arg: AST): AST = AST(Tag.Quote, mkNode(arg))
 }
 

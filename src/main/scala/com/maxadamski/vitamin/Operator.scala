@@ -4,6 +4,7 @@ import Fixity.Fixity
 import Assoc.Assoc
 import OpUtils._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -74,7 +75,7 @@ object OpUtils {
     }.toMap
   }
 
-  def mkOps(names: Seq[OpName], groups: Map[String, OpGroup]): Seq[Op] = {
+  def mkOps(names: List[OpName], groups: Map[String, OpGroup]): List[Op] = {
     names.flatMap { name =>
       if (groups.contains(name.group)) {
         val group = groups(name.group)
@@ -87,13 +88,13 @@ object OpUtils {
     }
   }
 
-  def getArgs(params: Seq[Param], given: Seq[Arg]): Seq[AST] = {
+  def getArgs(params: Seq[Param], given: Seq[Arg]): Seq[Syntax] = {
     // FIXME?
-    val args = Array.ofDim[AST](params.length)
+    val args = Array.ofDim[Syntax](params.length)
     val keys = params.map(_.key)
     val list = params.last.list
     var startedKeys = false
-    var listArgs = Array[AST]()
+    var listArgs = List[Syntax]()
 
     given.zipWithIndex foreach { case (arg, i) =>
       arg.key match {
@@ -114,7 +115,7 @@ object OpUtils {
     }
 
     if (list)
-      args(args.length - 1) = AST(Tag.Array, Node(listArgs))
+      args(args.length - 1) = Node(Tag.Array, listArgs)
 
     args.zipWithIndex foreach {
       case (null, i) =>
@@ -137,11 +138,67 @@ case class OpName(group: String, name: String)
 
 case class Op(name: String, prec: Int, fix: Fixity, ass: Assoc)
 
-case class Arg(key: Option[String], value: AST)
+case class Arg(key: Option[String], value: Syntax)
 
-case class Param(key: String, default: Option[AST] = None, list: Boolean = false)
+case class Param(key: String, default: Option[Syntax] = None, list: Boolean = false)
 
-case class Lambda(
-  param: List[String],
-  body: AST,
-)
+
+object Functions {
+
+  sealed trait AFunction
+
+  case class Lambda(typ: Types.Fun, param: List[String], body: Syntax) extends AFunction
+  case class Builtin(typ: Types.Fun, body: List[Any] => Any) extends AFunction
+
+}
+
+
+object Types {
+
+  sealed trait AType
+
+  case class Typ(x: String) extends AType
+
+  case class Var(x: String) extends AType
+
+  case class Fun(x: AType, y: AType) extends AType {
+    override def toString: String = s"$x -> $y"
+
+    def toList: List[AType] = (x, y) match {
+      case (_, f: Fun) => x +: f.toList
+      case _ => List(x, y)
+    }
+  }
+
+  def mkFun(arg: AType*): Fun = arg match {
+    case Seq() => Fun(VOID, VOID)
+    case Seq(one) => Fun(one, VOID)
+    case Seq(one, two) => Fun(one, two)
+    case head +: tail => Fun(head, mkFun(tail: _*))
+  }
+
+
+  def arity(fun: AType): Int = {
+    @tailrec
+    def go(typ: AType, sum: Int): Int = typ match {
+      case Fun(_, y) => go(y, sum + 1)
+      case _ => sum
+    }
+    go(fun, 0)
+  }
+
+  val VOID = Typ("Void")
+  val TYPE = Typ("Type")
+  val ANY = Typ("Any")
+  val NIL = Typ("Nothing")
+  val INT = Typ("Int")
+  val STR = Typ("Str")
+  val REAL = Typ("Real")
+  val BOOL = Typ("Bool")
+  val EXPR = Typ("Expr")
+
+  object OBJ_NIL
+  object OBJ_VOID
+
+}
+

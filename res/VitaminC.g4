@@ -37,7 +37,7 @@ exprs : expr (',' expr)* ;
 //whileStatement : 'while' clause block ;
 
 program : chunk EOF ;
-chunk : NL* expr? ((SEMI NL* | NL+) expr)* NL* ;
+chunk : NL* (expr (SEMI | NL) NL*)* NL* ;
 
 expr
     : primary+
@@ -45,8 +45,8 @@ expr
 
 primary
     : call
-    | constant
     | pragma
+    | constant
     | ifexpr
     | whexpr
     | fun
@@ -56,9 +56,10 @@ primary
 ifexpr : 'if' '(' NL* expr NL* ')' NL* expr NL* ('else' NL* expr)? ;
 whexpr : 'while' '(' NL* expr NL* ')' NL* expr ;
 
-fun
-    : '{' (atom? (',' atom)* PIPE)? chunk '}'
-    ;
+typ : atom ;
+par : atom COLON typ ;
+
+fun : '{' ('(' par (',' par)* ')' ('->' typ)? 'in')? chunk '}' ;
 
 //typ : atom | atom LANGLE typ (',' typ)* RANGLE | '_' ;
 /*
@@ -68,7 +69,7 @@ funParam : atom COLON typ (EQUAL expr)? ;
 */
 
 // combine callArg and pragmaArg after creating the first compiler
-call : (atom | fun) '(' callArg? (',' callArg)* ')' ;
+call : (atom | fun) '(' (callArg (',' callArg)*)? ')' ;
 callArg : (atom COLON)? expr ;
 pragma : '#' (atom | call) ;
 
@@ -76,11 +77,15 @@ pragma : '#' (atom | call) ;
 
 // boilerplate
 constant : atom | intn | real | string ;
-atom : Name | Symbol | PIPE | QUOTE | COLON | EQUAL | LANGLE | RANGLE | '`' atom '`' ;
 intn : Int ;
 real : Real ;
 string : String ;
 
+atom
+    : Name | Symbol | '`' constant '`'
+    | COLON | LANGLE | RANGLE | EQUAL
+    | MINUS | QUOTE
+    ;
 
 /****************************
  *       Lexer Rules        *
@@ -90,7 +95,7 @@ ShebangLine : '#!' ~[\u000A\u000D]* -> channel(HIDDEN) ;
 
 fragment Whitespace : [ \t]+ ;
 fragment Newline : '\r'? '\n' '\r'? ;
-WS : Whitespace -> skip ;
+WS : Whitespace -> channel(HIDDEN) ;
 NL : Newline ;
 
 fragment NumberSign : [-+] ;
@@ -133,6 +138,7 @@ fragment NameHead : [_A-Za-z] ;
 fragment NameTail : NameHead | [0-9] ;
 Name : NameHead NameTail* ;
 
+MINUS : '-' ;
 LANGLE : '<' ;
 RANGLE : '>' ;
 QUOTE : '\'' ;
@@ -143,7 +149,7 @@ PIPE : '|' ;
 
 //fragment OpHead : [\p{Sm}\p{Po}] ;
 //fragment OpTail : OpHead ;
-fragment SymbolHead : [-+=*/<>~^$&|!?%:] ;
+fragment SymbolUsed : [-<>=:|] ;
+fragment SymbolHead : [+*/~^$&|!?%] | SymbolUsed ;
 fragment SymbolTail : SymbolHead ;
 Symbol : SymbolHead SymbolTail* ;
-

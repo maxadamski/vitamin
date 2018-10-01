@@ -1,5 +1,6 @@
 package com.maxadamski.vitamin
 
+import com.maxadamski.vitamin.Types.{AType, Typ}
 import com.maxadamski.vparser._
 import com.maxadamski.vparser.VitaminCParser._
 import org.antlr.v4.runtime._
@@ -11,7 +12,7 @@ import scala.reflect.ClassTag
 class ANTLRException(message: String) extends Exception
 
 object Parser {
-  def parseFile(path: String): AST = {
+  def parseFile(path: String): Syntax = {
     val input = new ANTLRFileStream(path)
     val lexer = new VitaminCLexer(input)
     val tokens = new CommonTokenStream(lexer)
@@ -46,32 +47,32 @@ class Listener extends VitaminCBaseListener {
   }
 
   implicit class JavaListExtension[T](list: java.util.List[T]) {
-    def mapArray[U](transform: T => U)(implicit UT: ClassTag[U]): Array[U] = {
-      var arr = Array[U]()
+    def map[U](transform: T => U)(implicit UT: ClassTag[U]): List[U] = {
+      var arr = List[U]()
       list.forEach(arr :+= transform(_))
       arr
     }
   }
 
   val impossible = new ANTLRException("ANTLRListener is outdated")
-  var program: Option[AST] = None
+  var program: Option[Syntax] = None
 
   override def enterProgram(ctx: ProgramContext): Unit = {
     program = Some(getChunk(ctx.chunk))
   }
 
-  def getChunk(ctx: ChunkContext): AST = {
-    AST(Tag.Block, Node(ctx.expr.mapArray(getExpr)), ctx.meta)
+  def getChunk(ctx: ChunkContext): Block = {
+    Block(ctx.expr.map(getExpr))
   }
 
-  def getExpr(ctx: ExprContext): AST = {
+  def getExpr(ctx: ExprContext): Node = {
     if (!ctx.primary.isEmpty)
-      AST(Tag.Flat, Node(ctx.primary.mapArray(getPrimary)), ctx.meta)
+      Node(Tag.Flat, ctx.primary.map(getPrimary))
     else
       throw impossible
   }
 
-  def getPrimary(ctx: PrimaryContext): AST = {
+  def getPrimary(ctx: PrimaryContext) = {
     if (ctx.call != null)
       getCall(ctx.call)
     else if (ctx.constant != null)
@@ -90,51 +91,53 @@ class Listener extends VitaminCBaseListener {
       throw impossible
   }
 
-  def getIf(ctx: IfexprContext): AST = {
-    val func = AST(Tag.Atom, Leaf("if"))
-    var args = ctx.expr.mapArray(getExpr)
-    if (args.length == 2) args :+= AST(Tag.Atom, Leaf("()"))
-    AST(Tag.Call, Node(Array(func, args(0), args(1), args(2))), ctx.meta)
+  def getIf(ctx: IfexprContext) = {
+    var args = ctx.expr.map(getExpr)
+    if (args.length == 2) args :+= Atom("()")
+    Call(Atom("if"), args)
   }
 
-  def getWh(ctx: WhexprContext): AST = {
-    val func = AST(Tag.Atom, Leaf("while"))
-    val args = ctx.expr.mapArray(getExpr)
-    AST(Tag.Call, Node(Array(func, args(0), args(1))), ctx.meta)
+  def getWh(ctx: WhexprContext) = {
+    Call(Atom("while"), ctx.expr.map(getExpr))
   }
 
 
-  def getFun(ctx: FunContext): AST = {
-    AST(Tag.Lambda, Node(ctx.atom.mapArray(getAtom) :+ getChunk(ctx.chunk)), ctx.meta)
+  def getFun(ctx: FunContext) = {
+    val ret = if (ctx.typ != null) getTyp(ctx.typ) else TypNode(Types.VOID)
+    FunNode(getChunk(ctx.chunk), ret, ctx.par.map(getPar))
   }
 
-  def getCall(ctx: CallContext): AST = {
-    val head = if (ctx.atom != null)
-      getAtom(ctx.atom)
-    else
-      getFun(ctx.fun)
-
-    AST(Tag.Call, Node(head +: ctx.callArg.mapArray(getCallArg)), ctx.meta)
+  def getPar(ctx: ParContext) = {
+    ParNode(getAtom(ctx.atom), getTyp(ctx.typ))
   }
 
-  def getCallArg(ctx: CallArgContext): AST = {
+  def getTyp(ctx: TypContext) = {
+    TypNode(Types.Typ(ctx.atom().getText))
+  }
+
+  def getCall(ctx: CallContext) = {
+    val head = if (ctx.atom != null) getAtom(ctx.atom) else getFun(ctx.fun)
+    Call(head, ctx.callArg.map(getCallArg))
+  }
+
+  def getCallArg(ctx: CallArgContext) = {
     val expr = getExpr(ctx.expr)
     if (ctx.atom != null)
-      AST(Tag.Arg, Node(Array(getAtom(ctx.atom), expr)))
+      ArgNode(getAtom(ctx.atom), expr)
     else
       expr
   }
 
-  def getPragma(ctx: PragmaContext): AST = {
+  def getPragma(ctx: PragmaContext) = {
     if (ctx.call != null)
-      AST(Tag.Pragma, getCall(ctx.call).data, ctx.meta)
+      getCall(ctx.call)
     else if (ctx.atom != null)
-      AST(Tag.Pragma, Node(Array(getAtom(ctx.atom))), ctx.meta)
+      Call(getAtom(ctx.atom), List())
     else
       throw impossible
   }
 
-  def getConstant(ctx: ConstantContext): AST = {
+  def getConstant(ctx: ConstantContext) = {
     if (ctx.atom != null)
       getAtom(ctx.atom)
     else if (ctx.intn != null)
@@ -147,26 +150,26 @@ class Listener extends VitaminCBaseListener {
       throw impossible
   }
 
-  def getAtom(ctx: AtomContext): AST = {
+  def getAtom(ctx: AtomContext) = {
     var (meta, text) = (ctx.meta, ctx.text)
     if (text.startsWith("`") && text.endsWith("`")) {
       text = text.stripPrefix("`").stripSuffix("`")
       meta += Meta.QuotedAtom -> true
     }
-    AST(Tag.Atom, Leaf(text), meta)
+    Atom(text)
   }
 
-  def getStr(ctx: StringContext): AST = {
+  def getStr(ctx: StringContext) = {
     val text = ctx.text.stripPrefix("\"").stripSuffix("\"")
-    AST(Tag.String, Leaf(text), ctx.meta)
+    StrLit(text)
   }
 
-  def getInt(ctx: IntnContext): AST = {
-    AST(Tag.Int, Leaf(ctx.text.toInt), ctx.meta)
+  def getInt(ctx: IntnContext) = {
+    IntLit(ctx.text.toInt)
   }
 
-  def getReal(ctx: RealContext): AST = {
-    AST(Tag.Int, Leaf(ctx.text.toDouble), ctx.meta)
+  def getReal(ctx: RealContext) = {
+    RealLit(ctx.text.toDouble)
   }
 
 }

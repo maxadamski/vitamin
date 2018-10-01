@@ -3,105 +3,124 @@ package com.maxadamski.vitamin
 import OpUtils.{getArgs, mkGroup}
 import ASTUtils._
 import Report._
+import Functions._
+import Types._
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+class Env(
+  var opGroups: Map[String, OpGroup] = Map(),
+  var opNames: List[OpName] = List(),
+  var parent: Option[Env] = None,
+  var vars: mutable.Map[String, Any] = mutable.Map(),
+  var name: String = "main"
+)
+
+class Ctx(
+  var env: Env = new Env(),
+  var fileStack: mutable.Stack[String] = mutable.Stack(),
+  var nodeStack: mutable.Stack[Syntax] = mutable.Stack(),
+  var parser: PrattParser = null,
+) {
+
+  def node: Syntax = nodeStack.top
+
+  def file: String = fileStack.top
+
+  def pushEnv(): Unit = {
+    val newEnv = new Env(parent = Some(env))
+    env = newEnv
+  }
+
+  def popEnv(): Env = {
+    val oldEnv = env
+    if (oldEnv.parent.isEmpty) throw new Exception()
+    env = oldEnv.parent.get
+    oldEnv
+  }
+
+  def name: String = {
+    var local: Option[Env] = Some(env)
+    var names = Array[String]()
+    while (local.isDefined) {
+      names +:= local.get.name
+      local = local.get.parent
+    }
+    names.mkString("/")
+  }
+
+  def lookup(name: String): Option[Env] = {
+    var local: Option[Env] = Some(env)
+    while (local.isDefined) {
+      if (local.get.vars.contains(name))
+        return local
+      else
+        local = local.get.parent
+    }
+    None
+  }
+
+  def let(name: String, value: Any): Unit = {
+    if (env.vars.contains(name))
+      throw new RuntimeException(error__eval__let_defined(this, name))
+    env.vars.put(name, value)
+  }
+
+  def set(name: String, value: Any): Unit = lookup(name) match {
+    case Some(dst) => dst.vars(name) = value
+    case None =>
+      throw new RuntimeException(error__eval__set_undefined(this, name))
+  }
+
+  def get(name: String): Any = lookup(name) match {
+    case Some(dst) => dst.vars(name)
+    case None =>
+      throw new RuntimeException(error__eval__get_undefined(this, name))
+  }
+
+  def mangleTyp(typ: AType): String = typ match {
+    case fun: Fun => fun.toList.dropRight(1).map(mangleTyp).mkString("->")
+    case Typ(x) => x
+    case Var(x) => x
+  }
+
+  def mangleFun(name: String, arity: Int, typ: AType): String = {
+    s"$name:$arity:${mangleTyp(typ)}"
+  }
+
+}
 
 object Vitamin {
 
-  implicit class Castable[A](val self: A) {
-    def as[B](implicit tag: ClassTag[B]): Option[B] = self match {
-      case that: B => Some(that)
-      case _ => None
-    }
-  }
-
-  class Env(
-    var opGroups: Map[String, OpGroup] = Map(),
-    var opNames: Seq[OpName] = Seq(),
-    var parent: Option[Env] = None,
-    var vars: mutable.Map[String, Any] = mutable.Map(),
-    var name: String = "main"
-  )
-
-  class Ctx(
-    var env: Env = new Env(),
-    var fileStack: mutable.Stack[String] = mutable.Stack(),
-    var nodeStack: mutable.Stack[AST] = mutable.Stack(),
-  ) {
-    def node: AST = nodeStack.top
-    def file: String = fileStack.top
-
-    def pushEnv(): Unit = {
-      val newEnv = new Env(parent = Some(env))
-      env = newEnv
-    }
-
-    def popEnv(): Env = {
-      val oldEnv = env
-      if (oldEnv.parent.isEmpty) throw new Exception()
-      env = oldEnv.parent.get
-      oldEnv
-    }
-
-    def name: String = {
-      var local: Option[Env] = Some(env)
-      var names = Array[String]()
-      while (local.isDefined) {
-        names +:= local.get.name
-        local = local.get.parent
-      }
-      names.mkString("/")
-    }
-
-    def lookup(name: String): Option[Env] = {
-      var local: Option[Env] = Some(env)
-      while (local.isDefined) {
-        if (local.get.vars.contains(name))
-          return local
-        else
-          local = local.get.parent
-      }
-      None
-    }
-
-    def let(name: String, value: Any): Unit = {
-      if (env.vars.contains(name))
-        throw new RuntimeException(error__eval__let_defined(this, name))
-      env.vars.put(name, value)
-    }
-
-    def set(name: String, value: Any): Unit = lookup(name) match {
-      case Some(dst) => dst.vars(name) = value
-      case None =>
-        throw new RuntimeException(error__eval__set_undefined(this, name))
-    }
-
-    def get(name: String): Any = lookup(name) match {
-      case Some(dst) => dst.vars(name)
-      case None =>
-        throw new RuntimeException(error__eval__get_undefined(this, name))
-    }
+  def getTyp(obj: Any): AType = obj match {
+    case OBJ_VOID => VOID
+    case OBJ_NIL => NIL
+    case _: Boolean => BOOL
+    case _: Int => INT
+    case _: Double => REAL
+    case _: String => STR
+    case Lambda(typ, _, _) => typ
+    case Builtin(typ, _) => typ
+    case _ => ANY
   }
 
   def main(args: Array[String]): Unit = {
     val mainFile = "res/main.vc"
-    var program: AST = Parser.parseFile(mainFile)
-    val ctx = new Ctx(env = new Env())
+    var program: Syntax = Parser.parseFile(mainFile)
+
+    val ctx = new Ctx()
+    ctx.parser = PrattTools.makeParser(ctx, List())
     ctx.fileStack.push(mainFile)
-    ctx.let("true", true)
-    ctx.let("false", false)
-    ctx.let("()", false)
-    var parser = PrattTools.makeParser(ctx, Array[Op]())
-    //println(program)
+    Corelib.register(ctx)
+
 
     // 1. parse expressions
     program = program.map() { it =>
       val res = it match {
-        case AST(Tag.Flat, _, _) =>
+        case Node(Tag.Flat, _) =>
           try {
-            parser.parse(it)
+            ctx.parser.parse(it)
           } catch {
             case e: ParserException =>
               println(e.message)
@@ -113,37 +132,33 @@ object Vitamin {
 
       if (res != it) {
         res match {
-          case AST(Tag.Pragma, Node(AST(Tag.Atom, Leaf(name: String), _) +: args), _) =>
-            val arguments = args.map {
-              case AST(Tag.Arg, Node(Seq(AST(Tag.Atom, Leaf(key: String), _), value)), _) =>
+          case Call(Atom(name), arg) =>
+            val arguments = arg.map {
+              case ArgNode(Atom(key), value) =>
                 Arg(Some(key), value)
-              case arg =>
-                Arg(None, arg)
-            }.toSeq
+              case value =>
+                Arg(None, value)
+            }
 
 
             name match {
               case "operatorgroup" =>
-                val nil = Some(AST(Tag.Atom, Leaf("nil")))
+                val nil = Some(Atom("nil"))
                 val defn = Seq(Param("name"), Param("kind"), Param("gt", nil), Param("lt", nil))
-                val args = getArgs(defn, arguments).map(_.data.asInstanceOf[Leaf].data.asInstanceOf[String])
+                val args = getArgs(defn, arguments).map { case Atom(str) => str }
                 val gt = if (args(2) != "nil") Some(args(2)) else None
                 val lt = if (args(3) != "nil") Some(args(3)) else None
                 ctx.env.opGroups += args(0) -> mkGroup(args(0), args(1), gt, lt)
               case "operator" =>
                 val defn = Seq(Param("group"), Param("name", list = true))
                 val args = getArgs(defn, arguments)
-                val group = args(0).data.asInstanceOf[Leaf].data.asInstanceOf[String]
-                val names = args(1).data.asInstanceOf[Node].data.map { name =>
-                  name.data.asInstanceOf[Leaf].data.asInstanceOf[String]
-                }
-                for (name <- names) {
-                  ctx.env.opNames :+= OpName(group, name)
-                }
+                val group = args(0).asInstanceOf[Atom].value
+                val names = args(1).asInstanceOf[Node].data.map(_.asInstanceOf[Atom].value)
+                for (name <- names) ctx.env.opNames :+= OpName(group, name)
               case "operatorcompile" =>
                 ctx.env.opGroups = OpUtils.updateGroups(ctx.env.opGroups)
                 val ops = OpUtils.mkOps(ctx.env.opNames, ctx.env.opGroups)
-                parser = PrattTools.makeParser(ctx, ops)
+                ctx.parser = PrattTools.makeParser(ctx, ops)
               case _ =>
                 println(s"unknown pragma $res")
             }
@@ -155,215 +170,110 @@ object Vitamin {
       res
     }
 
-    def exIf(it: AST): AST = it match {
-      case AST(Tag.Call, Node(AST(Tag.Atom, Leaf(op), _) +: args), _) =>
-        val quoted = args.toList
-        AST(Tag.Call, mkNode(mkAtom("if") +: quoted: _*))
-      case _ => throw new Exception()
-    }
-
     // 2. expand macros
-    program = program.map(next = {
-      case it@AST(Tag.Call, Node(AST(Tag.Arg, Node(_ :+ AST(Tag.Atom, Leaf("'"), _)), _) +: _), _) =>
-        List()
-      case it =>
-        it.child.toList
-
-    }) {
-      case it@AST(Tag.Call, Node(AST(Tag.Atom, Leaf(op), _) +: args), _) =>
-        (op, args) match {
-          case (":=", AST(Tag.Atom, Leaf(name), _) +: tail) =>
-            AST(Tag.Let, mkNode(AST(Tag.Quote, Leaf(name)) +: tail.toList: _*))
-          case ("=", AST(Tag.Atom, Leaf(name), _) +: tail) =>
-            AST(Tag.Set, mkNode(AST(Tag.Quote, Leaf(name)) +: tail.toList: _*))
-          case ("'", Seq(arg: AST)) =>
-            AST(Tag.Quote, mkNode(arg))
-          case ("if", args) =>
-            exIf(it)
-          case ("while", Seq(cond: AST, AST(Tag.Lambda, Node(Seq(AST(Tag.Block, Node(body), _))), _))) =>
-            val call = AST(Tag.Call, mkNode(mkAtom("if"), cond, mkBlock(
-              body.toSeq :+ mkCall2("while"): _*
-            ), mkAtom("()")))
-
-            AST(Tag.Call, mkNode(
-              AST(Tag.Lambda, mkNode(mkBlock(
-                mkLet("while",
-                  AST(Tag.Lambda, mkNode(mkBlock(
-                    call
-                  )))
-                ),
-                mkCall2("while")
-              ))))
-            )
-          case _ => it
-        }
-
-      case it@AST(Tag.Call, Node(AST(Tag.Arg, Node(_ :+ AST(Tag.Atom, Leaf("'"), _)), _) +: _), _) =>
-        it
-      case AST(Tag.Pragma, _, _) =>
-        mkNull
+    program = program.map {
+      case Call(Atom(":="), arg) =>
+        Node(Tag.Let, arg)
+      case Call(Atom("="), Atom(name) :: tail) =>
+        Node(Tag.Set, Quote(Atom(name)) +: tail)
+      case Call(Atom("'"), arg) =>
+        Node(Tag.Quote, arg)
+      case it if it.tag == Tag.Pragma =>
+        Leaf(Tag.Null, Nil)
       case it =>
         it
     }
 
-
-    val builtins = Seq("+", "-", "*", "/", "=", "==", ">", "printr", "newline", "if", "eval")
+    println(repr(program, multi = true))
 
     // 3. run interpreter
-    def eval(node: AST): Any = {
+    def eval(node: Syntax): Any = {
       ctx.nodeStack.push(node)
       val ret = node match {
-        case AST(Tag.Block, Node(children), _) =>
+        case Leaf(_, value) =>
+          value
+
+        case _: FunNode =>
+          node
+
+        case Block(children) =>
           var last: Any = None
-          for (child <- children) {
-            last = eval(child)
-          }
+          for (child <- children) last = eval(child)
           last
-        case AST(Tag.Let, Node(Seq(AST(_, Leaf(name: String), _), value)), _) =>
+
+        case Node(Tag.Let, List(Atom(name), value)) =>
           val res = eval(value)
           ctx.let(name, res)
           res
-        case AST(Tag.Set, Node(Seq(AST(_, Leaf(name: String), _), value)), _) =>
+
+        case Node(Tag.Set, List(Atom(name), value)) =>
           val res = eval(value)
           ctx.set(name, res)
           res
-        case AST(Tag.Atom, Leaf(name: String), _) =>
+
+        case Atom(name) =>
           ctx.get(name)
-        case AST(Tag.Quote, Node(Seq(quoted)), _) =>
+
+        case Quote(quoted) =>
           quoted
-        case AST(Tag.Call, Node(AST(Tag.Atom, Leaf(name: String), _) +: args), _)
-          if builtins contains name =>
 
-          if (name == "if") {
-            val arg = args.toList
-            val (cond, t, f) = (eval(arg(0)), arg(1), arg(2))
-
-            (cond, t, f) match {
-              case (cond: Boolean, t: AST, f: AST) =>
-                return if (cond) eval(t) else eval(f)
-              case _ =>
-                throw new RuntimeException(error__type__call_mismatch(
-                  ctx, "if", Array("Bool", "AST", "AST"), Array()))
-            }
+        case Call(Atom("if"), arg) =>
+          val (cond, t, f) = (eval(arg(0)), arg(1), arg(2))
+          (cond, t, f) match {
+            case (cond: Boolean, t: Syntax, f: Syntax) =>
+              return if (cond) eval(t) else eval(f)
+            case _ =>
+              throw new RuntimeException(error__type__call_mismatch(
+                ctx, "if", Array("Bool", "AST", "AST"), Array()))
           }
 
-          def t(v: Any): String = v.getClass.getClasses.map(_.getSimpleName).mkString("/")
+        case Call(Atom("eval"), List(arg)) =>
+          eval(arg)
 
-          val arg = (args map eval).toList
-          val res = name match {
-            case "+" =>
-              arg match {
-                case Seq(x: Int, y: Int) => x + y
-                case Seq(x: Double, y: Double) => x + y
-                case Seq(x, y) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "+", Array("Num", "Num"), Array(t(x), t(y))))
-              }
-            case "*" =>
-              arg match {
-                case Seq(x: Int, y: Int) => x * y
-                case Seq(x: Double, y: Double) => x * y
-                case Seq(x, y) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "*", Array("Num", "Num"), Array(t(x), t(y))))
-              }
-            case "/" =>
-              arg match {
-                case Seq(_, 0) =>
-                  throw new RuntimeException(error__eval__div_zero(ctx))
-                case Seq(x: Int, y: Int) => x.toDouble / y.toDouble
-                case Seq(x: Double, y: Double) => x / y
-                case Seq(x, y) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "/", Array("Num", "Num"), Array(t(x), t(y))))
-              }
-            case "-" =>
-              arg match {
-                case Seq(x: Int) => -x
-                case Seq(x: Double) => -x
-                case Seq(x: Int, y: Int) => x - y
-                case Seq(x: Double, y: Double) => x - y
-                case Seq(x, y) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "-", Array("Num", "Num"), Array(t(x), t(y))))
-                case Seq(x) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "-", Array("Num"), Array(t(x))))
-              }
-            case "==" =>
-              arg match {
-                case Seq(x: Boolean, y: Boolean) => x == y
-                case Seq(x: Int, y: Int) => x == y
-                case Seq(x: Double, y: Double) => x == y
-                case Seq(x: String, y: String) => x == y
-                case Seq(x, y) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "==", Array("Eq", "Eq"), Array(t(x), t(y))))
-              }
-            case ">" =>
-              arg match {
-                case Seq(x: Int, y: Int) => x > y
-                case Seq(x: Double, y: Double) => x > y
-                case Seq(x, y) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, ">", Array("Num", "Num"), Array(t(x), t(y))))
-              }
-            case "eval" =>
-              arg match {
-                case Seq(x: AST) => eval(x)
-                case Seq(x) =>
-                  throw new RuntimeException(error__type__call_mismatch(
-                    ctx, "eval", Array("AST"), Array(t(x))))
-              }
-            case "printr" =>
-              print(arg(0).toString)
-            case "newline" =>
-              println()
+        case Call(head, tail) =>
+          val arg = tail.map(eval)
+          val typ = mkFun(arg.map(getTyp) :+ VOID: _*)
+          val sig = if (head.toString.startsWith("(")) "lambda" else head.toString
+
+          val lambda = head match {
+            case Atom(name) =>
+              val key = ctx.mangleFun(name, arg.length, typ)
+              ctx.get(key)
+
+            case _ =>
+              eval(head)
           }
-          res
 
-        case AST(Tag.Call, Node((head: AST) +: args), _) =>
-          val lambda = eval(head)
-          val arg = (args map eval).toList
+
           lambda match {
-            case AST(Tag.Lambda, Node(body), _) if body.toList.length == 1 =>
+            case FunNode(body, ret, par) =>
               ctx.pushEnv()
-              ctx.env.name = head.toString
-              if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
-              val ret = eval(body.toList(0))
-              ctx.popEnv()
-              ret
-
-            case AST(Tag.Lambda, Node(kids), _) if kids.toList.length > 1 =>
-              val body = kids.last
-              val param = kids.dropRight(1)
-              ctx.pushEnv()
-              ctx.env.name = head.toString
-              if (ctx.env.name.startsWith("(")) ctx.env.name = "lambda"
-              val par = param.map { it => it.data.asInstanceOf[Leaf].data.asInstanceOf[String] }
-              (par zip arg) foreach { case (k, v) => ctx.let(k, v) }
+              // set environment name for nice stack traces
+              ctx.env.name = sig
+              // get parameter names
+              val names = par.map(_.id.value)
+              // define arguments
+              for ((k, v) <- names zip arg) ctx.let(k, v)
+              // evaluate the body and save return value
               val ret = eval(body)
               ctx.popEnv()
               ret
 
+            case Builtin(_, body) =>
+              // just pass things to a regular lambda
+              body(arg)
+
             case _ =>
               throw new Exception("cannot call non lambda!")
           }
-
-        case it@AST(Tag.Lambda, _, _) =>
-          it
-
-        case AST(_, Leaf(value), _) =>
-          value
       }
 
       ctx.nodeStack.pop()
       ret
     }
 
-
-
     //println(repr(program, multi = true))
+
     try {
       eval(program)
     } catch {
