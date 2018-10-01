@@ -3,51 +3,43 @@ package com.maxadamski.vitamin
 import PrattTools._
 import PrattFunctions._
 import com.maxadamski.vitamin.Report._
-import com.maxadamski.vitamin.Vitamin.Ctx
 
 import util.control.Breaks._
 
 // TODO: do something about the expr metadata
 
-case class Token(key: String, value: AST)
-
 case class Null(
-  nud: (PrattParser, Token, Int) => AST,
+  nud: (PrattParser, Token, Int) => PrattCall,
   rbp: Int, nbp: Int)
 
 case class Left(
-  led: (PrattParser, Token, Int, AST) => AST,
+  led: (PrattParser, Token, Int, PrattCall) => PrattCall,
   lbp: Int, rbp: Int, nbp: Int)
+
+case class PrattCall(head: Token, tail: List[PrattCall])
+
+case class Token(key: String, value: Any)
 
 class PrattParser(
   val ctx: Ctx,
   val nud: Map[String, Null],
   val led: Map[String, Left],
-  val opNames: Array[String],
+  val ops: List[String],
 ) {
-  var history: Array[Token] = Array()
+  var history: List[Token] = List()
   var tokens: Iterator[Token] = Iterator()
   var token: Token = EOF_TOKEN
 
-  def parse(node: AST): AST = node.data match {
-    case Node(children) =>
-      val tokens = children map {
-        case atom@AST(Tag.Atom, Leaf(name: String), meta) if opNames.contains(name) =>
-          val key = if (meta.contains(Meta.QuotedAtom)) LIT else name
-          Token(key, atom)
-        case prim@AST(_, _, _) =>
-          Token(LIT, prim)
-      }
-      ctx.nodeStack.push(node)
-      val parsed = parse(tokens.toIterator)
-      ctx.nodeStack.pop()
-      parsed
-    case Leaf(value) =>
-      throw new Exception("not implemented")
+  def parse(node: Syntax): Syntax = {
+    val tokens = encodeSyntax(node, ops)
+    ctx.nodeStack.push(node)
+    val parsed = parse(tokens.toIterator)
+    ctx.nodeStack.pop()
+    decodeSyntax(parsed)
   }
 
-  def parse(tokens: Iterator[Token]): AST = {
-    history = Array()
+  def parse(tokens: Iterator[Token]): PrattCall = {
+    history = List()
     this.tokens = tokens
     advance()
     parseUntil(0)
@@ -67,7 +59,7 @@ class PrattParser(
     token
   }
 
-  def parseUntil(rbp: Int): AST = {
+  def parseUntil(rbp: Int): PrattCall = {
     val (t, l) = (token, last)
     advance()
 
@@ -112,70 +104,52 @@ class PrattParser(
 }
 
 object PrattFunctions {
-  def mkArg(arg: AST): AST = {
-    arg
-  }
 
-  def sum(x: Span, y: Span): Span = {
-    Span(Math.min(x.start, y.start), Math.max(x.stop, y.stop))
-  }
-
-  def mkCall(args: AST*): AST = {
-    val call = AST(Tag.Call, Node(args), Map(
-      Meta.Span -> args.flatMap(_.span).reduce(sum),
-      Meta.Line -> args(0).line.get,
-      Meta.Char -> args(0).char.get,
-    ))
-    call
-  }
-
-  def nullError(p: PrattParser, t: Token, rbp: Int): AST = {
+  def nullError(p: PrattParser, t: Token, rbp: Int): PrattCall = {
     throw new ParserException(error__parser__null_not_registered(p.ctx, t))
   }
 
-  def leftError(p: PrattParser, t: Token, rbp: Int, left: AST): AST = {
+  def leftError(p: PrattParser, t: Token, rbp: Int, left: PrattCall): PrattCall = {
     throw new ParserException(error__parser__left_not_registered(p.ctx, t))
   }
 
-  def literal(p: PrattParser, t: Token, rbp: Int): AST = {
-    t.value
+  def literal(p: PrattParser, t: Token, rbp: Int): PrattCall = {
+    PrattCall(t, List())
   }
 
-  def prefix(p: PrattParser, t: Token, rbp: Int): AST = {
-    val arg = mkArg(p.parseUntil(rbp))
-    mkCall(t.value, arg)
+  def prefix(p: PrattParser, t: Token, rbp: Int): PrattCall = {
+    PrattCall(t, List(p.parseUntil(rbp)))
   }
 
-  def infix(p: PrattParser, t: Token, rbp: Int, left: AST): AST = {
-    val lhs = mkArg(left)
-    val rhs = mkArg(p.parseUntil(rbp))
-    mkCall(t.value, lhs, rhs)
+  def infix(p: PrattParser, t: Token, rbp: Int, left: PrattCall): PrattCall = {
+    PrattCall(t, List(left, p.parseUntil(rbp)))
   }
 
-  def suffix(p: PrattParser, t: Token, rbp: Int, left: AST): AST = {
-    val arg = mkArg(left)
-    mkCall(t.value, arg)
+  def suffix(p: PrattParser, t: Token, rbp: Int, left: PrattCall): PrattCall = {
+    PrattCall(t, List(left))
   }
+
 }
 
 object PrattTools {
+
   val LIT = "Literal"
   val EOF = "EOF"
   val BOF = "BOF"
-  val EOF_TOKEN = Token(EOF, AST(null, null))
-  val BOF_TOKEN = Token(BOF, AST(null, null))
+  val EOF_TOKEN = Token(EOF, Nil)
+  val BOF_TOKEN = Token(BOF, Nil)
 
-  private def makeLeft(name: String, led: (PrattParser, Token, Int, AST) => AST,
+  private def makeLeft(name: String, led: (PrattParser, Token, Int, PrattCall) => PrattCall,
     lbp: Int, rbp: Int, nbp: Option[Int] = None) = {
     name -> Left(led, lbp, rbp, nbp.getOrElse(rbp))
   }
 
-  private def makeNull(name: String, nud: (PrattParser, Token, Int) => AST,
+  private def makeNull(name: String, nud: (PrattParser, Token, Int) => PrattCall,
     rbp: Int, nbp: Option[Int] = None) = {
     name -> Null(nud, rbp, nbp.getOrElse(rbp))
   }
 
-  def makeParser(ctx: Ctx, ops: Iterable[Op]): PrattParser = {
+  def makeParser(ctx: Ctx, ops: List[Op]): PrattParser = {
     var max_prec = if (ops.nonEmpty) ops.map(_.prec).max else 0
     val op_names = ops.map(_.name)
     val offset = 10
@@ -210,7 +184,35 @@ object PrattTools {
       }
     }
 
-    new PrattParser(ctx, nud, led, op_names.toArray)
+    new PrattParser(ctx, nud, led, op_names)
   }
+
+  def encodeSyntax(expr: Syntax, ops: List[String]): List[Token] = {
+    val children = expr.child
+    if (children.nonEmpty) {
+        children map {
+          case atom@Atom(name) if !atom.escaped && ops.contains(name) =>
+            Token(name, atom)
+          case primary =>
+            Token(LIT, primary)
+        }
+    } else {
+      throw new Exception("not implemented")
+    }
+  }
+
+  def decodeSyntax(call: PrattCall): Syntax = {
+    decode[Syntax](call, { (head, tail) =>
+      Call(head, tail)
+    })
+  }
+
+  def decode[T](call: PrattCall, makeCall: (T, List[T]) => T): T = {
+    call.tail match {
+      case Nil => call.head.value.asInstanceOf[T]
+      case tail => makeCall(call.head.value, tail.map(decode(_, makeCall)))
+    }
+  }
+
 }
 

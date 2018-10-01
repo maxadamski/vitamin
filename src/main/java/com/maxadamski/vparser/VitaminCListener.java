@@ -68,6 +68,26 @@ public interface VitaminCListener extends ParseTreeListener {
 	 */
 	void exitWhexpr(VitaminCParser.WhexprContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#typ}.
+	 * @param ctx the parse tree
+	 */
+	void enterTyp(VitaminCParser.TypContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#typ}.
+	 * @param ctx the parse tree
+	 */
+	void exitTyp(VitaminCParser.TypContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#par}.
+	 * @param ctx the parse tree
+	 */
+	void enterPar(VitaminCParser.ParContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#par}.
+	 * @param ctx the parse tree
+	 */
+	void exitPar(VitaminCParser.ParContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link VitaminCParser#fun}.
 	 * @param ctx the parse tree
 	 */
@@ -118,16 +138,6 @@ public interface VitaminCListener extends ParseTreeListener {
 	 */
 	void exitConstant(VitaminCParser.ConstantContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#atom}.
-	 * @param ctx the parse tree
-	 */
-	void enterAtom(VitaminCParser.AtomContext ctx);
-	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#atom}.
-	 * @param ctx the parse tree
-	 */
-	void exitAtom(VitaminCParser.AtomContext ctx);
-	/**
 	 * Enter a parse tree produced by {@link VitaminCParser#intn}.
 	 * @param ctx the parse tree
 	 */
@@ -157,4 +167,14 @@ public interface VitaminCListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitString(VitaminCParser.StringContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#atom}.
+	 * @param ctx the parse tree
+	 */
+	void enterAtom(VitaminCParser.AtomContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#atom}.
+	 * @param ctx the parse tree
+	 */
+	void exitAtom(VitaminCParser.AtomContext ctx);
 }

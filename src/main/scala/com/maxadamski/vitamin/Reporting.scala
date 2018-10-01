@@ -2,8 +2,6 @@ package com.maxadamski.vitamin
 
 import java.io.RandomAccessFile
 
-import com.maxadamski.vitamin.Vitamin.Ctx
-
 
 class RuntimeException(val message: String) extends Exception
 
@@ -159,7 +157,7 @@ object Report {
   def compileError(
     c: Ctx, name: String, comment: String,
     hints: Array[String] = Array(),
-    node: AST = null, high: AST = null,
+    node: Syntax = null, high: Syntax = null,
   ): String = {
     val node2 = if (node != null) node else c.node
     val high2 = if (high != null) high else node2
@@ -177,14 +175,12 @@ object Report {
   def error__parser__null_unexpected_token(c: Ctx, token: Token): String =
     compileError(
       c, "syntax error",
-      s"expected a primary expression or prefix operator, but got '${token.value.meta(Meta.Text)}'",
-      node = token.value)
+      s"expected a primary expression or prefix operator, but got '${token.value}'")
 
   def error__parser__left_unexpected_token(c: Ctx, token: Token): String =
     compileError(
       c, "syntax error",
-      s"expected an infix or suffix operator, but got '${token.value.meta(Meta.Text)}'",
-      node = token.value)
+      s"expected an infix or suffix operator, but got '${token.value}'")
 
   def error__parser__null_bad_precedence(c: Ctx, t: Token, l: Token): String =
     compileError(
@@ -196,8 +192,7 @@ object Report {
           "fix trivially by reversing the operator order",
         "the same non-associative prefix operator may be used in succession.\n" +
           "fix trivially by putting the subexpression in parentheses",
-      ),
-      node = t.value)
+      ))
 
   def error__parser__left_bad_precedence(c: Ctx, t: Token, l: Token): String =
     compileError(
@@ -207,20 +202,17 @@ object Report {
       hints = Array(
         "the same non-associative infix/suffix operator may be used in succession\n" +
           "fix trivially by putting the subexpression in parentheses",
-      ),
-      node = t.value)
+      ))
 
   def error__parser__null_not_registered(c: Ctx, t: Token): String =
     compileError(
       c, "syntax error",
-      s"'${t.key}' is not a prefix operator, and cannot be used as such.",
-      node = t.value)
+      s"'${t.key}' is not a prefix operator, and cannot be used as such.")
 
   def error__parser__left_not_registered(c: Ctx, t: Token): String =
     compileError(
       c, "syntax error",
-      s"'${t.key}' is not an infix or suffix operator, and cannot be used as such.",
-      node = t.value)
+      s"'${t.key}' is not an infix or suffix operator, and cannot be used as such.")
 
   def error__parser__unexpected_eof(c: Ctx): String =
     compileError(
