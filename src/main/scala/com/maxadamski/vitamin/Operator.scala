@@ -88,13 +88,13 @@ object OpUtils {
     }
   }
 
-  def getArgs(params: Seq[Param], given: Seq[Arg]): Seq[Syntax] = {
+  def getArgs(params: Seq[Param], given: Seq[Arg]): Seq[AST] = {
     // FIXME?
-    val args = Array.ofDim[Syntax](params.length)
+    val args = Array.ofDim[AST](params.length)
     val keys = params.map(_.key)
     val list = params.last.list
     var startedKeys = false
-    var listArgs = List[Syntax]()
+    var listArgs = List[AST]()
 
     given.zipWithIndex foreach { case (arg, i) =>
       arg.key match {
@@ -115,7 +115,7 @@ object OpUtils {
     }
 
     if (list)
-      args(args.length - 1) = Node(Tag.Array, listArgs)
+      args(args.length - 1) = Term(Tag.Array, listArgs)
 
     args.zipWithIndex foreach {
       case (null, i) =>
@@ -138,16 +138,16 @@ case class OpName(group: String, name: String)
 
 case class Op(name: String, prec: Int, fix: Fixity, ass: Assoc)
 
-case class Arg(key: Option[String], value: Syntax)
+case class Arg(key: Option[String], value: AST)
 
-case class Param(key: String, default: Option[Syntax] = None, list: Boolean = false)
+case class Param(key: String, default: Option[AST] = None, list: Boolean = false)
 
 
 object Functions {
 
   sealed trait AFunction
 
-  case class Lambda(typ: Types.Fun, param: List[String], body: Syntax) extends AFunction
+  case class Lambda(typ: Types.Fun, param: List[String], body: AST) extends AFunction
   case class Builtin(typ: Types.Fun, body: List[Any] => Any) extends AFunction
 
 }
@@ -157,9 +157,13 @@ object Types {
 
   sealed trait AType
 
-  case class Typ(x: String) extends AType
+  case class Typ(x: String) extends AType {
+    override def toString: String = x
+  }
 
-  case class Var(x: String) extends AType
+  case class Var(x: String) extends AType {
+    override def toString: String = "'" + x
+  }
 
   case class Fun(x: AType, y: AType) extends AType {
     override def toString: String = s"$x -> $y"
@@ -181,6 +185,7 @@ object Types {
   def arity(fun: AType): Int = {
     @tailrec
     def go(typ: AType, sum: Int): Int = typ match {
+      case Fun(VOID, y) => go(y, sum)
       case Fun(_, y) => go(y, sum + 1)
       case _ => sum
     }
@@ -191,8 +196,9 @@ object Types {
   val TYPE = Typ("Type")
   val ANY = Typ("Any")
   val NIL = Typ("Nothing")
-  val INT = Typ("Int")
   val STR = Typ("Str")
+  val INT = Typ("Int")
+  val I64 = Typ("I64")
   val REAL = Typ("Real")
   val BOOL = Typ("Bool")
   val EXPR = Typ("Expr")

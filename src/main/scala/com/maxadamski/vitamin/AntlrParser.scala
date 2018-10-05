@@ -1,5 +1,6 @@
 package com.maxadamski.vitamin
 
+import com.maxadamski.vitamin.Tag.Tag
 import com.maxadamski.vitamin.Types.{AType, Typ}
 import com.maxadamski.vparser._
 import com.maxadamski.vparser.VitaminCParser._
@@ -7,12 +8,13 @@ import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.tree._
 
 import math.max
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 class ANTLRException(message: String) extends Exception
 
 object Parser {
-  def parseFile(path: String): Syntax = {
+  def parseFile(path: String): AST = {
     val input = new ANTLRFileStream(path)
     val lexer = new VitaminCLexer(input)
     val tokens = new CommonTokenStream(lexer)
@@ -30,10 +32,10 @@ object Parser {
 class Listener extends VitaminCBaseListener {
 
   implicit class ParserRuleContextExtension(ctx: ParserRuleContext) {
-    def meta: Map[String, Any] = {
+    def meta: mutable.Map[String, Any] = {
       val start = ctx.start.getStartIndex
       val stop = max(ctx.start.getStopIndex, ctx.stop.getStopIndex)
-      Map(
+      mutable.Map(
         Meta.Span -> Span(start, stop),
         Meta.Text -> ctx.getText,
         Meta.Line -> ctx.start.getLine,
@@ -54,25 +56,30 @@ class Listener extends VitaminCBaseListener {
     }
   }
 
+  def withMeta[T <: AST](ctx: ParserRuleContext, ast: T): T = {
+    ast.meta = ctx.meta
+    ast
+  }
+
+  def mkTerm(ctx: ParserRuleContext, tag: Tag, data: List[AST]): Term = withMeta(ctx, Term(tag, data))
+  def mkLeaf(ctx: ParserRuleContext, tag: Tag, data: Any): Leaf = withMeta(ctx, Leaf(tag, data))
+  def mkAtom(ctx: ParserRuleContext, text: String): Atom = withMeta(ctx, Atom(text))
+
+
   val impossible = new ANTLRException("ANTLRListener is outdated")
-  var program: Option[Syntax] = None
+  var program: Option[AST] = None
 
   override def enterProgram(ctx: ProgramContext): Unit = {
     program = Some(getChunk(ctx.chunk))
   }
 
-<<<<<<< HEAD
-  def getChunk(ctx: ChunkContext): Block = {
-    Block(ctx.expr.map(getExpr))
-=======
-  def getChunk(ctx: ChunkContext): Node = {
-    Node(Tag.Block, ctx.expr.map(getExpr))
->>>>>>> origin/new-ast
+  def getChunk(ctx: ChunkContext): Term = {
+    mkTerm(ctx, Tag.Block, ctx.expr.map(getExpr))
   }
 
-  def getExpr(ctx: ExprContext): Node = {
+  def getExpr(ctx: ExprContext): Term = {
     if (!ctx.primary.isEmpty)
-      Node(Tag.Flat, ctx.primary.map(getPrimary))
+      mkTerm(ctx, Tag.Flat, ctx.primary.map(getPrimary))
     else
       throw impossible
   }
@@ -97,49 +104,50 @@ class Listener extends VitaminCBaseListener {
   }
 
   def getIf(ctx: IfexprContext) = {
-    var args = ctx.expr.map(getExpr)
+    var args: List[AST] = ctx.expr.map(getExpr)
     if (args.length == 2) args :+= Atom("()")
-    Call(Atom("if"), args)
+    mkTerm(ctx, Tag.Call, Atom("if") :: args)
   }
 
   def getWh(ctx: WhexprContext) = {
-    Call(Atom("while"), ctx.expr.map(getExpr))
+    mkTerm(ctx, Tag.Call, Atom("while") :: ctx.expr.map(getExpr))
   }
-
 
   def getFun(ctx: FunContext) = {
-    val ret = if (ctx.typ != null) getTyp(ctx.typ) else TypNode(Types.VOID)
-    FunNode(getChunk(ctx.chunk), ret, ctx.par.map(getPar))
-  }
-
-  def getPar(ctx: ParContext) = {
-    ParNode(getAtom(ctx.atom), getTyp(ctx.typ))
+    val ret = if (ctx.typ != null) getTyp(ctx.typ) else Leaf(Tag.Type, Types.VOID)
+    val body = getChunk(ctx.chunk)
+    mkTerm(ctx, Tag.Lambda, body :: ret :: ctx.par.map(getPar))
   }
 
   def getTyp(ctx: TypContext) = {
-    TypNode(Types.Typ(ctx.atom().getText))
+    Leaf(Tag.Type, Typ(ctx.atom().getText))
+  }
+
+  def getPar(ctx: ParContext) = {
+    var data = getAtom(ctx.atom) :: getTyp(ctx.typ) :: Nil
+    mkTerm(ctx, Tag.Param, data)
   }
 
   def getCall(ctx: CallContext) = {
-    val head = if (ctx.atom != null) getAtom(ctx.atom) else getFun(ctx.fun)
-    Call(head, ctx.callArg.map(getCallArg))
+    // TODO: support any Expr on the left-hand side
+    val head: AST = if (ctx.atom != null) getAtom(ctx.atom) else getFun(ctx.fun)
+    mkTerm(ctx, Tag.Call, head :: ctx.callArg.map(getCallArg))
   }
 
   def getCallArg(ctx: CallArgContext) = {
-    val expr = getExpr(ctx.expr)
-    if (ctx.atom != null)
-      ArgNode(getAtom(ctx.atom), expr)
-    else
-      expr
+    val name = if (ctx.atom != null)  getAtom(ctx.atom) else Zero
+    val value = getExpr(ctx.expr)
+    mkTerm(ctx, Tag.Arg, value :: name :: Nil)
   }
 
   def getPragma(ctx: PragmaContext) = {
-    if (ctx.call != null)
-      getCall(ctx.call)
-    else if (ctx.atom != null)
-      Call(getAtom(ctx.atom), List())
-    else
+    if (ctx.call != null) {
+      getCall(ctx.call).copy(tag = Tag.Pragma)
+    } else if (ctx.atom != null) {
+      mkTerm(ctx, Tag.Pragma, getAtom(ctx.atom) :: Nil)
+    } else {
       throw impossible
+    }
   }
 
   def getConstant(ctx: ConstantContext) = {
@@ -161,20 +169,22 @@ class Listener extends VitaminCBaseListener {
       text = text.stripPrefix("`").stripSuffix("`")
       meta += Meta.QuotedAtom -> true
     }
-    Atom(text)
+    val atom = Atom(text)
+    atom.meta = meta
+    atom
   }
 
   def getStr(ctx: StringContext) = {
     val text = ctx.text.stripPrefix("\"").stripSuffix("\"")
-    StrLit(text)
+    mkLeaf(ctx, Tag.String, text)
   }
 
   def getInt(ctx: IntnContext) = {
-    IntLit(ctx.text.toInt)
+    mkLeaf(ctx, Tag.Int, ctx.text.toInt)
   }
 
   def getReal(ctx: RealContext) = {
-    RealLit(ctx.text.toDouble)
+    mkLeaf(ctx, Tag.Real, ctx.text.toDouble)
   }
 
 }

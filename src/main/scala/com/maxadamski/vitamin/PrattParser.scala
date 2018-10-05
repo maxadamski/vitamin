@@ -30,7 +30,7 @@ class PrattParser(
   var tokens: Iterator[Token] = Iterator()
   var token: Token = EOF_TOKEN
 
-  def parse(node: Syntax): Syntax = {
+  def parse(node: AST): AST = {
     val tokens = encodeSyntax(node, ops)
     ctx.nodeStack.push(node)
     val parsed = parse(tokens.toIterator)
@@ -187,30 +187,31 @@ object PrattTools {
     new PrattParser(ctx, nud, led, op_names)
   }
 
-  def encodeSyntax(expr: Syntax, ops: List[String]): List[Token] = {
-    val children = expr.child
-    if (children.nonEmpty) {
+  def encodeSyntax(expr: AST, ops: List[String]): List[Token] = {
+    expr match {
+      case Term(_, children) =>
         children map {
           case atom@Atom(name) if !atom.escaped && ops.contains(name) =>
             Token(name, atom)
           case primary =>
             Token(LIT, primary)
         }
-    } else {
-      throw new Exception("not implemented")
+      case _ =>
+        throw new Exception("not implemented")
     }
   }
 
-  def decodeSyntax(call: PrattCall): Syntax = {
-    decode[Syntax](call, { (head, tail) =>
-      Call(head, tail)
+  def decodeSyntax(call: PrattCall): AST = {
+    decode[AST](call, { (head, tail) =>
+      Term.makeCall(head, tail)
     })
   }
 
   def decode[T](call: PrattCall, makeCall: (T, List[T]) => T): T = {
+    val head = call.head.value.asInstanceOf[T]
     call.tail match {
-      case Nil => call.head.value.asInstanceOf[T]
-      case tail => makeCall(call.head.value, tail.map(decode(_, makeCall)))
+      case Nil => head
+      case tail => makeCall(head, tail.map(decode(_, makeCall)))
     }
   }
 

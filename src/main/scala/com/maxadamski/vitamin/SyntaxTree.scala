@@ -27,11 +27,12 @@ object Meta {
   val Char = "char"
 }
 
-sealed trait Syntax {
+
+sealed trait AST {
 
   var meta: mutable.Map[String, Any] = mutable.Map()
   def tag: Tag
-  def child: List[Syntax] = Nil
+  def child: List[AST] = Nil
 
   def atomic: Boolean = child.nonEmpty
   def depth: Int = if (atomic) 0 else 1 + child.map(_.depth).max
@@ -43,39 +44,38 @@ sealed trait Syntax {
 
   def fold[T](
     sum: T,
-    func: Folder[Syntax, T] = foldDFS[Syntax, T] _,
-    next: Syntax => List[Syntax] = nextAll _,
+    func: Folder[AST, T] = foldDFS[AST, T] _,
+    next: AST => List[AST] = nextAll _,
   )(
-    f: (T, Syntax) => T,
+    f: (T, AST) => T,
   ): T = {
     func(this, sum, f, next)
   }
 
-  def map(f: Syntax => Syntax): Syntax = {
-    this match {
-      case Node(tag, data) =>
-        f(Node(tag, data.map(f)))
-
-      case it@(_: Leaf | _: Atom) =>
-        f(it)
+  def map(next: AST => List[AST] = it => it.child)(f: AST => AST): AST = {
+    val res = this match {
+      case term: Term =>
+        term.copy(data = next(term).map(_.map(next)(f)))
+      case _ =>
+        this
     }
+    f(res)
   }
 
   override def toString: String = repr(this)
 
 }
 
-trait ASTLeaf[T] extends Syntax {
 
-}
+sealed trait ASTNode extends AST
 
-case class Node(tag: Tag, data: List[Syntax]) extends Syntax {
+case class Term(tag: Tag, data: List[AST]) extends ASTNode {
 
-  // Arg : {value: Expr, name: Atom?}
-  def isArg = tag == Tag.Arg && data.length >= 1
+  // Arg : {value: Expr, name: Atom|Zero}
+  def isArg = tag == Tag.Arg && data.length == 2
 
-  // Par : {name: Atom, type: Type, value: Expr?}
-  def isPar = tag == Tag.Param && data.length >= 2
+  // Par : {name: Atom, typ: Type}
+  def isPar = tag == Tag.Param && data.length == 2
 
   // Fun : {body: Expr, ret: Type, par: Type*}
   def isFun = tag == Tag.Lambda && data.length >= 2
@@ -83,25 +83,45 @@ case class Node(tag: Tag, data: List[Syntax]) extends Syntax {
   // Call : {callee: Expr, arg: Arg*}
   def isCall = tag == Tag.Call && data.length >= 1
 
-  // Quote : {value: Expr}
+  // Expr : {value: Expr}
   def isQuote = tag == Tag.Quote && data.length == 1
 
+  override def child: List[AST] = data
+
+  override def atomic: Boolean = false
+
 }
 
-object Node {
-  def apply(tag: Tag, data: Syntax*)(implicit d: DummyImplicit) =
-    new Node(tag, data.toList)
+object Term {
+
+  def apply(tag: Tag, data: AST*)(implicit d: DummyImplicit) =
+    new Term(tag, data.toList)
+
+  def makeCall(callee: AST, arg: List[AST]): AST = {
+    Term(Tag.Call, callee :: arg)
+  }
+
 }
 
-case class Leaf(tag: Tag, value: Any) extends ASTLeaf[Any]
 
-case class Atom(value: String) extends ASTLeaf[String] {
+sealed trait ASTLeaf extends AST
+
+case class Leaf(tag: Tag, value: Any) extends ASTLeaf
+
+case class Atom(value: String) extends ASTLeaf {
   def tag: Tag = Tag.Atom
 }
 
-object Null extends Syntax {
+object Zero extends ASTLeaf {
   def tag: Tag = Tag.Null
 }
+
+
+
+
+
+
+
 
 object ASTUtils {
 
@@ -111,15 +131,15 @@ object ASTUtils {
   type Folder[A, B] = (A, B, Fcat[B, A], Walker[A]) => B
   type Mapper[A, B] = (A, A => B, Walker[A]) => B
 
-  def nextAll(node: Syntax): List[Syntax] = {
+  def nextAll(node: AST): List[AST] = {
     node.child
   }
 
-  def nextFilter(pred: Syntax => Boolean)(node: Syntax): List[Syntax] = {
+  def nextFilter(pred: AST => Boolean)(node: AST): List[AST] = {
     if (pred(node)) nextAll(node) else List()
   }
 
-  def nextExcept(pred: Syntax => Boolean)(node: Syntax): List[Syntax] = {
+  def nextExcept(pred: AST => Boolean)(node: AST): List[AST] = {
     if (!pred(node)) nextAll(node) else List()
   }
 
@@ -178,14 +198,27 @@ object ASTUtils {
   }
   */
 
-  def repr(node: Syntax, level: Int = 0, multi: Boolean = false): String = {
-    var lvl = level
-    node match {
-      case Node(tag, data) =>
-        "(" + (tag.toString +: data.map(_.toString)).mkString(" ") + ")"
+  def leafRepr(node: Leaf): String = {
+    node.value match {
+      case s: String => "'" + s + "'"
+      case d: Double => d.toString
+      case i: Int => i.toString
+      case value => value.toString
+    }
+  }
 
-      case Leaf(tag, data) =>
-        data.toString
+  def repr(node: AST, level: Int = 0, multi: Boolean = false): String = {
+    //var lvl = level
+    node match {
+      case Term(Tag.Arg, List(value, Zero)) => repr(value)
+      case leaf: Leaf => leafRepr(leaf)
+      case Atom(value) => value
+      case Zero => "⊥"
+      case Term(tag, data) =>
+        val items = (tag :: data).map(_.toString)
+        "(" + items.mkString(" ") + ")"
+
+
 
         /*
       case FunNode(body, ret, par) =>

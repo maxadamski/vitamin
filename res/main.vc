@@ -12,7 +12,6 @@
 #operatorgroup(Quotation, fx, gt: NumberSign)
 
 #operator(Declaration, :=)
-#operator(Command, print)
 #operator(Assignment, =, +=)
 #operator(Disjunction, or)
 #operator(Conjunction, and)
@@ -25,9 +24,13 @@
 
 #operatorcompile
 
-`print` := { (str: Str) in
-    Core_print(str)
-    Core_print(NL)
+print := { (obj: Any) in
+    Core_print(Str(obj))
+}
+
+println := { (obj: Any) in
+    print(obj)
+    print(NL)
 }
 
 countdown_i := { (n: Int) in
@@ -50,12 +53,23 @@ countdown_r := { (n: Int) -> Int in
     if (n > 0) n + countdown_r(n - 1) else 0
 }
 
-i := 0
-while (i < 100) {
-    printr(countdown_t(i)); printr(" ")
-    newline()
-    i = i + 1
+benchmark := { (passes: Int, lambda: Any) in
+    sum := I64(0)
+    i := 0
+    while (i < passes) {
+        t0 := Core_time()
+        lambda()
+        t1 := Core_time()
+        sum = sum + t1 - t0
+        i = i + 1
+    }
+    sum div I64(passes)
 }
 
-print(Str(3 / 2))
+report := { (t: I64) in
+    print("took: "); print(t); println("ms")
+}
 
+N := 1000000
+print("N = "); println(N)
+report(benchmark(5, { countdown_i(N) }))

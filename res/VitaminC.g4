@@ -37,7 +37,7 @@ exprs : expr (',' expr)* ;
 //whileStatement : 'while' clause block ;
 
 program : chunk EOF ;
-chunk : NL* (expr (SEMI | NL) NL*)* NL* ;
+chunk : NL* (expr (SEMI | NL) NL*)* (expr SEMI?)? NL* ;
 
 expr
     : primary+
@@ -58,17 +58,8 @@ whexpr : 'while' '(' NL* expr NL* ')' NL* expr ;
 
 typ : atom ;
 par : atom COLON typ ;
-
 fun : '{' ('(' par (',' par)* ')' ('->' typ)? 'in')? chunk '}' ;
 
-//typ : atom | atom LANGLE typ (',' typ)* RANGLE | '_' ;
-/*
-typ : atom ;
-fun : atom '(' funParam? (',' funParam)* ')' ('->' typ)? '{' chunk '}' ;
-funParam : atom COLON typ (EQUAL expr)? ;
-*/
-
-// combine callArg and pragmaArg after creating the first compiler
 call : (atom | fun) '(' (callArg (',' callArg)*)? ')' ;
 callArg : (atom COLON)? expr ;
 pragma : '#' (atom | call) ;
@@ -108,20 +99,11 @@ fragment HexFraction : '.' HexFraction ;
 fragment DecExponent : [eE] NumberSign? DecDigits ;
 fragment HexExponent : [pP] NumberSign? HexDigits ;
 
-fragment FloatReal
-    :      DecDigits (DecFraction DecExponent? | DecExponent)
-    | '0x' HexDigits (HexFraction HexExponent? | HexExponent)
-    ;
+fragment FloatReal : DecDigits DecFraction ;
+fragment IntReal : DecDigits ;
 
-fragment IntReal
-    :      DecDigits
-    | '0x' HexDigits
-    | '0o' OctDigits
-    | '0b' BinDigits
-    ;
-
-Real : FloatReal [i]? ;
-Int  : IntReal   [i]? ;
+Real : FloatReal ;
+Int  : IntReal ;
 
 fragment EscapedString : '"' ( '\\' . | ~["\n\r] )* '"' ;
 String : EscapedString ;

@@ -123,7 +123,7 @@ object Source {
     val spec = if (lines.length == 1)
       lines.map(_ -> relativeSpan)
     else
-      lines.map(_ -> Span(-1, -1))
+      lines.map(_ -> Span(0, 0))
     highlightedSource(spec, lineAnchor)
   }
 }
@@ -157,7 +157,7 @@ object Report {
   def compileError(
     c: Ctx, name: String, comment: String,
     hints: Array[String] = Array(),
-    node: Syntax = null, high: Syntax = null,
+    node: AST = null, high: AST = null,
   ): String = {
     val node2 = if (node != null) node else c.node
     val high2 = if (high != null) high else node2
@@ -177,10 +177,12 @@ object Report {
       c, "syntax error",
       s"expected a primary expression or prefix operator, but got '${token.value}'")
 
-  def error__parser__left_unexpected_token(c: Ctx, token: Token): String =
+  def error__parser__left_unexpected_token(c: Ctx, token: Token): String = {
+    val token_desc = if (token.key == PrattTools.LIT) "primary expression" else "prefix operator"
     compileError(
       c, "syntax error",
-      s"expected an infix or suffix operator, but got '${token.value}'")
+      s"expected an infix or suffix operator, but got $token_desc '${token.value}'")
+  }
 
   def error__parser__null_bad_precedence(c: Ctx, t: Token, l: Token): String =
     compileError(
