@@ -105,7 +105,7 @@ object Vitamin {
     case _ => ANY
   }
 
-  def parseExpressions(ctx: Ctx, ast: Syntax): Syntax = {
+  def parseExpressions(ctx: Ctx, ast: Node): Node = {
     val res: Syntax = if (ast.tag == Tag.Flat) {
       try {
         ctx.parser.parse(ast)
@@ -120,9 +120,9 @@ object Vitamin {
 
     if (res != ast) {
       res match {
-        case Call(Atom(name), arg) =>
+        case Node(Tag.Call, Atom(name) +: arg) =>
           val arg2 = arg.map {
-            case ArgNode(Atom(key), value) =>
+            case Node(Tag.Arg, value + Atom(name)) =>
               Arg(Some(key), value)
             case value =>
               Arg(None, value)
