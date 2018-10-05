@@ -105,6 +105,59 @@ object Vitamin {
     case _ => ANY
   }
 
+  def parseExpressions(ctx: Ctx, ast: Node): Node = {
+    val res: Syntax = if (ast.tag == Tag.Flat) {
+      try {
+        ctx.parser.parse(ast)
+      } catch {
+        case e: ParserException =>
+          println(e.message)
+          ast
+      }
+    } else {
+      parseExpressions()
+    }
+
+    if (res != ast) {
+      res match {
+        case Node(Tag.Call, Atom(name) +: arg) =>
+          val arg2 = arg.map {
+            case Node(Tag.Arg, value + Atom(name)) =>
+              Arg(Some(key), value)
+            case value =>
+              Arg(None, value)
+          }
+          runPragma(ctx, name, arg2)
+
+        case _ =>
+      }
+
+    res
+  }
+
+  def runPragma(ctx: Ctx, name: String, arg: List[Arg]): Unit = {
+    name match {
+      case "operatorgroup" =>
+        val nil = Some(Atom("nil"))
+        val defn = Seq(Param("name"), Param("kind"), Param("gt", nil), Param("lt", nil))
+        val args = getArgs(defn, arg).map { case Atom(str) => str }
+        val gt = if (args(2) != "nil") Some(args(2)) else None
+        val lt = if (args(3) != "nil") Some(args(3)) else None
+        ctx.env.opGroups += args(0) -> mkGroup(args(0), args(1), gt, lt)
+      case "operator" =>
+        val defn = Seq(Param("group"), Param("name", list = true))
+        val args = getArgs(defn, arg)
+        val group = args(0).asInstanceOf[Atom].value
+        val names = args(1).asInstanceOf[Node].data.map(_.asInstanceOf[Atom].value)
+        for (name <- names) ctx.env.opNames :+= OpName(group, name)
+      case "operatorcompile" =>
+        ctx.env.opGroups = OpUtils.updateGroups(ctx.env.opGroups)
+        val ops = OpUtils.mkOps(ctx.env.opNames, ctx.env.opGroups)
+        ctx.parser = PrattTools.makeParser(ctx, ops)
+      case _ =>
+        println(s"unknown pragma $res")
+  }
+
   def main(args: Array[String]): Unit = {
     val mainFile = "res/main.vc"
     var program: Syntax = Parser.parseFile(mainFile)
@@ -116,59 +169,7 @@ object Vitamin {
 
 
     // 1. parse expressions
-    program = program.map() { it =>
-      val res = it match {
-        case Node(Tag.Flat, _) =>
-          try {
-            ctx.parser.parse(it)
-          } catch {
-            case e: ParserException =>
-              println(e.message)
-              it
-          }
-        case _ =>
-          it
-      }
-
-      if (res != it) {
-        res match {
-          case Call(Atom(name), arg) =>
-            val arguments = arg.map {
-              case ArgNode(Atom(key), value) =>
-                Arg(Some(key), value)
-              case value =>
-                Arg(None, value)
-            }
-
-
-            name match {
-              case "operatorgroup" =>
-                val nil = Some(Atom("nil"))
-                val defn = Seq(Param("name"), Param("kind"), Param("gt", nil), Param("lt", nil))
-                val args = getArgs(defn, arguments).map { case Atom(str) => str }
-                val gt = if (args(2) != "nil") Some(args(2)) else None
-                val lt = if (args(3) != "nil") Some(args(3)) else None
-                ctx.env.opGroups += args(0) -> mkGroup(args(0), args(1), gt, lt)
-              case "operator" =>
-                val defn = Seq(Param("group"), Param("name", list = true))
-                val args = getArgs(defn, arguments)
-                val group = args(0).asInstanceOf[Atom].value
-                val names = args(1).asInstanceOf[Node].data.map(_.asInstanceOf[Atom].value)
-                for (name <- names) ctx.env.opNames :+= OpName(group, name)
-              case "operatorcompile" =>
-                ctx.env.opGroups = OpUtils.updateGroups(ctx.env.opGroups)
-                val ops = OpUtils.mkOps(ctx.env.opNames, ctx.env.opGroups)
-                ctx.parser = PrattTools.makeParser(ctx, ops)
-              case _ =>
-                println(s"unknown pragma $res")
-            }
-
-          case _ =>
-        }
-      }
-
-      res
-    }
+    program = parseExpressions(ctx, program)
 
     // 2. expand macros
     program = program.map {

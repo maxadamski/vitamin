@@ -52,70 +52,55 @@ sealed trait Syntax {
   }
 
   def map(f: Syntax => Syntax): Syntax = {
-    f(this)
+    this match {
+      case Node(tag, data) =>
+        f(Node(tag, data.map(f)))
+
+      case it@(_: Leaf | _: Atom) =>
+        f(it)
+    }
   }
 
   override def toString: String = repr(this)
 
 }
 
-
-case class Leaf(tag: Tag, data: Any) extends Syntax {
+trait ASTLeaf[T] extends Syntax {
 
 }
 
 case class Node(tag: Tag, data: List[Syntax]) extends Syntax {
-  override def child: List[Syntax] = data
+
+  // Arg : {value: Expr, name: Atom?}
+  def isArg = tag == Tag.Arg && data.length >= 1
+
+  // Par : {name: Atom, type: Type, value: Expr?}
+  def isPar = tag == Tag.Param && data.length >= 2
+
+  // Fun : {body: Expr, ret: Type, par: Type*}
+  def isFun = tag == Tag.Lambda && data.length >= 2
+
+  // Call : {callee: Expr, arg: Arg*}
+  def isCall = tag == Tag.Call && data.length >= 1
+
+  // Quote : {value: Expr}
+  def isQuote = tag == Tag.Quote && data.length == 1
+
 }
 
-case class ParNode(id: Atom, typ: TypNode) extends Syntax {
-  override def tag: Tag = Tag.Param
-  override def child: List[Syntax] = List(id, typ)
+object Node {
+  def apply(tag: Tag, data: Syntax*)(implicit d: DummyImplicit) =
+    new Node(tag, data.toList)
 }
 
-case class ArgNode(id: Atom, value: Syntax) extends Syntax {
-  override def tag: Tag = Tag.Arg
-  override def child: List[Syntax] = List(id, value)
+case class Leaf(tag: Tag, value: Any) extends ASTLeaf[Any]
+
+case class Atom(value: String) extends ASTLeaf[String] {
+  def tag: Tag = Tag.Atom
 }
 
-case class Block(expr: List[Syntax]) extends Syntax {
-  override def tag: Tag = Tag.Block
-  override def child: List[Syntax] = expr
-}
-
-case class Call(head: Syntax, args: List[Syntax] = List()) extends Syntax {
-  override def tag: Tag = Tag.Call
-  override def child: List[Syntax] = head +: args
-}
-
-case class FunNode(body: Block, ret: TypNode, par: List[ParNode]) extends Syntax {
-  override def tag: Tag = Tag.Lambda
-  override def child: List[Syntax] = body +: ret +: par
-}
-
-case class Quote(value: Syntax) extends Syntax {
-  override def tag: Tag = Tag.Quote
-  override def child: List[Syntax] = List(value)
-}
-
-case class TypNode(value: Types.Typ) extends Syntax {
-  override def tag: Tag = Tag.Type
-}
-
-case class Atom(value: String) extends Syntax {
-  override def tag: Tag = Tag.Atom
-}
-
-case class StrLit(value: String) extends Syntax {
-  override def tag: Tag = Tag.String
-}
-
-case class IntLit(value: Int) extends Syntax {
-  override def tag: Tag = Tag.Int
-}
-
-case class RealLit(value: Double) extends Syntax {
-  override def tag: Tag = Tag.Real
+object Null extends Syntax {
+  def tag: Tag = Tag.Null
 }
 
 object ASTUtils {

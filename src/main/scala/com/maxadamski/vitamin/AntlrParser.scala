@@ -61,8 +61,13 @@ class Listener extends VitaminCBaseListener {
     program = Some(getChunk(ctx.chunk))
   }
 
+<<<<<<< HEAD
   def getChunk(ctx: ChunkContext): Block = {
     Block(ctx.expr.map(getExpr))
+=======
+  def getChunk(ctx: ChunkContext): Node = {
+    Node(Tag.Block, ctx.expr.map(getExpr))
+>>>>>>> origin/new-ast
   }
 
   def getExpr(ctx: ExprContext): Node = {
