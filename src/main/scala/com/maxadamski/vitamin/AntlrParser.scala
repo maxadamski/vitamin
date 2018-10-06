@@ -14,8 +14,16 @@ import scala.reflect.ClassTag
 class ANTLRException(message: String) extends Exception
 
 object Parser {
+
+  def parseString(string: String): AST = {
+    parseInput(new ANTLRInputStream(string))
+  }
+
   def parseFile(path: String): AST = {
-    val input = new ANTLRFileStream(path)
+    parseInput(new ANTLRFileStream(path))
+  }
+
+  def parseInput(input: CharStream): AST = {
     val lexer = new VitaminCLexer(input)
     val tokens = new CommonTokenStream(lexer)
     val parser = new VitaminCParser(tokens)
@@ -27,6 +35,7 @@ object Parser {
       case None => throw new Exception("Failed to parse file")
     }
   }
+
 }
 
 class Listener extends VitaminCBaseListener {

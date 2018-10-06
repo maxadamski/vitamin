@@ -74,6 +74,7 @@ object Corelib {
     addFun("Real", mkFun(INT, REAL),   { case List(x: Int) => x.toDouble })
 
     addFun("Int",  mkFun(REAL, INT),   { case List(x: Double)  => x.toInt })
+    addFun("Int",  mkFun(I64,  INT),   { case List(x: Long)  => x.toInt })
     addFun("Int",  mkFun(BOOL, INT),   { case List(x: Boolean) => if (x) 1 else 0 })
 
     addFun("I64",  mkFun(INT, I64), { case List(x: Int) => x.toLong })

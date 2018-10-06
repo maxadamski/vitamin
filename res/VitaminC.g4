@@ -58,7 +58,7 @@ whexpr : 'while' '(' NL* expr NL* ')' NL* expr ;
 
 typ : atom ;
 par : atom COLON typ ;
-fun : '{' ('(' par (',' par)* ')' ('->' typ)? 'in')? chunk '}' ;
+fun : '{' ('(' par? (',' par)* ')' ('->' typ)? 'in')? chunk '}' ;
 
 call : (atom | fun) '(' (callArg (',' callArg)*)? ')' ;
 callArg : (atom COLON)? expr ;

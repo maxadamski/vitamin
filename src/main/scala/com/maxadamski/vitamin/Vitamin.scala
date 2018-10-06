@@ -1,5 +1,8 @@
 package com.maxadamski.vitamin
 
+import java.io.File
+import java.nio.file.{Files, Paths}
+
 import OpUtils.{getArgs, mkGroup}
 import ASTUtils._
 import Report._
@@ -283,7 +286,7 @@ object Vitamin {
         }
 
       case _ =>
-        print("this shouldn't happen")
+        println("this shouldn't happen")
     }
 
     ctx.nodeStack.pop()
@@ -291,8 +294,14 @@ object Vitamin {
   }
 
   def main(args: Array[String]): Unit = {
+    val libs = List("res/stdlib.vc")
     val mainFile = "res/main.vc"
     var program: AST = Parser.parseFile(mainFile)
+
+    libs.reverse foreach { path =>
+      val lib = Parser.parseFile(path).asInstanceOf[Term]
+      program.asInstanceOf[Term].data ++:= lib.data
+    }
 
     val ctx = new Ctx()
     ctx.parser = PrattTools.makeParser(ctx, List())
@@ -302,16 +311,16 @@ object Vitamin {
 
     // 1. parse expressions
     program = parseExpressions(ctx, program)
-    println("parse flat ------------------------------")
-    program.child.foreach(x => println(repr(x)))
+    //println("-- PARSE FLAT ------------------------------")
+    //program.child.foreach(x => println(repr(x)))
 
     // 2. expand macros
     program = expandMacros(ctx, program)
-    println("expand macro ----------------------------")
-    program.child.filterNot(_ == Zero).foreach(x => println(repr(x)))
+    //println("-- EXPAND MACRO ----------------------------")
+    //program.child.filterNot(_ == Zero).foreach(x => println(repr(x)))
 
     // 3. run interpreter
-    println("eval program ----------------------------")
+    println("-- EVAL PROGRAM ----------------------------")
     try {
       eval(ctx, program)
     } catch {

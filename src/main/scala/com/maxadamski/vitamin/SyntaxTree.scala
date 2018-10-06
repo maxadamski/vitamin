@@ -69,7 +69,7 @@ sealed trait AST {
 
 sealed trait ASTNode extends AST
 
-case class Term(tag: Tag, data: List[AST]) extends ASTNode {
+case class Term(tag: Tag, var data: List[AST]) extends ASTNode {
 
   // Arg : {value: Expr, name: Atom|Zero}
   def isArg = tag == Tag.Arg && data.length == 2

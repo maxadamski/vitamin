@@ -1,38 +1,4 @@
 
-#operatorgroup(Declaration, xfx)
-#operatorgroup(Assignment, xfy, gt: Declaration)
-#operatorgroup(Command, fy, gt: Assignment)
-#operatorgroup(Disjunction, yfx, gt: Command)
-#operatorgroup(Conjunction, yfx, gt: Disjunction)
-#operatorgroup(Negation, fy,  gt: Conjunction)
-#operatorgroup(Comparison, xfx, gt: Negation)
-#operatorgroup(Addition, yfx, gt: Comparison)
-#operatorgroup(Multiplication, yfx, gt: Addition)
-#operatorgroup(NumberSign, fx, gt: Multiplication)
-#operatorgroup(Quotation, fx, gt: NumberSign)
-
-#operator(Declaration, :=)
-#operator(Assignment, =, +=)
-#operator(Disjunction, or)
-#operator(Conjunction, and)
-#operator(Negation, not)
-#operator(Comparison, ==, !=, <, <=, >, >=)
-#operator(Addition, +, -)
-#operator(Multiplication, *, /, div, mod)
-#operator(NumberSign, -)
-#operator(Quotation, ')
-
-#operatorcompile
-
-print := { (obj: Any) in
-    Core_print(Str(obj))
-}
-
-println := { (obj: Any) in
-    print(obj)
-    print(NL)
-}
-
 countdown_i := { (n: Int) in
     sum := 0
     while (n > 0) {
@@ -53,23 +19,11 @@ countdown_r := { (n: Int) -> Int in
     if (n > 0) n + countdown_r(n - 1) else 0
 }
 
-benchmark := { (passes: Int, lambda: Any) in
-    sum := I64(0)
-    i := 0
-    while (i < passes) {
-        t0 := Core_time()
-        lambda()
-        t1 := Core_time()
-        sum = sum + t1 - t0
-        i = i + 1
-    }
-    sum div I64(passes)
-}
-
 report := { (t: I64) in
     print("took: "); print(t); println("ms")
 }
 
-N := 1000000
+N := 1000
 print("N = "); println(N)
-report(benchmark(5, { countdown_i(N) }))
+report(bench(5, { countdown_i(N) }))
+

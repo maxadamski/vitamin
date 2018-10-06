@@ -1,0 +1,51 @@
+
+#operatorgroup(Declaration, xfx)
+#operatorgroup(Assignment, xfy, gt: Declaration)
+#operatorgroup(Command, fy, gt: Assignment)
+#operatorgroup(Disjunction, yfx, gt: Command)
+#operatorgroup(Conjunction, yfx, gt: Disjunction)
+#operatorgroup(Negation, fy,  gt: Conjunction)
+#operatorgroup(Comparison, xfx, gt: Negation)
+#operatorgroup(Addition, yfx, gt: Comparison)
+#operatorgroup(Multiplication, yfx, gt: Addition)
+#operatorgroup(NumberSign, fx, gt: Multiplication)
+#operatorgroup(Quotation, fx, gt: NumberSign)
+
+#operator(Declaration, :=)
+#operator(Assignment, =, +=)
+#operator(Disjunction, or)
+#operator(Conjunction, and)
+#operator(Negation, not)
+#operator(Comparison, ==, !=, <, <=, >, >=)
+#operator(Addition, +, -)
+#operator(Multiplication, *, /, div, mod)
+#operator(NumberSign, -)
+#operator(Quotation, ')
+
+#operatorcompile
+
+print := { (obj: Any) in
+    Core_print(Str(obj))
+}
+
+println := { (obj: Any) in
+    print(obj)
+    print(NL)
+}
+
+time := { () -> I64 in
+    Core_time()
+}
+
+bench := { (passes: Int, lambda: Any) -> Int in
+    sum := I64(0)
+    i := 0
+    while (i < passes) {
+        t0 := time()
+        lambda()
+        t1 := time()
+        sum = sum + t1 - t0
+        i = i + 1
+    }
+    Int(sum div I64(passes))
+}
