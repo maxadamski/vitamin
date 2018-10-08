@@ -1,7 +1,7 @@
 package com.maxadamski.vitamin
 
 import java.io.RandomAccessFile
-
+import AST.Tree
 
 class RuntimeException(val message: String) extends Exception
 
@@ -157,7 +157,7 @@ object Report {
   def compileError(
     c: Ctx, name: String, comment: String,
     hints: Array[String] = Array(),
-    node: AST = null, high: AST = null,
+    node: Tree = null, high: Tree = null,
   ): String = {
     val node2 = if (node != null) node else c.node
     val high2 = if (high != null) high else node2

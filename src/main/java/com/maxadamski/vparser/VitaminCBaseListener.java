@@ -52,157 +52,253 @@ public class VitaminCBaseListener implements VitaminCListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterPrimary(VitaminCParser.PrimaryContext ctx) { }
+	@Override public void enterPrim(VitaminCParser.PrimContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitPrimary(VitaminCParser.PrimaryContext ctx) { }
+	@Override public void exitPrim(VitaminCParser.PrimContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterIfexpr(VitaminCParser.IfexprContext ctx) { }
+	@Override public void enterType(VitaminCParser.TypeContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitIfexpr(VitaminCParser.IfexprContext ctx) { }
+	@Override public void exitType(VitaminCParser.TypeContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterWhexpr(VitaminCParser.WhexprContext ctx) { }
+	@Override public void enterPatt(VitaminCParser.PattContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitWhexpr(VitaminCParser.WhexprContext ctx) { }
+	@Override public void exitPatt(VitaminCParser.PattContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterTyp(VitaminCParser.TypContext ctx) { }
+	@Override public void enterPattPrim(VitaminCParser.PattPrimContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitTyp(VitaminCParser.TypContext ctx) { }
+	@Override public void exitPattPrim(VitaminCParser.PattPrimContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterPar(VitaminCParser.ParContext ctx) { }
+	@Override public void enterLetExpr(VitaminCParser.LetExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitPar(VitaminCParser.ParContext ctx) { }
+	@Override public void exitLetExpr(VitaminCParser.LetExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterFun(VitaminCParser.FunContext ctx) { }
+	@Override public void enterIfExpr(VitaminCParser.IfExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitFun(VitaminCParser.FunContext ctx) { }
+	@Override public void exitIfExpr(VitaminCParser.IfExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterCall(VitaminCParser.CallContext ctx) { }
+	@Override public void enterWhileExpr(VitaminCParser.WhileExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitCall(VitaminCParser.CallContext ctx) { }
+	@Override public void exitWhileExpr(VitaminCParser.WhileExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterCallArg(VitaminCParser.CallArgContext ctx) { }
+	@Override public void enterGenItem(VitaminCParser.GenItemContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitCallArg(VitaminCParser.CallArgContext ctx) { }
+	@Override public void exitGenItem(VitaminCParser.GenItemContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterPragma(VitaminCParser.PragmaContext ctx) { }
+	@Override public void enterGenList(VitaminCParser.GenListContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitPragma(VitaminCParser.PragmaContext ctx) { }
+	@Override public void exitGenList(VitaminCParser.GenListContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterConstant(VitaminCParser.ConstantContext ctx) { }
+	@Override public void enterParType(VitaminCParser.ParTypeContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitConstant(VitaminCParser.ConstantContext ctx) { }
+	@Override public void exitParType(VitaminCParser.ParTypeContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterIntn(VitaminCParser.IntnContext ctx) { }
+	@Override public void enterParItem(VitaminCParser.ParItemContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitIntn(VitaminCParser.IntnContext ctx) { }
+	@Override public void exitParItem(VitaminCParser.ParItemContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterReal(VitaminCParser.RealContext ctx) { }
+	@Override public void enterParList(VitaminCParser.ParListContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitReal(VitaminCParser.RealContext ctx) { }
+	@Override public void exitParList(VitaminCParser.ParListContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void enterString(VitaminCParser.StringContext ctx) { }
+	@Override public void enterFunExpr(VitaminCParser.FunExprContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
-	@Override public void exitString(VitaminCParser.StringContext ctx) { }
+	@Override public void exitFunExpr(VitaminCParser.FunExprContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterArgItem(VitaminCParser.ArgItemContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitArgItem(VitaminCParser.ArgItemContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterArgList(VitaminCParser.ArgListContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitArgList(VitaminCParser.ArgListContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterLambda(VitaminCParser.LambdaContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitLambda(VitaminCParser.LambdaContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterArray(VitaminCParser.ArrayContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitArray(VitaminCParser.ArrayContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterLiteral(VitaminCParser.LiteralContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitLiteral(VitaminCParser.LiteralContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterVInt(VitaminCParser.VIntContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitVInt(VitaminCParser.VIntContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterVStr(VitaminCParser.VStrContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitVStr(VitaminCParser.VStrContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterVFlt(VitaminCParser.VFltContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitVFlt(VitaminCParser.VFltContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *

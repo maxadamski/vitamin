@@ -1,6 +1,5 @@
 
-#operatorgroup(Declaration, xfx)
-#operatorgroup(Assignment, xfy, gt: Declaration)
+#operatorgroup(Assignment, xfy)
 #operatorgroup(Command, fy, gt: Assignment)
 #operatorgroup(Disjunction, yfx, gt: Command)
 #operatorgroup(Conjunction, yfx, gt: Disjunction)
@@ -11,8 +10,7 @@
 #operatorgroup(NumberSign, fx, gt: Multiplication)
 #operatorgroup(Quotation, fx, gt: NumberSign)
 
-#operator(Declaration, :=)
-#operator(Assignment, =, +=)
+#operator(Assignment, =, +=, -=, *=)
 #operator(Disjunction, or)
 #operator(Conjunction, and)
 #operator(Negation, not)
@@ -22,30 +20,37 @@
 #operator(NumberSign, -)
 #operator(Quotation, ')
 
-#operatorcompile
+#operatorcompile()
 
-print := { (obj: Any) in
-    Core_print(Str(obj))
+let print: Any -> () = { it in
+    Core_print(Str(it))
 }
 
-println := { (obj: Any) in
-    print(obj)
+let println: Any -> () = { it in
+    print(it)
     print(NL)
 }
 
-time := { () -> I64 in
+let time: () -> I64 = {
     Core_time()
 }
 
-bench := { (passes: Int, lambda: Any) -> Int in
-    sum := I64(0)
-    i := 0
+let bench: Int -> Any -> Int = { passes, lambda in
+    let sum = I64(0)
+    let i = 0
     while (i < passes) {
-        t0 := time()
+        let t0 = time()
         lambda()
-        t1 := time()
-        sum = sum + t1 - t0
-        i = i + 1
+        let t1 = time()
+        sum += t1 - t0
+        i += 1
     }
     Int(sum div I64(passes))
 }
+
+
+let ptime: Any -> () = { lambda in
+    let dt = bench(1, lambda)
+    print("took: "); print(dt); println("ms")
+}
+

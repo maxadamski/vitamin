@@ -38,135 +38,215 @@ public interface VitaminCListener extends ParseTreeListener {
 	 */
 	void exitExpr(VitaminCParser.ExprContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#primary}.
+	 * Enter a parse tree produced by {@link VitaminCParser#prim}.
 	 * @param ctx the parse tree
 	 */
-	void enterPrimary(VitaminCParser.PrimaryContext ctx);
+	void enterPrim(VitaminCParser.PrimContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#primary}.
+	 * Exit a parse tree produced by {@link VitaminCParser#prim}.
 	 * @param ctx the parse tree
 	 */
-	void exitPrimary(VitaminCParser.PrimaryContext ctx);
+	void exitPrim(VitaminCParser.PrimContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#ifexpr}.
+	 * Enter a parse tree produced by {@link VitaminCParser#type}.
 	 * @param ctx the parse tree
 	 */
-	void enterIfexpr(VitaminCParser.IfexprContext ctx);
+	void enterType(VitaminCParser.TypeContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#ifexpr}.
+	 * Exit a parse tree produced by {@link VitaminCParser#type}.
 	 * @param ctx the parse tree
 	 */
-	void exitIfexpr(VitaminCParser.IfexprContext ctx);
+	void exitType(VitaminCParser.TypeContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#whexpr}.
+	 * Enter a parse tree produced by {@link VitaminCParser#patt}.
 	 * @param ctx the parse tree
 	 */
-	void enterWhexpr(VitaminCParser.WhexprContext ctx);
+	void enterPatt(VitaminCParser.PattContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#whexpr}.
+	 * Exit a parse tree produced by {@link VitaminCParser#patt}.
 	 * @param ctx the parse tree
 	 */
-	void exitWhexpr(VitaminCParser.WhexprContext ctx);
+	void exitPatt(VitaminCParser.PattContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#typ}.
+	 * Enter a parse tree produced by {@link VitaminCParser#pattPrim}.
 	 * @param ctx the parse tree
 	 */
-	void enterTyp(VitaminCParser.TypContext ctx);
+	void enterPattPrim(VitaminCParser.PattPrimContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#typ}.
+	 * Exit a parse tree produced by {@link VitaminCParser#pattPrim}.
 	 * @param ctx the parse tree
 	 */
-	void exitTyp(VitaminCParser.TypContext ctx);
+	void exitPattPrim(VitaminCParser.PattPrimContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#par}.
+	 * Enter a parse tree produced by {@link VitaminCParser#letExpr}.
 	 * @param ctx the parse tree
 	 */
-	void enterPar(VitaminCParser.ParContext ctx);
+	void enterLetExpr(VitaminCParser.LetExprContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#par}.
+	 * Exit a parse tree produced by {@link VitaminCParser#letExpr}.
 	 * @param ctx the parse tree
 	 */
-	void exitPar(VitaminCParser.ParContext ctx);
+	void exitLetExpr(VitaminCParser.LetExprContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#fun}.
+	 * Enter a parse tree produced by {@link VitaminCParser#ifExpr}.
 	 * @param ctx the parse tree
 	 */
-	void enterFun(VitaminCParser.FunContext ctx);
+	void enterIfExpr(VitaminCParser.IfExprContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#fun}.
+	 * Exit a parse tree produced by {@link VitaminCParser#ifExpr}.
 	 * @param ctx the parse tree
 	 */
-	void exitFun(VitaminCParser.FunContext ctx);
+	void exitIfExpr(VitaminCParser.IfExprContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#call}.
+	 * Enter a parse tree produced by {@link VitaminCParser#whileExpr}.
 	 * @param ctx the parse tree
 	 */
-	void enterCall(VitaminCParser.CallContext ctx);
+	void enterWhileExpr(VitaminCParser.WhileExprContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#call}.
+	 * Exit a parse tree produced by {@link VitaminCParser#whileExpr}.
 	 * @param ctx the parse tree
 	 */
-	void exitCall(VitaminCParser.CallContext ctx);
+	void exitWhileExpr(VitaminCParser.WhileExprContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#callArg}.
+	 * Enter a parse tree produced by {@link VitaminCParser#genItem}.
 	 * @param ctx the parse tree
 	 */
-	void enterCallArg(VitaminCParser.CallArgContext ctx);
+	void enterGenItem(VitaminCParser.GenItemContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#callArg}.
+	 * Exit a parse tree produced by {@link VitaminCParser#genItem}.
 	 * @param ctx the parse tree
 	 */
-	void exitCallArg(VitaminCParser.CallArgContext ctx);
+	void exitGenItem(VitaminCParser.GenItemContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#pragma}.
+	 * Enter a parse tree produced by {@link VitaminCParser#genList}.
 	 * @param ctx the parse tree
 	 */
-	void enterPragma(VitaminCParser.PragmaContext ctx);
+	void enterGenList(VitaminCParser.GenListContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#pragma}.
+	 * Exit a parse tree produced by {@link VitaminCParser#genList}.
 	 * @param ctx the parse tree
 	 */
-	void exitPragma(VitaminCParser.PragmaContext ctx);
+	void exitGenList(VitaminCParser.GenListContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#constant}.
+	 * Enter a parse tree produced by {@link VitaminCParser#parType}.
 	 * @param ctx the parse tree
 	 */
-	void enterConstant(VitaminCParser.ConstantContext ctx);
+	void enterParType(VitaminCParser.ParTypeContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#constant}.
+	 * Exit a parse tree produced by {@link VitaminCParser#parType}.
 	 * @param ctx the parse tree
 	 */
-	void exitConstant(VitaminCParser.ConstantContext ctx);
+	void exitParType(VitaminCParser.ParTypeContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#intn}.
+	 * Enter a parse tree produced by {@link VitaminCParser#parItem}.
 	 * @param ctx the parse tree
 	 */
-	void enterIntn(VitaminCParser.IntnContext ctx);
+	void enterParItem(VitaminCParser.ParItemContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#intn}.
+	 * Exit a parse tree produced by {@link VitaminCParser#parItem}.
 	 * @param ctx the parse tree
 	 */
-	void exitIntn(VitaminCParser.IntnContext ctx);
+	void exitParItem(VitaminCParser.ParItemContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#real}.
+	 * Enter a parse tree produced by {@link VitaminCParser#parList}.
 	 * @param ctx the parse tree
 	 */
-	void enterReal(VitaminCParser.RealContext ctx);
+	void enterParList(VitaminCParser.ParListContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#real}.
+	 * Exit a parse tree produced by {@link VitaminCParser#parList}.
 	 * @param ctx the parse tree
 	 */
-	void exitReal(VitaminCParser.RealContext ctx);
+	void exitParList(VitaminCParser.ParListContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#string}.
+	 * Enter a parse tree produced by {@link VitaminCParser#funExpr}.
 	 * @param ctx the parse tree
 	 */
-	void enterString(VitaminCParser.StringContext ctx);
+	void enterFunExpr(VitaminCParser.FunExprContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#string}.
+	 * Exit a parse tree produced by {@link VitaminCParser#funExpr}.
 	 * @param ctx the parse tree
 	 */
-	void exitString(VitaminCParser.StringContext ctx);
+	void exitFunExpr(VitaminCParser.FunExprContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#argItem}.
+	 * @param ctx the parse tree
+	 */
+	void enterArgItem(VitaminCParser.ArgItemContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#argItem}.
+	 * @param ctx the parse tree
+	 */
+	void exitArgItem(VitaminCParser.ArgItemContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#argList}.
+	 * @param ctx the parse tree
+	 */
+	void enterArgList(VitaminCParser.ArgListContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#argList}.
+	 * @param ctx the parse tree
+	 */
+	void exitArgList(VitaminCParser.ArgListContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#lambda}.
+	 * @param ctx the parse tree
+	 */
+	void enterLambda(VitaminCParser.LambdaContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#lambda}.
+	 * @param ctx the parse tree
+	 */
+	void exitLambda(VitaminCParser.LambdaContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#array}.
+	 * @param ctx the parse tree
+	 */
+	void enterArray(VitaminCParser.ArrayContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#array}.
+	 * @param ctx the parse tree
+	 */
+	void exitArray(VitaminCParser.ArrayContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#literal}.
+	 * @param ctx the parse tree
+	 */
+	void enterLiteral(VitaminCParser.LiteralContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#literal}.
+	 * @param ctx the parse tree
+	 */
+	void exitLiteral(VitaminCParser.LiteralContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#vInt}.
+	 * @param ctx the parse tree
+	 */
+	void enterVInt(VitaminCParser.VIntContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#vInt}.
+	 * @param ctx the parse tree
+	 */
+	void exitVInt(VitaminCParser.VIntContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#vStr}.
+	 * @param ctx the parse tree
+	 */
+	void enterVStr(VitaminCParser.VStrContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#vStr}.
+	 * @param ctx the parse tree
+	 */
+	void exitVStr(VitaminCParser.VStrContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link VitaminCParser#vFlt}.
+	 * @param ctx the parse tree
+	 */
+	void enterVFlt(VitaminCParser.VFltContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link VitaminCParser#vFlt}.
+	 * @param ctx the parse tree
+	 */
+	void exitVFlt(VitaminCParser.VFltContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link VitaminCParser#atom}.
 	 * @param ctx the parse tree

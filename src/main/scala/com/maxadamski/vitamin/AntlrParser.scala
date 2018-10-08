@@ -1,6 +1,6 @@
 package com.maxadamski.vitamin
 
-import com.maxadamski.vitamin.Tag.Tag
+import com.maxadamski.vitamin.AST.{Meta, Tag, Node, Leaf, Tree, Zero}
 import com.maxadamski.vitamin.Types.{AType, Typ}
 import com.maxadamski.vparser._
 import com.maxadamski.vparser.VitaminCParser._
@@ -15,15 +15,15 @@ class ANTLRException(message: String) extends Exception
 
 object Parser {
 
-  def parseString(string: String): AST = {
+  def parseString(string: String): Tree = {
     parseInput(new ANTLRInputStream(string))
   }
 
-  def parseFile(path: String): AST = {
+  def parseFile(path: String): Tree = {
     parseInput(new ANTLRFileStream(path))
   }
 
-  def parseInput(input: CharStream): AST = {
+  def parseInput(input: CharStream): Tree = {
     val lexer = new VitaminCLexer(input)
     val tokens = new CommonTokenStream(lexer)
     val parser = new VitaminCParser(tokens)
@@ -65,136 +65,150 @@ class Listener extends VitaminCBaseListener {
     }
   }
 
-  def withMeta[T <: AST](ctx: ParserRuleContext, ast: T): T = {
-    ast.meta = ctx.meta
-    ast
-  }
+  private def mkNode(ctx: ParserRuleContext, tag: Tag.Tag, data: List[Tree]) = Node(tag, data, ctx.meta)
 
-  def mkTerm(ctx: ParserRuleContext, tag: Tag, data: List[AST]): Term = withMeta(ctx, Term(tag, data))
-  def mkLeaf(ctx: ParserRuleContext, tag: Tag, data: Any): Leaf = withMeta(ctx, Leaf(tag, data))
-  def mkAtom(ctx: ParserRuleContext, text: String): Atom = withMeta(ctx, Atom(text))
+  private def mkLeaf(ctx: ParserRuleContext, tag: Tag.Tag, data: Any) = Leaf(tag, data, ctx.meta)
 
-
-  val impossible = new ANTLRException("ANTLRListener is outdated")
-  var program: Option[AST] = None
+  val impossible = new ANTLRException("ANTLRListener might be outdated")
+  var program: Option[Tree] = None
 
   override def enterProgram(ctx: ProgramContext): Unit = {
     program = Some(getChunk(ctx.chunk))
   }
 
-  def getChunk(ctx: ChunkContext): Term = {
-    mkTerm(ctx, Tag.Block, ctx.expr.map(getExpr))
+  def getChunk(ctx: ChunkContext): Tree = {
+    mkNode(ctx, Tag.Block, ctx.expr.map(getExpr))
   }
 
-  def getExpr(ctx: ExprContext): Term = {
-    if (!ctx.primary.isEmpty)
-      mkTerm(ctx, Tag.Flat, ctx.primary.map(getPrimary))
-    else
-      throw impossible
-  }
-
-  def getPrimary(ctx: PrimaryContext) = {
-    if (ctx.call != null)
-      getCall(ctx.call)
-    else if (ctx.constant != null)
-      getConstant(ctx.constant)
-    else if (ctx.fun != null)
-      getFun(ctx.fun)
-    else if (ctx.pragma != null)
-      getPragma(ctx.pragma)
-    else if (ctx.ifexpr != null)
-      getIf(ctx.ifexpr)
-    else if (ctx.whexpr != null)
-      getWh(ctx.whexpr)
-    else if (ctx.expr != null)
-      getExpr(ctx.expr)
-    else
-      throw impossible
-  }
-
-  def getIf(ctx: IfexprContext) = {
-    var args: List[AST] = ctx.expr.map(getExpr)
-    if (args.length == 2) args :+= Atom("()")
-    mkTerm(ctx, Tag.Call, Atom("if") :: args)
-  }
-
-  def getWh(ctx: WhexprContext) = {
-    mkTerm(ctx, Tag.Call, Atom("while") :: ctx.expr.map(getExpr))
-  }
-
-  def getFun(ctx: FunContext) = {
-    val ret = if (ctx.typ != null) getTyp(ctx.typ) else Leaf(Tag.Type, Types.VOID)
-    val body = getChunk(ctx.chunk)
-    mkTerm(ctx, Tag.Lambda, body :: ret :: ctx.par.map(getPar))
-  }
-
-  def getTyp(ctx: TypContext) = {
-    Leaf(Tag.Type, Typ(ctx.atom().getText))
-  }
-
-  def getPar(ctx: ParContext) = {
-    var data = getAtom(ctx.atom) :: getTyp(ctx.typ) :: Nil
-    mkTerm(ctx, Tag.Param, data)
-  }
-
-  def getCall(ctx: CallContext) = {
-    // TODO: support any Expr on the left-hand side
-    val head: AST = if (ctx.atom != null) getAtom(ctx.atom) else getFun(ctx.fun)
-    mkTerm(ctx, Tag.Call, head :: ctx.callArg.map(getCallArg))
-  }
-
-  def getCallArg(ctx: CallArgContext) = {
-    val name = if (ctx.atom != null)  getAtom(ctx.atom) else Zero
-    val value = getExpr(ctx.expr)
-    mkTerm(ctx, Tag.Arg, value :: name :: Nil)
-  }
-
-  def getPragma(ctx: PragmaContext) = {
-    if (ctx.call != null) {
-      getCall(ctx.call).copy(tag = Tag.Pragma)
-    } else if (ctx.atom != null) {
-      mkTerm(ctx, Tag.Pragma, getAtom(ctx.atom) :: Nil)
+  def getExpr(ctx: ExprContext): Tree = {
+    if (ctx.funExpr != null) {
+      getFun(ctx.funExpr)
+    } else if (ctx.letExpr != null) {
+      val typ = if (ctx.letExpr.`type` != null) getType(ctx.letExpr.`type`) else Zero
+      mkNode(ctx, Tag.Let, getAtom(ctx.letExpr.atom) :: typ :: getExpr(ctx.letExpr.expr) :: Nil)
+    } else if (ctx.ifExpr != null) {
+      val args = ctx.ifExpr.expr.map(getExpr)
+      mkNode(ctx, Tag.Call, Leaf(Tag.Atom, "if") :: args)
+    } else if (ctx.whileExpr != null) {
+      mkNode(ctx, Tag.Call, Leaf(Tag.Atom, "while") :: ctx.whileExpr.expr.map(getExpr))
+    } else if (ctx.prim != null) {
+        mkNode(ctx, Tag.Flat, ctx.prim.map(getPrim))
     } else {
       throw impossible
     }
   }
 
-  def getConstant(ctx: ConstantContext) = {
-    if (ctx.atom != null)
-      getAtom(ctx.atom)
-    else if (ctx.intn != null)
-      getInt(ctx.intn)
-    else if (ctx.real != null)
-      getReal(ctx.real)
-    else if (ctx.string != null)
-      getStr(ctx.string)
+  def getPrim(ctx: PrimContext): Tree = {
+    if (ctx.argList != null) {
+      val args = ctx.argList.argItem.map(getArg)
+      mkNode(ctx, Tag.Call, getPrim(ctx.prim) :: args)
+    } else if (ctx.atom != null) {
+      val node = getAtom(ctx.atom)
+      if (ctx.text.startsWith("#")) node.meta += Meta.Directive -> true
+      if (ctx.text.startsWith("@")) node.meta += Meta.Annotation -> true
+      node
+    } else if (ctx.lambda != null) {
+      getLambda(ctx.lambda)
+    } else if (ctx.literal != null) {
+      getLiteral(ctx.literal)
+    } else if (ctx.expr != null) {
+      getExpr(ctx.expr)
+    } else {
+      throw impossible
+    }
+  }
+
+  def getLiteral(ctx: LiteralContext): Tree = {
+    if (ctx.vInt != null)
+      getInt(ctx.vInt)
+    else if (ctx.vFlt != null)
+      getFlt(ctx.vFlt)
+    else if (ctx.vStr != null)
+      getStr(ctx.vStr)
+    else if (ctx.array != null)
+      getArray(ctx.array)
     else
       throw impossible
   }
 
-  def getAtom(ctx: AtomContext) = {
+  def getPatt(ctx: PattContext): Tree = {
+    mkNode(ctx, Tag.TupMatch, ctx.pattPrim.map(getPattPrim))
+  }
+
+  def getPattPrim(ctx: PattPrimContext): Tree = {
+    if (ctx.text == "_") {
+      mkNode(ctx.atom, Tag.AnyMatch, Leaf(Tag.Atom, "_") :: Nil)
+    } else if (ctx.atom != null) {
+      mkNode(ctx, Tag.VarMatch, getAtom(ctx.atom) :: Nil)
+    } else if (ctx.patt != null) {
+      getPatt (ctx.patt)
+    } else {
+      throw impossible
+    }
+  }
+
+  def getFun(ctx: FunExprContext): Tree = {
+    val name = getAtom(ctx.atom)
+    val typ = if(ctx.`type` != null) getType(ctx.`type`) else mkNode(ctx, Tag.ConType, Leaf(Tag.Atom, "Void") :: Nil)
+    val body = getChunk(ctx.chunk)
+    val par = ctx.parList.parItem.map(getParItem)
+    val gen = ctx.genList.genItem.map(getGenItem)
+    mkNode(ctx, Tag.Fun, name :: body :: typ :: par ++ gen)
+  }
+
+  def getGenItem(ctx: GenItemContext): Tree = {
+    if (ctx.atom != null) {
+      getAtom(ctx.atom)
+    } else {
+      throw impossible
+    }
+  }
+
+  def getParItem(ctx: ParItemContext): Tree = {
+    val name = getAtom(ctx.atom)
+    val expr = if(ctx.expr != null) getExpr(ctx.expr) else Zero
+    val typ = getType(ctx.parType.`type`)
+    if (ctx.parType.text.endsWith("...")) typ.meta += Meta.Rest -> true
+    mkNode(ctx, Tag.Param, name :: typ :: expr :: Nil)
+  }
+
+  def getType(ctx: TypeContext): Tree = {
+    val args = ctx.`type`.map(getType)
+    if (ctx.atom != null) {
+      val name = getAtom(ctx.atom)
+      mkNode(ctx, Tag.ConType, name :: args)
+    } else {
+      mkNode(ctx, Tag.FunType, args)
+    }
+  }
+
+  def getArg(ctx: ArgItemContext): Tree = {
+    val name = if (ctx.atom != null) getAtom(ctx.atom) else Zero
+    val value = getExpr(ctx.expr)
+    mkNode(ctx, Tag.Arg, value :: name :: Nil)
+  }
+
+  def getLambda(ctx: LambdaContext): Tree = {
+    val patt = if (ctx.patt != null) getPatt(ctx.patt) else Zero
+    mkNode(ctx, Tag.Lambda, patt :: getChunk(ctx.chunk) :: Nil)
+  }
+
+  def getAtom(ctx: AtomContext): Leaf = {
     var (meta, text) = (ctx.meta, ctx.text)
     if (text.startsWith("`") && text.endsWith("`")) {
       text = text.stripPrefix("`").stripSuffix("`")
-      meta += Meta.QuotedAtom -> true
+      meta += Meta.Escaped -> true
     }
-    val atom = Atom(text)
-    atom.meta = meta
-    atom
+    Leaf(Tag.Atom, text, meta)
   }
 
-  def getStr(ctx: StringContext) = {
-    val text = ctx.text.stripPrefix("\"").stripSuffix("\"")
-    mkLeaf(ctx, Tag.String, text)
-  }
+  def getArray(ctx: ArrayContext): Node = mkNode(ctx, Tag.Array, ctx.expr.map(getExpr))
 
-  def getInt(ctx: IntnContext) = {
-    mkLeaf(ctx, Tag.Int, ctx.text.toInt)
-  }
+  def getStr(ctx: VStrContext): Leaf = mkLeaf(ctx, Tag.String, ctx.text.stripPrefix("\"").stripSuffix("\""))
 
-  def getReal(ctx: RealContext) = {
-    mkLeaf(ctx, Tag.Real, ctx.text.toDouble)
-  }
+  def getInt(ctx: VIntContext): Leaf = mkLeaf(ctx, Tag.Int, ctx.text.toInt)
+
+  def getFlt(ctx: VFltContext): Leaf = mkLeaf(ctx, Tag.Real, ctx.text.toDouble)
 
 }
 

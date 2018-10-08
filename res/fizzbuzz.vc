@@ -1,0 +1,14 @@
+
+let fizzbuzz = { n in
+    let i = 1
+    while (i < n) {
+        print(i); print(": ")
+        if (i mod 3 == 0) print("fizz")
+        if (i mod 5 == 0) print("buzz")
+        println("")
+        i += 1
+    }
+}
+
+println("- fizzbuzz")
+fizzbuzz(25)

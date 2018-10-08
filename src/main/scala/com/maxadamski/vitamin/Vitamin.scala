@@ -1,20 +1,18 @@
 package com.maxadamski.vitamin
 
-import java.io.File
-import java.nio.file.{Files, Paths}
-
 import OpUtils.{getArgs, mkGroup}
+import AST.Tag.Tag
 import ASTUtils._
 import Report._
 import Functions._
 import Types._
+import AST._
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
 
 class Env(
   var opGroups: Map[String, OpGroup] = Map(),
-  var opNames: List[OpName] = List(),
+  var opNames: Set[OpName] = Set(),
   var parent: Option[Env] = None,
   var vars: mutable.Map[String, Any] = mutable.Map(),
   var name: String = "main"
@@ -23,11 +21,11 @@ class Env(
 class Ctx(
   var env: Env = new Env(),
   var fileStack: mutable.Stack[String] = mutable.Stack(),
-  var nodeStack: mutable.Stack[AST] = mutable.Stack(),
+  var nodeStack: mutable.Stack[Tree] = mutable.Stack(),
   var parser: PrattParser = null,
 ) {
 
-  def node: AST = nodeStack.top
+  def node: Tree = nodeStack.top
 
   def file: String = fileStack.top
 
@@ -102,39 +100,44 @@ object Vitamin {
     case _: Float => REAL
     case _: Double => REAL
     case _: String => STR
-    case Lambda(typ, _, _) => typ
+    case AST.Lambda(_, _) => ANY
     case Builtin(typ, _) => typ
     case _ => ANY
   }
 
-  def parseExpressions(ctx: Ctx, ast: AST): AST = ast.map() { it =>
+  def parseExpressions(ctx: Ctx, ast: Tree): Tree = ast.map() { it =>
     val res = it match {
-      case Term(Tag.Flat, _) => parsedAST(ctx, it)
+      case Node(Tag.Flat, _, _) => parsedAST(ctx, it)
       case _ => it
     }
-
     res match {
-      case Term(Tag.Pragma, Atom(name) :: arg) => runPragma(ctx, name, pragmaArg(arg))
+      case Call(callee@Atom(name), arg) =>
+        if (callee.isDirective)
+          runPragma(ctx, name, pragmaArg(arg))
       case _ =>
     }
-
     res
   }
 
-  def expandMacros(ctx: Ctx, ast: AST): AST = ast.map() {
-    case Term(Tag.Call, Atom(":=") :: arg) =>
-      Term(Tag.Let, arg)
-    case Term(Tag.Call, Atom("=") :: Atom(name) :: tail) =>
-      Term(Tag.Set, Atom(name) :: tail)
-    case Term(Tag.Call, Atom("'") :: arg) =>
-      Term(Tag.Quote, arg)
-    case Term(Tag.Pragma, _) =>
+  def expandMacros(ctx: Ctx, ast: Tree): Tree = ast.map() {
+    case Call(Atom(":="), arg) =>
+      Node(Tag.Let, arg)
+    case Call(Atom("="), Atom(name) :: tail) =>
+      Node(Tag.Set, Atom(name) :: tail)
+    case Call(Atom(op @ ("+=" | "-=" | "*=")), lhs :: rhs :: Nil) =>
+      val do2bin = Map("+=" -> "+", "-=" -> "-", "*=" -> "*")
+      Node(Tag.Set, lhs :: Node(Tag.Call, Atom(do2bin(op)) :: lhs :: rhs :: Nil) :: Nil)
+    case Call(Atom("if"), pred :: onT :: Nil) =>
+      Node(Tag.Call, Atom("if") :: pred :: onT :: Atom("()") :: Nil )
+    case Call(Atom("'"), arg) =>
+      Node(Tag.Quote, arg)
+    case it@Call(_, _) if it.isDirective =>
       Zero
     case it =>
       it
   }
 
-  def parsedAST(ctx: Ctx, ast: AST): AST = {
+  def parsedAST(ctx: Ctx, ast: Tree): Tree = {
     try {
       ctx.parser.parse(ast)
     } catch {
@@ -144,9 +147,9 @@ object Vitamin {
     }
   }
 
-  def pragmaArg(arg: List[AST]): List[Arg] = arg.map {
-    case Term(Tag.Arg, value :: Atom(key) :: Nil) => Arg(Some(key), value)
-    case Term(Tag.Arg, value :: Zero :: Nil) => Arg(None, value)
+  def pragmaArg(arg: List[Tree]): List[Arg] = arg.map {
+    case Node(Tag.Arg, value :: Atom(key) :: Nil, _) => Arg(Some(key), value)
+    case Node(Tag.Arg, value :: Zero :: Nil, _) => Arg(None, value)
     case it => throw new Exception(s"Pragma argument must have tag Tag.Arg, but was $it")
   }
 
@@ -164,9 +167,9 @@ object Vitamin {
     case "operator" =>
       val defn = Seq(Param("group"), Param("name", list = true))
       val args = getArgs(defn, arg)
-      val group = args(0).asInstanceOf[Atom].value
-      val names = args(1).asInstanceOf[Term].data.map(_.asInstanceOf[Atom].value)
-      for (name <- names) ctx.env.opNames :+= OpName(group, name)
+      val group = args(0).asInstanceOf[Leaf].value.asInstanceOf[String]
+      val names = args(1).asInstanceOf[Node].data.map(_.asInstanceOf[Leaf].value.asInstanceOf[String])
+      for (name <- names) ctx.env.opNames += OpName(group, name)
     case "operatorcompile" =>
       ctx.env.opGroups = OpUtils.updateGroups(ctx.env.opGroups)
       val ops = OpUtils.mkOps(ctx.env.opNames, ctx.env.opGroups)
@@ -175,32 +178,12 @@ object Vitamin {
       println(s"unknown pragma $pragma")
   }
 
-  def eval(ctx: Ctx, node: AST): Any = {
+
+  def eval(ctx: Ctx, node: Tree): Any = {
     ctx.nodeStack.push(node)
     val ret = node match {
       case Zero =>
         OBJ_VOID
-
-      case Leaf(_, value) =>
-        value
-
-      case Term(Tag.Lambda, _) =>
-        node
-
-      case Term(Tag.Block, children) =>
-        var ans: Any = None
-        for (child <- children) ans = eval(ctx, child)
-        ans
-
-      case Term(Tag.Let, Atom(name) :: value :: Nil) =>
-        val res = eval(ctx, value)
-        ctx.let(name, res)
-        res
-
-      case Term(Tag.Set, Atom(name) :: value :: Nil) =>
-        val res = eval(ctx, value)
-        ctx.set(name, res)
-        res
 
       case Atom(name) =>
         val ans = ctx.get(name)
@@ -208,19 +191,43 @@ object Vitamin {
           throw new RuntimeException(error__eval__get_undefined(ctx, name))
         ans.get
 
-      case Term(Tag.Quote, quoted) =>
+      case Node(Tag.Let, Atom(name) :: typ :: value :: Nil, _) =>
+        val res = eval(ctx, value)
+        ctx.let(name, res)
+        res
+
+      case Node(Tag.Set, Atom(name) :: value :: Nil, _) =>
+        val res = eval(ctx, value)
+        ctx.set(name, res)
+        res
+
+      case Leaf(_, value, _) =>
+        value
+
+      case AST.Lambda(_, _) =>
+        node
+
+      case Node(Tag.Block, children, _) =>
+        var ans: Any = None
+        for (child <- children) ans = eval(ctx, child)
+        ans
+
+      case Node(Tag.Quote, quoted, _) =>
         quoted
 
-      case Term(Tag.Call, Atom("if") :: cond :: onT :: onF :: Nil) =>
+      case Call(callee, _) if callee.isDirective =>
+        // do nothing
+
+      case Call(Atom("if"), cond :: onT :: onF :: Nil) =>
         (eval(ctx, cond), onT, onF) match {
-          case (cond: Boolean, t: AST, f: AST) =>
+          case (cond: Boolean, t: Tree, f: Tree) =>
             return if (cond) eval(ctx, t) else eval(ctx, f)
           case _ =>
             throw new RuntimeException(error__type__call_mismatch(
               ctx, "if", Array("Bool", "AST", "AST"), Array()))
         }
 
-      case Term(Tag.Call, Atom("while") :: cond :: Term(Tag.Lambda, body :: _) :: Nil) =>
+      case Call(Atom("while"), cond :: AST.Lambda(_, body) :: Nil) =>
         var loop = eval(ctx, cond)
 
         while (loop == true) {
@@ -232,12 +239,12 @@ object Vitamin {
 
         OBJ_VOID
 
-      case Term(Tag.Call, Atom("eval") :: arg :: Nil) =>
+      case Call(Atom("eval"), arg :: Nil) =>
         eval(ctx, arg)
 
-      case Term(Tag.Call, head :: tail) =>
+      case Call(head, tail) =>
         val arg = tail.map {
-          case Term(Tag.Arg, value :: name :: Nil) =>
+          case Node(Tag.Arg, value :: name :: Nil, _) =>
             // TODO: respect keywords
             eval(ctx, value)
           case expr =>
@@ -264,15 +271,21 @@ object Vitamin {
 
 
         lambda match {
-          case Term(Tag.Lambda, body :: ret :: par) =>
+          case AST.Lambda(Node(Tag.TupMatch, par, _), body) =>
             ctx.pushEnv()
             // set environment name for nice stack traces
             ctx.env.name = sig
             // get parameter names
-            val names = par.map { case Term(Tag.Param, Atom(k) :: _) => k }
+            val names = par.map { case Node(Tag.VarMatch, Atom(name) :: Nil, _) => name }
             // define arguments
             for ((k, v) <- names zip arg) ctx.let(k, v)
             // evaluate the body and save return value
+            val ret = eval(ctx, body)
+            ctx.popEnv()
+            ret
+
+          case AST.Lambda(Zero, body) =>
+            ctx.pushEnv()
             val ret = eval(ctx, body)
             ctx.popEnv()
             ret
@@ -285,8 +298,8 @@ object Vitamin {
             throw new Exception("cannot call non lambda!")
         }
 
-      case _ =>
-        println("this shouldn't happen")
+      case ast =>
+        throw new Exception("cannot evaluate " + ast.toString)
     }
 
     ctx.nodeStack.pop()
@@ -295,19 +308,18 @@ object Vitamin {
 
   def main(args: Array[String]): Unit = {
     val libs = List("res/stdlib.vc")
-    val mainFile = "res/main.vc"
-    var program: AST = Parser.parseFile(mainFile)
+    val mainFile = "res/fizzbuzz.vc"
+    var program: Tree = Parser.parseFile(mainFile)
 
     libs.reverse foreach { path =>
-      val lib = Parser.parseFile(path).asInstanceOf[Term]
-      program.asInstanceOf[Term].data ++:= lib.data
+      val lib = Parser.parseFile(path).asInstanceOf[Node]
+      program.asInstanceOf[Node].data ++:= lib.data
     }
 
     val ctx = new Ctx()
     ctx.parser = PrattTools.makeParser(ctx, List())
     ctx.fileStack.push(mainFile)
     Corelib.register(ctx)
-
 
     // 1. parse expressions
     program = parseExpressions(ctx, program)
@@ -316,8 +328,8 @@ object Vitamin {
 
     // 2. expand macros
     program = expandMacros(ctx, program)
-    //println("-- EXPAND MACRO ----------------------------")
-    //program.child.filterNot(_ == Zero).foreach(x => println(repr(x)))
+    println("-- EXPAND MACRO ----------------------------")
+    program.child.foreach(x => println(repr(x)))
 
     // 3. run interpreter
     println("-- EVAL PROGRAM ----------------------------")
@@ -326,11 +338,7 @@ object Vitamin {
     } catch {
       case e: RuntimeException =>
         println(e.message)
-      case e =>
-        e.printStackTrace()
-        print(e)
     }
-
   }
 
 }

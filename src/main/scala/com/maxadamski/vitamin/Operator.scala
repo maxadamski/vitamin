@@ -2,7 +2,7 @@ package com.maxadamski.vitamin
 
 import Fixity.Fixity
 import Assoc.Assoc
-import OpUtils._
+import AST._
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -75,7 +75,7 @@ object OpUtils {
     }.toMap
   }
 
-  def mkOps(names: List[OpName], groups: Map[String, OpGroup]): List[Op] = {
+  def mkOps(names: Set[OpName], groups: Map[String, OpGroup]): List[Op] = {
     names.flatMap { name =>
       if (groups.contains(name.group)) {
         val group = groups(name.group)
@@ -85,16 +85,16 @@ object OpUtils {
         println(s"operator $name not created")
         None
       }
-    }
+    }.toList
   }
 
-  def getArgs(params: Seq[Param], given: Seq[Arg]): Seq[AST] = {
+  def getArgs(params: Seq[Param], given: Seq[Arg]): Seq[Tree] = {
     // FIXME?
-    val args = Array.ofDim[AST](params.length)
+    val args = Array.ofDim[Tree](params.length)
     val keys = params.map(_.key)
     val list = params.last.list
     var startedKeys = false
-    var listArgs = List[AST]()
+    var listArgs = List[Tree]()
 
     given.zipWithIndex foreach { case (arg, i) =>
       arg.key match {
@@ -115,7 +115,7 @@ object OpUtils {
     }
 
     if (list)
-      args(args.length - 1) = Term(Tag.Array, listArgs)
+      args(args.length - 1) = Node(Tag.Array, listArgs)
 
     args.zipWithIndex foreach {
       case (null, i) =>
@@ -138,16 +138,16 @@ case class OpName(group: String, name: String)
 
 case class Op(name: String, prec: Int, fix: Fixity, ass: Assoc)
 
-case class Arg(key: Option[String], value: AST)
+case class Arg(key: Option[String], value: Tree)
 
-case class Param(key: String, default: Option[AST] = None, list: Boolean = false)
+case class Param(key: String, default: Option[Tree] = None, list: Boolean = false)
 
 
 object Functions {
 
   sealed trait AFunction
 
-  case class Lambda(typ: Types.Fun, param: List[String], body: AST) extends AFunction
+  case class Lambda(typ: Types.Fun, param: List[String], body: Tree) extends AFunction
   case class Builtin(typ: Types.Fun, body: List[Any] => Any) extends AFunction
 
 }

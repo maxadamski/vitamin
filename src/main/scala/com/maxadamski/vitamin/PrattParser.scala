@@ -30,7 +30,7 @@ class PrattParser(
   var tokens: Iterator[Token] = Iterator()
   var token: Token = EOF_TOKEN
 
-  def parse(node: AST): AST = {
+  def parse(node: AST.Tree): AST.Tree = {
     val tokens = encodeSyntax(node, ops)
     ctx.nodeStack.push(node)
     val parsed = parse(tokens.toIterator)
@@ -187,23 +187,21 @@ object PrattTools {
     new PrattParser(ctx, nud, led, op_names)
   }
 
-  def encodeSyntax(expr: AST, ops: List[String]): List[Token] = {
-    expr match {
-      case Term(_, children) =>
-        children map {
-          case atom@Atom(name) if !atom.escaped && ops.contains(name) =>
-            Token(name, atom)
-          case primary =>
-            Token(LIT, primary)
-        }
-      case _ =>
-        throw new Exception("not implemented")
-    }
+  def encodeSyntax(expr: AST.Tree, ops: List[String]): List[Token] = expr match {
+    case AST.Node(_, children, _) =>
+      children map {
+        case atom@AST.Atom(name) if !atom.isEscaped && ops.contains(name) =>
+          Token(name, atom)
+        case primary =>
+          Token(LIT, primary)
+      }
+    case _ =>
+      throw new Exception("not implemented")
   }
 
-  def decodeSyntax(call: PrattCall): AST = {
-    decode[AST](call, { (head, tail) =>
-      Term.makeCall(head, tail)
+  def decodeSyntax(call: PrattCall): AST.Tree = {
+    decode[AST.Tree](call, { (head, tail) =>
+      AST.Node(AST.Tag.Call, head :: tail)
     })
   }
 

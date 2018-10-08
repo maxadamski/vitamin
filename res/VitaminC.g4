@@ -1,81 +1,79 @@
 grammar VitaminC;
 
-
 /****************************
  *       Parser Rules       *
  ****************************/
 
-
-/*
-enumeration : 'enum' name parameters? '{' decl* '}' ;
-autoParameter : name (':' type)? ;
-autoParameters : '(' ( autoParameter (',' autoParameter)* )? ')' ;
-closure : ( autoParameters ('->' type)? )? block ;
-directive : Directive | Annotation ;
-
-precedenceProperty : name '=' name term ;
-precedence : 'operator_precedence' name '{' precedenceProperty+ '}' term ;
-operator : 'operator' name name name term ;
-
-function : 'fun' name parameters '->' name block ;
-structure : 'struct' name parameters? '{' decl* '}' ;
-label : name ':' ;
-
-parameter : name (':' name ('=' expr)? | '=' expr) ;
-parameters :  '(' ( parameter (',' parameter)* )? ')' ;
-
-argument : (name ':')? expr ;
-arguments : '(' ( argument (',' argument)* ','? )? ')f' ;
-
-exprs : expr (',' expr)* ;
-*/
-
-
-//function : 'fun' name parameters '->' name block ;
-//clause : '(' expr ')' ;
-//ifStatement : 'if' clause block ('else' 'if' clause block)* ('else' block)? ;
-//whileStatement : 'while' clause block ;
-
 program : chunk EOF ;
-chunk : NL* (expr (SEMI | NL) NL*)* (expr SEMI?)? NL* ;
+chunk : NL* ( NL* (expr | ';') (';' NL* | NL+) )* (expr | ';')? NL* ;
 
 expr
-    : primary+
+    : letExpr
+    | funExpr
+    | ifExpr
+    | whileExpr
+    | prim+
     ;
 
-primary
-    : call
-    | pragma
-    | constant
-    | ifexpr
-    | whexpr
-    | fun
+prim
+    : prim argList
+    | '#'? atom
+    | '@' atom NL?
+    | lambda
+    | literal
     | '(' NL* expr NL* ')'
     ;
 
-ifexpr : 'if' '(' NL* expr NL* ')' NL* expr NL* ('else' NL* expr)? ;
-whexpr : 'while' '(' NL* expr NL* ')' NL* expr ;
+type
+    : atom ( '(' type (',' type)* ')' )?
+    | type '->' type
+    | '()'
+    ;
 
-typ : atom ;
-par : atom COLON typ ;
-fun : '{' ('(' par? (',' par)* ')' ('->' typ)? 'in')? chunk '}' ;
+patt
+    : pattPrim (',' pattPrim)*
+    ;
 
-call : (atom | fun) '(' (callArg (',' callArg)*)? ')' ;
-callArg : (atom COLON)? expr ;
-pragma : '#' (atom | call) ;
+pattPrim
+    : '_'
+    | atom
+    | '(' patt ')'
+    ;
 
-// qualified operators could be called like functions without quoting
+// basic expressions
+// convert to mixfix macros?
+letExpr : 'let' atom (':' type)? '=' expr ;
+ifExpr : 'if' '(' NL* expr NL* ')' NL* expr NL* ('else' NL* expr)? ;
+whileExpr : 'while' '(' NL* expr NL* ')' NL* expr ;
+
+// generic clause
+genItem : atom ;
+genList : '(' genItem (',' genItem)* ')'  ;
+
+// function
+parType : type '...'? ;
+parItem : atom ':' parType ('=' expr)? ;
+parList : '(' ( parItem (',' parItem)* )? ')' ;
+funExpr : 'fun' atom parList ('->' type)? ('with' genList)? '{' chunk '}' ;
+
+// function calls
+// qualified operators should allow being called like functions without quoting?
+argItem : (atom ':')? expr ;
+argList : '()' | '(' argItem (',' argItem)* ')' ;
+
+// values
+lambda : '{' (patt 'in')? chunk '}' ;
+array : '[' NL* expr? (NL* ',' NL* expr)* NL* ']' ;
+literal : vInt | vFlt | vStr | array ;
 
 // boilerplate
-constant : atom | intn | real | string ;
-intn : Int ;
-real : Real ;
-string : String ;
-
+vInt : Int ;
+vStr : Str ;
+vFlt : Flt ;
 atom
-    : Name | Symbol | '`' constant '`'
-    | COLON | LANGLE | RANGLE | EQUAL
-    | MINUS | QUOTE
+    : '`' atom '`'
+    | Name | Symbol
+    | LANGLE | RANGLE | EQUAL | MINUS | QUOTE
     ;
 
 /****************************
@@ -99,14 +97,14 @@ fragment HexFraction : '.' HexFraction ;
 fragment DecExponent : [eE] NumberSign? DecDigits ;
 fragment HexExponent : [pP] NumberSign? HexDigits ;
 
-fragment FloatReal : DecDigits DecFraction ;
+fragment FltReal : DecDigits DecFraction ;
 fragment IntReal : DecDigits ;
 
-Real : FloatReal ;
-Int  : IntReal ;
+Flt : FltReal ;
+Int : IntReal ;
 
 fragment EscapedString : '"' ( '\\' . | ~["\n\r] )* '"' ;
-String : EscapedString ;
+Str : EscapedString ;
 
 //Rune : '\'' '\\'? . '\'' ;
 

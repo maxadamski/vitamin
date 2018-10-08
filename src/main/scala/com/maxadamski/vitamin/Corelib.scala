@@ -2,7 +2,6 @@ package com.maxadamski.vitamin
 
 import Types._
 import Functions.Builtin
-import ASTUtils._
 
 object Corelib {
 
@@ -86,7 +85,7 @@ object Corelib {
     addFun("Str",  mkFun(BOOL, STR),   { case List(x: Any) => x.toString })
 
     addFun("Core_print", mkFun(STR, VOID), { case List(x: String) => print(x) })
-    addFun("Core_quote", mkFun(EXPR, EXPR), { case List(x: AST) => Term(Tag.Quote, x) })
+    addFun("Core_quote", mkFun(EXPR, EXPR), { case List(x: AST.Tree) => AST.Node(AST.Tag.Quote, List(x)) })
     addFun("Core_time", mkFun(VOID, I64), { case List() => java.lang.System.currentTimeMillis() })
   }
 
