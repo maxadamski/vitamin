@@ -1,0 +1,5 @@
+
+print("say something: ")
+let word = input()
+print("you said ")
+println(word)

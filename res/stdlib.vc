@@ -1,3 +1,95 @@
+/*
+
+The following definitions are built-in:
+Please note that the used syntax is not valid yet
+
+def Int  : Type = Core_T_INT
+def Str  : Type = Core_T_STR
+def Bool : Type = Core_T_BOOL
+def Real : Type = Core_T_REAL
+def Expr : Type = Core_T_EXPR
+def Void : Type = Core_T_VOID
+
+def ()    : Void = Core_O_VOID
+def nil   : Nil  = Core_O_NIL
+def true  : Bool = Core_O_TRUE
+def false : Bool = Core_O_FALSE
+def BS    : Str  = "\b"
+def HT    : Str  = "\t"
+def NL    : Str  = "\n"
+def CR    : Str  = "\r"
+
+def Real : Int  -> Real         = { x in x.toDouble }
+def Int  : Real -> Int          = { x in x.toInt }
+def Int  : I64  -> Int          = { x in x.toInt }
+def Int  : Bool -> Int          = { x in if (x)  1 else 0 }
+def I64  : Int  -> I64          = { x in x.toLong }
+def Str  : Str  -> Str          = { x in x.toString }
+def Str  : I64  -> Str          = { x in x.toString }
+def Str  : Int  -> Str          = { x in x.toString }
+def Str  : Real -> Str          = { x in x.toString }
+def Str  : Bool -> Str          = { x in x.toString }
+def -    : Int  -> Int          = { x in -x }
+def -    : I64  -> I64          = { x in -x }
+def -    : Real -> Real         = { x in -x }
+def not  : Bool -> Bool         = { x in !x }
+def and  : Bool -> Bool -> Bool = { x, y in x && y }
+def or   : Bool -> Bool -> Bool = { x, y in x || y }
+def +    : Int  -> Int  -> Int  = { x, y in x + y }
+def +    : I64  -> I64  -> I64  = { x, y in x + y }
+def +    : Real -> Real -> Real = { x, y in x + y }
+def -    : Int  -> Int  -> Int  = { x, y in x - y }
+def -    : I64  -> I64  -> I64  = { x, y in x - y }
+def -    : Real -> Real -> Real = { x, y in x - y }
+def *    : Int  -> Int  -> Int  = { x, y in x * y }
+def *    : I64  -> I64  -> I64  = { x, y in x * y }
+def *    : Real -> Real -> Real = { x, y in x * y }
+def /    : Int  -> Int  -> Real = { x, y in x.toDouble / y.toDouble }
+def /    : Real -> Real -> Real = { x, y in x / y }
+def div  : Int  -> Int  -> Int  = { x, y in x / y }
+def div  : I64  -> I64  -> I64  = { x, y in x / y }
+def mod  : Int  -> Int  -> Int  = { x, y in x % y }
+def mod  : I64  -> I64  -> I64  = { x, y in x % y }
+def >=   : Int  -> Int  -> Bool = { x, y in x >= y }
+def >=   : Real -> Real -> Bool = { x, y in x >= y }
+def <=   : Int  -> Int  -> Bool = { x, y in x <= y }
+def <=   : Real -> Real -> Bool = { x, y in x <= y }
+def >    : Int  -> Int  -> Bool = { x, y in x > y }
+def >    : Real -> Real -> Bool = { x, y in x > y }
+def <    : Real -> Real -> Bool = { x, y in x < y }
+def <    : Int  -> Int  -> Bool = { x, y in x < y }
+def !=   : Int  -> Int  -> Bool = { x, y in x != y }
+def !=   : Real -> Real -> Bool = { x, y in x != y }
+def !=   : Bool -> Bool -> Bool = { x, y in x != y }
+def !=   : Str  -> Str  -> Bool = { x, y in x != y }
+def ==   : Int  -> Int  -> Bool = { x, y in x == y }
+def ==   : Real -> Real -> Bool = { x, y in x == y }
+def ==   : Bool -> Bool -> Bool = { x, y in x == y }
+def ==   : Str  -> Str  -> Bool = { x, y in x == y }
+
+def +=   : Atom -> Expr -> Expr = { x, y in '($x = $x + $y) }
+def -=   : Atom -> Expr -> Expr = { x, y in '($x = $x - $y) }
+def *=   : Atom -> Expr -> Expr = { x, y in '($x = $x * $y) }
+
+fun Core_print : Str  -> ()   = { x in print(x) }
+fun Core_input : ()   -> Str  = { x in System.Console.readLine }
+fun Core_quote : Expr -> Expr = { x in AST.Node(AST.Tag.Quote, List(x)) }
+fun Core_time  : ()   -> I64  = { java.lang.System.currentTimeMillis() }
+
+*/
+
+
+// Operator group precedence relations must form a DAG
+// (directed acyclic graph)
+
+/*
+Pragma reference:
+
+#operatorgroup(name: Atom, kind: Atom, gt: Atom = nil, lt: Atom = nil)
+    kind = fx | fy | xfy | yfx | xfx | xf | yf
+
+#operator(group: Atom, names: Atom...)
+*/
 
 #operatorgroup(Assignment, xfy)
 #operatorgroup(Command, fy, gt: Assignment)
@@ -20,10 +112,22 @@
 #operator(NumberSign, -)
 #operator(Quotation, ')
 
+// Before you can use your custom operators,
+// they have to be compiled (for now)
+
 #operatorcompile()
+
+// Type definitions are optional _for now_, and the type system is incomplete,
+// so don't expect type checking
+
+// assignment to an operator requires backquotes
 
 let print: Any -> () = { it in
     Core_print(Str(it))
+}
+
+let input: () -> Str = {
+    Core_input()
 }
 
 let println: Any -> () = { it in
@@ -35,7 +139,13 @@ let time: () -> I64 = {
     Core_time()
 }
 
-let bench: Int -> Any -> Int = { passes, lambda in
+// You can pass around lambdas!
+
+// In C-like languages the following definition might look like this:
+// fun bench(passes: Int, lambda: () -> ()) -> Int { ... }
+// conclusion: types are written like in Haskell!
+
+let bench: Int -> (() -> ()) -> Int = { passes, lambda in
     let sum = I64(0)
     let i = 0
     while (i < passes) {
@@ -49,7 +159,7 @@ let bench: Int -> Any -> Int = { passes, lambda in
 }
 
 
-let ptime: Any -> () = { lambda in
+let ptime: (() -> ()) -> () = { lambda in
     let dt = bench(1, lambda)
     print("took: "); print(dt); println("ms")
 }

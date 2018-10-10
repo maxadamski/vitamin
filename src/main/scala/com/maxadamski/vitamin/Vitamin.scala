@@ -132,9 +132,14 @@ object Vitamin {
       val do2bin = Map("+=" -> "+", "-=" -> "-", "*=" -> "*")
       Node(Tag.Set, lhs :: Node(Tag.Call, Atom(do2bin(op)) :: lhs :: rhs :: Nil) :: Nil)
     case Call(Atom("if"), pred :: onT :: Nil) =>
-      Node(Tag.Call, Atom("if") :: pred :: onT :: Atom("()") :: Nil )
-    case Call(Atom("'"), arg) =>
-      Node(Tag.Quote, arg)
+      val onT_ = if (onT.tag == Tag.Lambda) Node(Tag.Call, onT :: Nil) else onT
+      Node(Tag.Call, Atom("if") :: pred :: onT_ :: Atom("()") :: Nil)
+    case Call(Atom("if"), pred :: onT :: onF :: Nil) =>
+      val onT_ = if (onT.tag == Tag.Lambda) Node(Tag.Call, onT :: Nil) else onT
+      val onF_ = if (onF.tag == Tag.Lambda) Node(Tag.Call, onF :: Nil) else onF
+      Node(Tag.Call, Atom("if") :: pred :: onT_ :: onF_ :: Nil)
+    case Call(Atom("'"), arg :: Nil) =>
+      Node(Tag.Quote, arg :: Nil)
     case it@Call(_, _) if it.isDirective =>
       Zero
     case it =>
@@ -272,7 +277,6 @@ object Vitamin {
           case _ =>
             eval(ctx, head)
         }
-
 
         lambda match {
           case AST.Lambda(Node(Tag.TupMatch, par, _), body) =>
@@ -439,7 +443,7 @@ object Vitamin {
   def main(args: Array[String]): Unit = {
     var args2 = args.toList
     if (args2.isEmpty)
-      args2 = "res/stdlib.vc" :: "res/fibonacci.vc" :: Nil
+      args2 = "res/stdlib.vc" :: "res/calc.vc" :: Nil
     val arguments = parseArgs(args2)
     verifyArgs(arguments)
     evalFiles(arguments.files)

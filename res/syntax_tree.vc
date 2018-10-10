@@ -1,0 +1,11 @@
+
+// not working right now :(
+
+let x = 0
+
+let ifs = '{
+    if (x == 0) "zero" else "whatever"
+}
+
+println(ifs)
+println(eval(ifs))

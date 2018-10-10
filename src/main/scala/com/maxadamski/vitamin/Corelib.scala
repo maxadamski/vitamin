@@ -38,6 +38,7 @@ object Corelib {
 
     addFun("+",   mkFun(INT, INT, INT),  { case List(x: Int, y: Int) => x + y })
     addFun("-",   mkFun(INT, INT, INT),  { case List(x: Int, y: Int) => x - y })
+    addFun("-",   mkFun(INT, INT),       { case List(x: Int) => -x })
     addFun("*",   mkFun(INT, INT, INT),  { case List(x: Int, y: Int) => x * y })
     addFun("/",   mkFun(INT, INT, REAL), { case List(x: Int, y: Int) => x.toDouble / y.toDouble })
     addFun("div", mkFun(INT, INT, INT),  { case List(x: Int, y: Int) => x / y })
@@ -49,11 +50,14 @@ object Corelib {
 
     addFun("+",   mkFun(I64, I64, I64),  { case List(x: Long, y: Long) => x + y })
     addFun("-",   mkFun(I64, I64, I64),  { case List(x: Long, y: Long) => x - y })
+    addFun("-",   mkFun(I64, I64),       { case List(x: Long) => -x })
     addFun("*",   mkFun(I64, I64, I64),  { case List(x: Long, y: Long) => x * y })
     addFun("div", mkFun(I64, I64, I64),  { case List(x: Long, y: Long) => x / y })
+    addFun("mod", mkFun(I64, I64, I64),  { case List(x: Long, y: Long) => x % y })
 
     addFun("+",   mkFun(REAL, REAL, REAL), { case List(x: Double, y: Double) => x + y })
     addFun("-",   mkFun(REAL, REAL, REAL), { case List(x: Double, y: Double) => x - y })
+    addFun("-",   mkFun(REAL, REAL),       { case List(x: Double) => -x })
     addFun("*",   mkFun(REAL, REAL, REAL), { case List(x: Double, y: Double) => x * y })
     addFun("/",   mkFun(REAL, REAL, REAL), { case List(x: Double, y: Double) => x / y })
     addFun(">=",  mkFun(REAL, REAL, BOOL), { case List(x: Double, y: Double) => x >= y })
@@ -71,10 +75,12 @@ object Corelib {
     addFun("!=",  mkFun(STR, STR, BOOL),   { case List(x: String, y: String) => x != y })
 
     addFun("Real", mkFun(INT, REAL),   { case List(x: Int) => x.toDouble })
+    addFun("Real", mkFun(STR, REAL),   { case List(x: String) => x.toDouble })
 
     addFun("Int",  mkFun(REAL, INT),   { case List(x: Double)  => x.toInt })
     addFun("Int",  mkFun(I64,  INT),   { case List(x: Long)  => x.toInt })
     addFun("Int",  mkFun(BOOL, INT),   { case List(x: Boolean) => if (x) 1 else 0 })
+    addFun("Int",  mkFun(STR,  INT),   { case List(x: String)  => x.toInt })
 
     addFun("I64",  mkFun(INT, I64), { case List(x: Int) => x.toLong })
 
@@ -87,6 +93,7 @@ object Corelib {
     addFun("Core_print", mkFun(STR, VOID), { case List(x: String) => print(x) })
     addFun("Core_quote", mkFun(EXPR, EXPR), { case List(x: AST.Tree) => AST.Node(AST.Tag.Quote, List(x)) })
     addFun("Core_time", mkFun(VOID, I64), { case List() => java.lang.System.currentTimeMillis() })
+    addFun("Core_input", mkFun(VOID, STR), { case List() => System.console.readLine })
   }
 
 }

@@ -25,9 +25,10 @@ prim
     ;
 
 type
-    : atom ( '(' type (',' type)* ')' )?
+    : '()'
+    | atom ( '(' type (',' type)* ')' )?
     | type '->' type
-    | '()'
+    | '(' type ')'
     ;
 
 patt

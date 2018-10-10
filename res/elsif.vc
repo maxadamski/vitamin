@@ -1,0 +1,10 @@
+
+let x = 0
+
+if (x < 0) {
+    println("less than zero")
+} else if (x > 0) {
+    println("more than zero")
+} else {
+    println("equal to zero")
+}

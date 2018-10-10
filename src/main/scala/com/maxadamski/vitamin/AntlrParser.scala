@@ -173,12 +173,20 @@ class Listener extends VitaminCBaseListener {
   }
 
   def getType(ctx: TypeContext): Tree = {
+    if (ctx.text == "()") {
+      return mkNode(ctx, Tag.ConType, Leaf(Tag.Atom, "()") :: Nil)
+    }
+
     val args = ctx.`type`.map(getType)
     if (ctx.atom != null) {
       val name = getAtom(ctx.atom)
       mkNode(ctx, Tag.ConType, name :: args)
-    } else {
+    } else if (args.length == 2) {
       mkNode(ctx, Tag.FunType, args)
+    } else if (args.length == 1) {
+      args(0)
+    } else {
+      throw impossible
     }
   }
 
