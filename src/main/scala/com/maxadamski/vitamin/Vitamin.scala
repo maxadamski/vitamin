@@ -1,6 +1,10 @@
 package com.maxadamski.vitamin
 
 import OpUtils.{getArgs, mkGroup}
+import System.err.{println => eprintln}
+import System.exit
+import java.nio.file.Paths
+
 import AST.Tag.Tag
 import ASTUtils._
 import Report._
@@ -306,39 +310,139 @@ object Vitamin {
     ret
   }
 
-  def main(args: Array[String]): Unit = {
-    val libs = List("res/stdlib.vc")
-    val mainFile = "res/fizzbuzz.vc"
-    var program: Tree = Parser.parseFile(mainFile)
+  def usageShort: String = {
+    s"vc [-h|-H] FILE..."
+  }
 
-    libs.reverse foreach { path =>
-      val lib = Parser.parseFile(path).asInstanceOf[Node]
-      program.asInstanceOf[Node].data ++:= lib.data
+  def usageLong: String = {
+    s"""
+       | NAME
+       |    vc - execute VitaminC code
+       |
+       | USAGE
+       |    vc [-h|-H] FILE...
+       |
+       | DESCRIPTION
+       |    -h, --help
+       |        print usage
+       |
+       |    -H, --HELP
+       |        print this help
+       |
+       | EXAMPLE
+       |    vc stdlib.vc main.vc
+       |
+       | NOTES
+       |    FILEs are evaluated in the order they're given
+       |    (in fact the ASTs in FILEs are concatenated)
+     """.stripMargin
+  }
+
+  case class Arguments(
+    files: List[String]
+  )
+
+  def parseArgs(input: List[String]): Arguments = {
+    var args = input
+    var files = List[String]()
+
+    while (args.nonEmpty) {
+      val head = args.head
+      head match {
+        case "-h" | "--help" =>
+          println(s"usage: $usageShort")
+          exit(0)
+        case "-H" | "--HELP" =>
+          println(usageLong)
+          exit(0)
+        case _ =>
+          files :+= head
+          args = args.drop(1)
+      }
     }
 
-    val ctx = new Ctx()
-    ctx.parser = PrattTools.makeParser(ctx, List())
-    ctx.fileStack.push(mainFile)
-    Corelib.register(ctx)
+    Arguments(
+      files = files
+    )
+  }
 
-    // 1. parse expressions
-    program = parseExpressions(ctx, program)
+  def verifyArgs(args: Arguments): Unit = {
+    args.files foreach verifyFile
+
+    if (args.files.isEmpty) {
+      printError(s"no files given")
+      exit(1)
+    }
+  }
+
+  def printError(str: String): Unit = {
+    eprintln(s"[error] $str")
+  }
+
+  def printWarn(str: String): Unit = {
+    println(s"[warn] $str")
+  }
+
+  def verifyFile(it: String): Unit = {
+    val path = Paths.get(it)
+    val file = path.toFile
+    if (!file.exists) {
+      printError(s"file '$it' doesn't exist")
+      exit(1)
+    }
+    if (file.isDirectory) {
+      printError(s"file '$it' is a directory, which is not allowed yet")
+      exit(1)
+    }
+    if (!it.endsWith(".vc")) {
+      printWarn(s"extension of file '$it' is not '.vc'")
+    }
+  }
+
+  def evalFile(ctx: Ctx, file: String): Unit = {
+    ctx.fileStack.push(file)
+
+    // 1. parse with the generic parser
+    var ast: Tree = Parser.parseFile(file)
+
+    // 1. parse with context's parser
+    ast = parseExpressions(ctx, ast)
     //println("-- PARSE FLAT ------------------------------")
     //program.child.foreach(x => println(repr(x)))
 
     // 2. expand macros
-    program = expandMacros(ctx, program)
-    println("-- EXPAND MACRO ----------------------------")
-    program.child.foreach(x => println(repr(x)))
+    ast = expandMacros(ctx, ast)
+    //println("-- EXPAND MACRO ---------------------------")
+    //ast.child.foreach(x => println(repr(x)))
 
     // 3. run interpreter
-    println("-- EVAL PROGRAM ----------------------------")
+    //println("-- EVAL PROGRAM ----------------------------")
     try {
-      eval(ctx, program)
+      eval(ctx, ast)
     } catch {
       case e: RuntimeException =>
         println(e.message)
     }
+
+    ctx.fileStack.pop()
+  }
+
+  def evalFiles(files: List[String]): Unit = {
+    // 0. Create the world
+    val ctx = new Ctx()
+    ctx.parser = PrattTools.makeParser(ctx, List())
+    Corelib.register(ctx)
+
+    files foreach { file => evalFile(ctx, file) }
+  }
+
+  def main(args: Array[String]): Unit = {
+    var args2 = args.toList
+    if (args2.isEmpty)
+      args2 = "res/stdlib.vc" :: "res/fibonacci.vc" :: Nil
+    val arguments = parseArgs(args2)
+    verifyArgs(arguments)
+    evalFiles(arguments.files)
   }
 
 }
