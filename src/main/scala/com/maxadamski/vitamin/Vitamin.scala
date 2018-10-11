@@ -81,6 +81,10 @@ class Ctx(
 
   def get(name: String): Option[Any] = lookup(name).map(dst => dst.vars(name))
 
+  def findFun(name: String): List[Any] = {
+    List()
+  }
+
   def mangleTyp(typ: AType): String = typ match {
     case fun: Fun => fun.toList.dropRight(1).map(mangleTyp).mkString("->")
     case Typ(x) => x
@@ -107,6 +111,11 @@ object Vitamin {
     case AST.Lambda(_, _) => ANY
     case Builtin(typ, _) => typ
     case _ => ANY
+  }
+
+  def isFun(typ: AType): Boolean = typ match {
+    case _: Fun => true
+    case _ => false
   }
 
   def parseExpressions(ctx: Ctx, ast: Tree): Tree = ast.map() { it =>
@@ -187,6 +196,51 @@ object Vitamin {
       println(s"unknown pragma $pragma")
   }
 
+  // Call rules:
+  // - if the head is an atom
+  //   - if the variable exists and is a lambda
+  //   - else begin overloaded lambda lookup, based on arg types
+  //   - if no lambda is found
+  //     - report lambdas with matching stems
+  //     - if no stem was matched the lambda is undefined
+  //   - evaluate the args, verify types, and begin call
+  // - if the head is an expr
+  //   - evaluate the expr
+  //   - if the resulting value is a lambda
+  //     - evaluate the args, verify types, and begin call
+  //   - else the value cannot be called
+  //
+  // - when calling lambdas parameters are passed as a tuple
+  // - the tuple is then extracted with pattern matching
+  // { x, y, z in ... }
+  // { x, (a, b) in ... }
+
+  def finalizeCall(ctx: Ctx, lambda: Any, arg: List[Any]): Any = {
+    lambda match {
+      case AST.Lambda(Node(Tag.TupMatch, par, _), body) =>
+        ctx.pushEnv()
+        // set environment name for nice stack traces
+        //ctx.env.name = sig
+        // get parameter names
+        val names = par.map { case Node(Tag.VarMatch, Atom(name) :: Nil, _) => name }
+        // define arguments
+        for ((k, v) <- names zip arg) ctx.let(k, v)
+        // evaluate the body and save return value
+        val ret = eval(ctx, body)
+        ctx.popEnv()
+        ret
+
+      case AST.Lambda(Zero, body) =>
+        ctx.pushEnv()
+        val ret = eval(ctx, body)
+        ctx.popEnv()
+        ret
+
+      case Builtin(_, body) =>
+        // just pass things to a regular lambda
+        body(arg)
+    }
+  }
 
   def eval(ctx: Ctx, node: Tree): Any = {
     ctx.nodeStack.push(node)
@@ -225,89 +279,50 @@ object Vitamin {
         quoted
 
       case Call(callee, _) if callee.isDirective =>
-        // do nothing
-
-      case Call(Atom("if"), cond :: onT :: onF :: Nil) =>
-        (eval(ctx, cond), onT, onF) match {
-          case (cond: Boolean, t: Tree, f: Tree) =>
-            return if (cond) eval(ctx, t) else eval(ctx, f)
-          case _ =>
-            throw new RuntimeException(error__type__call_mismatch(
-              ctx, "if", Array("Bool", "AST", "AST"), Array()))
-        }
+      // do nothing
 
       case Call(Atom("while"), cond :: AST.Lambda(_, body) :: Nil) =>
         var loop = eval(ctx, cond)
-
         while (loop == true) {
           ctx.pushEnv()
           eval(ctx, body)
           ctx.popEnv()
           loop = eval(ctx, cond)
         }
-
         OBJ_VOID
 
       case Call(Atom("eval"), arg :: Nil) =>
         eval(ctx, arg)
 
-      case Call(head, tail) =>
-        val arg = tail.map {
-          case Node(Tag.Arg, value :: name :: Nil, _) =>
-            // TODO: respect keywords
-            eval(ctx, value)
-          case expr =>
-            eval(ctx, expr)
-        }
-        val typ = mkFun(arg.map(getTyp) :+ VOID: _*)
-        val sig = if (head.toString.startsWith("(")) "lambda" else head.toString
+      case Call(Atom(head), rawArgs) =>
+        val args = rawArgs.map(arg => eval(ctx, arg))
+        val lambda = ctx.get(head)
+        if (lambda.isDefined) {
+          finalizeCall(ctx, lambda.get, args)
+        } else {
+          val stems = ctx.findByStem(head)
+          if (stems.isEmpty)
+            throw new Exception(undefined_function)
 
-        val lambda = head match {
-          case Atom(name) =>
-            val key = ctx.mangleFun(name, arg.length, typ)
-            val fun1 = ctx.get(key)
-            val fun2 = ctx.get(name)
+          val unify = stems.filter(stem => typesUnify(stem, args))
+          if (unify.length > 1)
+            throw new Exception(multiple_functions_matched)
+          if (unify.isEmpty)
+            throw new Exception(mismatched_arguments(args, stems))
 
-            if (fun1.isEmpty && fun2.isEmpty)
-              // TODO: calling an undefined function (more specific message)
-              throw new RuntimeException(error__eval__get_undefined(ctx, key))
-
-            if (fun1.isDefined) fun1.get else fun2.get
-
-          case _ =>
-            eval(ctx, head)
+          finalizeCall(ctx, funcs.head, args)
         }
 
-        lambda match {
-          case AST.Lambda(Node(Tag.TupMatch, par, _), body) =>
-            ctx.pushEnv()
-            // set environment name for nice stack traces
-            ctx.env.name = sig
-            // get parameter names
-            val names = par.map { case Node(Tag.VarMatch, Atom(name) :: Nil, _) => name }
-            // define arguments
-            for ((k, v) <- names zip arg) ctx.let(k, v)
-            // evaluate the body and save return value
-            val ret = eval(ctx, body)
-            ctx.popEnv()
-            ret
+      case Call(rawHead, rawArgs) =>
+        val head = eval(ctx, rawHead)
+        if (!isFun(getTyp(head)))
+          throw new Exception(cannot_call_non_lambda(head))
 
-          case AST.Lambda(Zero, body) =>
-            ctx.pushEnv()
-            val ret = eval(ctx, body)
-            ctx.popEnv()
-            ret
+        val args = rawArgs.map(arg => eval(ctx, arg))
+        if (!typesUnify(stem, args))
+          throw new Exception(mismatched_arguments(args,List(head)))
 
-          case Builtin(_, body) =>
-            // just pass things to a regular lambda
-            body(arg)
-
-          case _ =>
-            throw new Exception("cannot call non lambda!")
-        }
-
-      case ast =>
-        throw new Exception("cannot evaluate " + ast.toString)
+        finalizeCall(ctx, head, args)
     }
 
     ctx.nodeStack.pop()
