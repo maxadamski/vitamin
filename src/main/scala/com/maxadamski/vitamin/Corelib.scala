@@ -6,14 +6,14 @@ import Functions.Builtin
 object Corelib {
 
   def register(ctx: Ctx): Unit = {
-    def addFun(name: String, typ: Fun, body: List[Any] => Any): Unit = {
+    def addFun(name: String, typ: AType, body: List[Any] => Any): Unit = {
       val k = ctx.mangleFun(name, arity(typ), typ)
       val v = Builtin(typ, body)
-      ctx.let(k, v)
+      ctx.let(k, typ, v)
     }
 
     def addVal(name: String, typ: AType, value: Any): Unit = {
-      ctx.let(name, value)
+      ctx.let(name, typ, value)
     }
 
     addVal("Int", TYPE, INT)
@@ -91,9 +91,9 @@ object Corelib {
     addFun("Str",  mkFun(BOOL, STR),   { case List(x: Any) => x.toString })
 
     addFun("Core_print", mkFun(STR, VOID), { case List(x: String) => print(x) })
+    addFun("Core_input", mkFun(VOID, STR), { case List() => System.console.readLine })
     addFun("Core_quote", mkFun(EXPR, EXPR), { case List(x: AST.Tree) => AST.Node(AST.Tag.Quote, List(x)) })
     addFun("Core_time", mkFun(VOID, I64), { case List() => java.lang.System.currentTimeMillis() })
-    addFun("Core_input", mkFun(VOID, STR), { case List() => System.console.readLine })
   }
 
 }

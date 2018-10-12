@@ -14,11 +14,17 @@ import AST._
 
 import scala.collection.mutable
 
+case class Obj(
+  var value: Any,
+  var typ: AType = NIL,
+  var const: Boolean = false,
+)
+
 class Env(
   var opGroups: Map[String, OpGroup] = Map(),
   var opNames: Set[OpName] = Set(),
   var parent: Option[Env] = None,
-  var vars: mutable.Map[String, Any] = mutable.Map(),
+  var vars: mutable.Map[String, Obj] = mutable.Map(),
   var name: String = "main"
 )
 
@@ -41,7 +47,7 @@ class Ctx(
 
   def popEnv(): Env = {
     val oldEnv = env
-    if (oldEnv.parent.isEmpty) throw new Exception()
+    if (oldEnv.parent.isEmpty) throw new RuntimeException("Cannot pop environment, as the stack is empty")
     env = oldEnv.parent.get
     oldEnv
   }
@@ -67,26 +73,39 @@ class Ctx(
     None
   }
 
-  def let(name: String, value: Any): Unit = {
-    if (env.vars.contains(name))
-      throw new RuntimeException(error__eval__let_defined(this, name))
-    env.vars.put(name, value)
+  def findFun(name: String): List[Obj] = {
+    var local: Option[Env] = Some(env)
+    var fun = List[Obj]()
+    while (local.isDefined) {
+      for ((k, v) <- local.get.vars) {
+        if (k.split(":")(0) == name) {
+          fun :+= v
+        }
+      }
+      local = local.get.parent
+    }
+    fun
   }
 
-  def set(name: String, value: Any): Unit = lookup(name) match {
-    case Some(dst) => dst.vars(name) = value
+  def let(name: String, typ: AType, value: Any): Unit = {
+    if (env.vars.contains(name))
+      throw new RuntimeException(error__eval__let_defined(this, name))
+    env.vars.put(name, Obj(value, typ))
+  }
+
+  def set(name: String, typ: AType, value: Any): Unit = lookup(name) match {
+    case Some(dst) =>
+      if (dst.vars(name).typ != typ)
+        throw new RuntimeException("Assigning to a variable of incompatible type")
+      dst.vars(name).value = value
     case None =>
       throw new RuntimeException(error__eval__set_undefined(this, name))
   }
 
   def get(name: String): Option[Any] = lookup(name).map(dst => dst.vars(name))
 
-  def findFun(name: String): List[Any] = {
-    List()
-  }
-
   def mangleTyp(typ: AType): String = typ match {
-    case fun: Fun => fun.toList.dropRight(1).map(mangleTyp).mkString("->")
+    case Fun(FUN :: tail) => tail.map(_.toString).mkString(" -> ")
     case Typ(x) => x
     case Var(x) => x
   }
@@ -111,6 +130,10 @@ object Vitamin {
     case AST.Lambda(_, _) => ANY
     case Builtin(typ, _) => typ
     case _ => ANY
+  }
+
+  def tupleTyp(typs: List[AType]): AType = {
+    Types.Fun(typs)
   }
 
   def isFun(typ: AType): Boolean = typ match {
@@ -215,7 +238,7 @@ object Vitamin {
   // { x, y, z in ... }
   // { x, (a, b) in ... }
 
-  def finalizeCall(ctx: Ctx, lambda: Any, arg: List[Any]): Any = {
+  def evalCall(ctx: Ctx, lambda: Any, arg: List[Any], typ: Fun): Any = {
     lambda match {
       case AST.Lambda(Node(Tag.TupMatch, par, _), body) =>
         ctx.pushEnv()
@@ -224,7 +247,7 @@ object Vitamin {
         // get parameter names
         val names = par.map { case Node(Tag.VarMatch, Atom(name) :: Nil, _) => name }
         // define arguments
-        for ((k, v) <- names zip arg) ctx.let(k, v)
+        for (((k, v), t) <- names zip arg zip typ.x.tail) ctx.let(k, t, v)
         // evaluate the body and save return value
         val ret = eval(ctx, body)
         ctx.popEnv()
@@ -242,6 +265,40 @@ object Vitamin {
     }
   }
 
+  def typesUnify(parTyp: AType, argTyp: AType): Boolean = parTyp match {
+    case Var(_) => true
+    case Typ(name) => argTyp == Typ(name)
+    case Fun(head :: tail) =>
+      argTyp match {
+        case Fun(h :: t) if typesUnify(head, h) =>
+          (tail zip t).forall { case (par, arg) => typesUnify(par, arg) }
+        case _ => false
+      }
+  }
+
+  def resolveCall(ctx: Ctx, head: String, args: List[Any]): Any = {
+    val lambda = ctx.get(head)
+    if (lambda.isDefined)
+      return lambda.get
+    val stems = ctx.findFun(head)
+    if (stems.isEmpty)
+      throw new RuntimeException("undefined function")
+
+    val argTypes = tupleTyp(args.map(getTyp))
+    val matching = stems.filter(stem => typesUnify(stem.typ, argTypes))
+    if (matching.length > 1)
+      throw new RuntimeException("multiple functions matched")
+    if (matching.isEmpty)
+      throw new RuntimeException("mismatched arguments")
+
+    matching.head
+  }
+
+  def parseTyp(ast: AST.Tree): AType = {
+    case Node(Tag.ConType, head :: tail, _) =>
+    case Node(Tag.FunType, head :: tail, _) =>
+  }
+
   def eval(ctx: Ctx, node: Tree): Any = {
     ctx.nodeStack.push(node)
     val ret = node match {
@@ -256,12 +313,13 @@ object Vitamin {
 
       case Node(Tag.Let, Atom(name) :: typ :: value :: Nil, _) =>
         val res = eval(ctx, value)
-        ctx.let(name, res)
+        ctx.let(name, parseTyp(typ), res)
         res
 
       case Node(Tag.Set, Atom(name) :: value :: Nil, _) =>
         val res = eval(ctx, value)
-        ctx.set(name, res)
+        val typ = getTyp(res)
+        ctx.set(name, typ, res)
         res
 
       case Leaf(_, value, _) =>
@@ -295,34 +353,18 @@ object Vitamin {
         eval(ctx, arg)
 
       case Call(Atom(head), rawArgs) =>
-        val args = rawArgs.map(arg => eval(ctx, arg))
-        val lambda = ctx.get(head)
-        if (lambda.isDefined) {
-          finalizeCall(ctx, lambda.get, args)
-        } else {
-          val stems = ctx.findByStem(head)
-          if (stems.isEmpty)
-            throw new Exception(undefined_function)
-
-          val unify = stems.filter(stem => typesUnify(stem, args))
-          if (unify.length > 1)
-            throw new Exception(multiple_functions_matched)
-          if (unify.isEmpty)
-            throw new Exception(mismatched_arguments(args, stems))
-
-          finalizeCall(ctx, funcs.head, args)
-        }
+        val args = rawArgs.map(eval(ctx, _))
+        val typs = Fun(TUP :: args.map(getTyp))
+        val lambda = resolveCall(ctx, head, args)
+        evalCall(ctx, lambda, args, typs)
 
       case Call(rawHead, rawArgs) =>
         val head = eval(ctx, rawHead)
         if (!isFun(getTyp(head)))
-          throw new Exception(cannot_call_non_lambda(head))
-
+          throw new RuntimeException("cannot call non-lambda")
         val args = rawArgs.map(arg => eval(ctx, arg))
-        if (!typesUnify(stem, args))
-          throw new Exception(mismatched_arguments(args,List(head)))
-
-        finalizeCall(ctx, head, args)
+        val typs = Fun(TUP :: args.map(getTyp))
+        evalCall(ctx, head, args, typs)
     }
 
     ctx.nodeStack.pop()

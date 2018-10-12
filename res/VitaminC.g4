@@ -25,10 +25,11 @@ prim
     ;
 
 type
-    : '()'
-    | atom ( '(' type (',' type)* ')' )?
-    | type '->' type
-    | '(' type ')'
+    : '()'                               # nullType
+    | atom ( '(' type (',' type)* ')' )? # naryType
+    | type ('->' type)+                  # lambdaType
+    | '(' type (',' type)+ ')'           # tupleType
+    | '(' type ')'                       # parenthesisType
     ;
 
 patt

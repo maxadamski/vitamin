@@ -165,33 +165,22 @@ object Types {
     override def toString: String = "'" + x
   }
 
-  case class Fun(x: AType, y: AType) extends AType {
-    override def toString: String = s"$x -> $y"
-
-    def toList: List[AType] = (x, y) match {
-      case (_, f: Fun) => x +: f.toList
-      case _ => List(x, y)
-    }
+  case class Fun(x: List[AType]) extends AType {
+    override def toString: String = x.head + "<" + x.tail.mkString(", ") + ">"
   }
 
-  def mkFun(arg: AType*): Fun = arg match {
-    case Seq() => Fun(VOID, VOID)
-    case Seq(one) => Fun(one, VOID)
-    case Seq(one, two) => Fun(one, two)
-    case head +: tail => Fun(head, mkFun(tail: _*))
+  def arity(typ: AType): Int = typ match {
+    case Typ(_) | Var(_) => 0
+    case Fun(x) => x.length
   }
 
-
-  def arity(fun: AType): Int = {
-    @tailrec
-    def go(typ: AType, sum: Int): Int = typ match {
-      case Fun(VOID, y) => go(y, sum)
-      case Fun(_, y) => go(y, sum + 1)
-      case _ => sum
-    }
-    go(fun, 0)
+  def mkFun(typ: AType*): AType = {
+    Fun(FUN :: typ.toList)
   }
 
+  val FUN = Typ("Fun")
+  val TUP = Typ("Tup")
+  val ARR = Typ("Arr")
   val VOID = Typ("Void")
   val TYPE = Typ("Type")
   val ANY = Typ("Any")

@@ -48,15 +48,65 @@ public interface VitaminCListener extends ParseTreeListener {
 	 */
 	void exitPrim(VitaminCParser.PrimContext ctx);
 	/**
-	 * Enter a parse tree produced by {@link VitaminCParser#type}.
+	 * Enter a parse tree produced by the {@code lambdaType}
+	 * labeled alternative in {@link VitaminCParser#type}.
 	 * @param ctx the parse tree
 	 */
-	void enterType(VitaminCParser.TypeContext ctx);
+	void enterLambdaType(VitaminCParser.LambdaTypeContext ctx);
 	/**
-	 * Exit a parse tree produced by {@link VitaminCParser#type}.
+	 * Exit a parse tree produced by the {@code lambdaType}
+	 * labeled alternative in {@link VitaminCParser#type}.
 	 * @param ctx the parse tree
 	 */
-	void exitType(VitaminCParser.TypeContext ctx);
+	void exitLambdaType(VitaminCParser.LambdaTypeContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code naryType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void enterNaryType(VitaminCParser.NaryTypeContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code naryType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void exitNaryType(VitaminCParser.NaryTypeContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code tupleType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void enterTupleType(VitaminCParser.TupleTypeContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code tupleType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void exitTupleType(VitaminCParser.TupleTypeContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code parenthesisType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void enterParenthesisType(VitaminCParser.ParenthesisTypeContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code parenthesisType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void exitParenthesisType(VitaminCParser.ParenthesisTypeContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code nullType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void enterNullType(VitaminCParser.NullTypeContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code nullType}
+	 * labeled alternative in {@link VitaminCParser#type}.
+	 * @param ctx the parse tree
+	 */
+	void exitNullType(VitaminCParser.NullTypeContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link VitaminCParser#patt}.
 	 * @param ctx the parse tree

@@ -47,3 +47,16 @@ ptime({ println(fib_t(N)) })
 
 print("recursive: ")
 ptime({ println(fib_r(N)) })
+
+println("- iterative 2: ")
+let m = 0
+while (m  < 10000) {
+	ptime({
+		print("for m = ")
+		print(m)
+		print(": ")
+		fib_i(m)
+	})
+	m += 100
+}
+
