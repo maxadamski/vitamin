@@ -1,0 +1,48 @@
+
+let greet = { name in
+    print("hello, ")
+    if (name == "max") {
+        print("human")
+    } else if (name == "ami")  {
+        print("dog")
+    } else {
+        print("world")
+    }
+    println("!")
+}
+
+println("- greetings")
+
+greet("max")
+greet("ami")
+greet("other")
+
+
+let countdown_i = { n in
+    let sum = 0
+    while (n > 0) {
+        sum = sum + n
+        n = n - 1
+    }
+    sum
+}
+
+let countdown_t = { n in
+    let go = { n, sum in
+        if (n > 0) go(n - 1, sum + n) else sum
+    }
+    go(n, 0)
+}
+
+let countdown_r = { n in
+    if (n > 0) n + countdown_r(n - 1) else 0
+}
+
+let N = 1000
+print("N = "); println(N)
+
+ptime({
+    print("Σ(1..N) = ")
+    println(countdown_i(N))
+})
+

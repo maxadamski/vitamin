@@ -1,0 +1,62 @@
+
+let fib_r = { n in
+    if (n > 1) fib_r(n - 1) + fib_r(n - 2) else n
+}
+
+let fib_t = { n in
+    let go = { a, b, n in
+        if (n > 0) go(b, a + b, n - 1) else a
+    }
+    go(0, 1, n)
+}
+
+let fib_i = { n in
+    let a = 1
+    let b = 0
+    let i = 0
+    while (i < n) {
+        let t = a
+        a += b
+        b = t
+        i += 1
+    }
+    b
+}
+
+println("- fibonacci")
+
+println("- test")
+
+let i = 0
+while (i < 15) {
+    print(fib_i(i))
+    print(" ")
+    i += 1
+}
+println("")
+
+
+println("- time")
+
+let N = 15
+print("iterative: ")
+ptime({ println(fib_i(N)) })
+
+print("tailoptim: ")
+ptime({ println(fib_t(N)) })
+
+print("recursive: ")
+ptime({ println(fib_r(N)) })
+
+println("- iterative 2: ")
+let m = 0
+while (m  < 10000) {
+	ptime({
+		print("for m = ")
+		print(m)
+		print(": ")
+		fib_i(m)
+	})
+	m += 100
+}
+

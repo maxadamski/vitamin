@@ -1,0 +1,19 @@
+
+def `for`(init, cond, post, do) =
+    quote({
+        unquote(init);
+        while (unquote(cond)) {
+            unquote(do);
+            unquote(post);
+        };
+    });
+
+
+let i = 0;
+while (i < 10) {
+    print(i);
+    i += 1;
+};
+
+for (let j = 0; j < 10; j += 1)
+    print(j);

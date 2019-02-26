@@ -1,0 +1,157 @@
+
+module Core {
+
+    def use_select!(name: Expr, items: Expr, qualified: Bool = false);
+    def use_filter!(name: Expr, items: Expr, qualified: Bool = false);
+    def use!(name: Expr, qualified: Bool = false);
+
+    def let(x: Expr, y: Expr, context: Maybe(Atom) = None);
+    def set(x: Expr, y: Expr);
+    def get(x: Atom);
+    def apply(x: Lambda, y: List(Any)) -> Any
+    def apply(module: Module, name: Atom, y: List(Any)) -> Any
+
+    def if(cond, on_true, on_false)
+    def while(cond, on_true)
+    def return(value)
+    def break()
+
+    def quote(expr)
+    def unquote(expr)
+    def splat(expr)
+
+    fun div(x, y)
+    fun mod(x, y)
+    fun max(x, y)
+    fun min(x, y)
+    fun abs(x)
+
+    fun and(x, y)
+    fun or(x, y)
+    fun not(x)
+
+    fun eq(x, y)
+    fun ne(x, y)
+    fun ge(x, y)
+    fun le(x, y)
+    fun lt(x, y)
+    fun gt(x, y)
+
+    fun exit(code) -> NoReturn
+
+}
+
+module Language {
+
+    type LambdaHeader = (name: Atom, arity: Int);
+
+    type Module = Atom
+
+    type Import = ...
+
+    type Env = (
+        module: String,
+        file: String,
+        line: Int,
+        functions: Map(Module, List(LambdaHeader)),
+        macros: Map(Module, List(LambdaHeader),
+        modules: List(Module),
+        imports: List(Import),
+        aliases: List((Atom, Atom)),
+    );
+
+    type Tree = Expr | Literal;
+
+    type Expr = (Tag, List(Tree));
+    enum Tag = call | block | lambda | expr;
+
+
+    type Literal = Atom | NumberLiteral | StringLiteral;
+    type Atom = String;
+    type NumberLiteral = (Bool, List(Bit), List(Digit), List(Digit), Bool);
+    type StringLiteral = List(Char);
+
+    type Term = Atom | String | Int | Real;
+
+
+    type Person = (name: String, age: Int)
+
+    impl Person {
+        fun greet();
+    }
+
+    let x: Person
+
+    greet(x)
+
+    x.greet() -> `.`(x, greet) -> greet(x)
+
+    x = Person(name: "", age: 0)
+    x = ("", 0)
+
+    struct Point {
+        id: UUID
+        x, y: Int
+
+        synthesize_init(except: id) {
+            id = UUID(seed)
+        }
+
+    }
+
+
+    def escape(expr);
+
+    impl Tree {
+        fun expand(env: Env) -> Tree;
+        fun expand_once(env: Env) -> Tree;
+        fun to_string(f: (Tree, String) -> String) -> String;
+        fun walk(f: Tree -> Tree) -> Tree;
+    }
+
+    impl Atom {
+        fun to_string() -> String
+    }
+
+}
+
+
+module Standard {
+
+    impl List(Item) {
+        fun empty() -> Bool
+        fun length() -> Int
+
+        fun get(index: Int) -> Item
+        mut fun set(index: Int, value: Int)
+
+        fun slice(start: Int, end: Int, step: Int) -> List(Item)
+
+        fun head() -> Option(Item)
+        fun last() -> Option(Item)
+        fun tail() -> List(Item)
+        fun init() -> List(Item)
+
+        fun find(key: Item -> Bool) -> List(Int)
+        fun starts_with(prefix: List(Item)) -> Bool
+        fun ends_with(suffix: List(Item)) -> Bool
+        fun contains(key: Item) -> Bool
+
+        mut fun insert_at(index: Int, item: Item)
+        mut fun delete_at(index: Int) -> Item
+        mut fun prepend(item: Item)
+        mut fun append(item: Item)
+        mut fun delete(key: Item -> Bool)
+        mut fun replace(key: Item -> Bool)
+
+        fun map(f: Item -> A) -> List(A)
+        fun reduce(accumulator: A, f: (A, Item) -> A) -> A
+        fun zip(other: List(A)) -> List((Item, A))
+        fun filter(f: Item -> Bool) -> List(A)
+    }
+
+    impl List(Iterable(Item)) {
+        fun flatten() -> List(Item)
+    }
+
+}

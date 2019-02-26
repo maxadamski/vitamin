@@ -1,0 +1,18 @@
+
+fun eval(env, ast):
+    switch ast:
+        Symbol(x) ->
+            env[x]
+        List('quote', x) ->
+            x
+        List('if', test, x, y) ->
+            eval(env, eval(env, test) ? x : y)
+        List('define', name, expr) ->
+            env[name] = eval(env, expr)
+        List('lambda', head, body) ->
+            Lambda(head, body, env)
+        head :: tail ->
+            args = tail.map(eval(env))
+            eval(env, head)(splat args)
+        atom ->
+            atom

@@ -1,166 +1,300 @@
+
+/// # Operator groups
+
+// enum OperatorKind = xfx | yfx | xfy | fx | fy | xf | yf | fxfx | xfxfx
+
+#operator_group(statement, fxfx, nil, nil);
+
+#operator_group(refinement, xfxfx, assignment, nil);
+#operator_group(association, xfxfx, refinement, nil);
+#operator_group(alternative, xfxfx, association, nil);
+#operator_group(function, xfxfx, alternative, nil);
+
+#operator_group(assignment, yfx, statement, nil);
+
+#operator_group(logic_conjunction, yfx, assignment, nil);
+#operator_group(logic_disjunction, yfx, logic_conjunction, nil);
+#operator_group(logic_negation, fy, logic_disjunction, nil);
+
+#operator_group(comparison, yfx, logic_negation, nil);
+
+#operator_group(construction, xfy, comparison, nil);
+
+#operator_group(addition, yfx, comparison, nil);
+#operator_group(multiplication, yfx, addition, nil);
+#operator_group(exponentiation, xfy, multiplication, nil);
+#operator_group(negation, fy, exponentiation, nil);
+
+
+/// ## UML Directed Graph
+///
+/// digraph G {
+///     "f _ = _";
+///     ":" -> "|";
+///     "|" -> "->";
+///     "where" -> "=";
+///     "f _ = _";
+///     ":=" -> "=";
+/// }
+
+/// # Operator declarations
+
+/// ## Parser Problem: Atom Operators
+///
+/// Even if an operator like `where` is defined, when an atom is followed by a tuple, it's parsed as a call.
+/// As a workaround `where`, `as`, `in`, etc. are lexed as symbols.
+/// This issue has to be addressed, either in the lexer or by making the parser aware of #operator calls earlier.
+/// Modifying the lexer has the downside of making the syntax more rigid, so no more spaces before argument lists,
+/// which will make macros like loops uglier, and introduce annoying hard to spot syntax errors.
+/// Making the parser aware of #operator calls is what I'll probably do, when rewriting the parser in Vitamin.
+/// Maybe I'll replace recursive descrent with the Pratt parser entirely, but I'm not sure that this is a good idea.
+///
+/// Examples:
+/// - `X where (Y, Z)` parses as `(parse X (where Y Z))` which is wrong
+/// - `X where Y` parses as `(parse X where Y)` which is correct
+
+/// ## List
+#operator(refinement, where);
+#operator(association, :);
+#operator(function, ->);
+#operator(alternative, |);
+
+/// ## Declaration
+#operator(statement, fun);
+#operator(statement, def);
+#operator(statement, let);
+#operator(statement, var);
+#operator(statement, type);
+#operator(statement, protocol);
+#operator(statement, instance);
+
+/// ## Assignment
+#operator(assignment, =);
+#operator(assignment, +=);
+#operator(assignment, -=);
+#operator(assignment, *=);
+#operator(assignment, /=);
+
+/// ## Arithmetic
+#operator(addition, +);
+#operator(addition, -);
+#operator(negation, -);
+#operator(multiplication, *);
+#operator(multiplication, /);
+#operator(multiplication, div);
+#operator(multiplication, mod);
+#operator(exponentiation, **);
+
+/// ## Construction
+#operator(construction, ::);
+#operator(construction, ++);
+
+/// ## Comparison
+#operator(comparison, ==);
+#operator(comparison, !=);
+#operator(comparison, <=);
+#operator(comparison, >=);
+#operator(comparison, <);
+#operator(comparison, >);
+#operator(comparison, in);
+
+/// ## Logic
+#operator(logic_negation, not);
+#operator(logic_conjunction, and);
+#operator(logic_disjunction, or);
+
+/// # Special Macros
+
+/// def #operator_group(name, kind, gt, lt)
+/// def #operator(group, name)
+/// def def!(name, head, body)
+/// def parse(term...)
+/// def block(expr...)
+
+/// # Special Functions
+
+/// fun let!(name, expr)
+/// fun set!(name, expr)
+/// fun lambda(head, body)
+/// fun while(test, body)
+/// fun if(test, body_t, body_f)
+
+
+// TODO: operator :=/let needs to pattern match
+def `let`(x, y) = quasiquote(let!(unquote(x), unquote(y)));
+def `var`(x, y) = quasiquote(let!(unquote(x), unquote(y)));
+
+// TODO: operator = needs to handle tuples on the lhs
+def `=`(x, y)  = quasiquote(set!(unquote(x), unquote(y)));
+
+def `+=`(x, y) = quasiquote(unquote(x) = unquote(x) + unquote(y));
+def `-=`(x, y) = quasiquote(unquote(x) = unquote(x) - unquote(y));
+def `*=`(x, y) = quasiquote(unquote(x) = unquote(x) * unquote(y));
+def `/=`(x, y) = quasiquote(unquote(x) = unquote(x) / unquote(y));
+
+def `::`(x, y) = quasiquote(cons(unquote(x), unquote(y)));
+def `++`(x, y) = quasiquote(append(unquote(x), unquote(y)));
+
+def `or`(x, y) = quasiquote(if (unquote(x)) true else unquote(y));
+def `and`(x, y) = quasiquote(if (unquote(x)) unquote(y) else false);
+def `not`(x) = quasiquote(if (x) false else true);
+
+def `where`(x, y) = {
+    let type_ctx = (if (head(y) == Atom(",")) y else Atom(",") :: y :: Nil);
+    head(x) :: (Atom(",") :: tail(x)) :: type_ctx :: Nil;
+};
+
+def `protocol`(x, y) = {
+    println(">>>>");
+    println(x, y);
+    println("<<<<");
+    quote(true);
+};
+
+protocol T(a, b, c) where (U(a), V(b)) = ...;
+
+//T(a, b, c) where (U(a), V(b));
+//T(a, b, c) where U(a);
+//T(a) where U(a);
+
+exit(0);
+
 /*
+type Type = (TypeApp, TypeCtx)
+type TypeApp = String | List(Type)
+type TypeCtx = List(Type)
 
-The following definitions are built-in:
-Please note that the used syntax is not valid yet
+@synthesize(Printable, Printable, Printable, Printable, Printable)
+type Maybe(a') = None | Some(a');
 
-def Int  : Type = Core_T_INT
-def Str  : Type = Core_T_STR
-def Bool : Type = Core_T_BOOL
-def Real : Type = Core_T_REAL
-def Expr : Type = Core_T_EXPR
-def Void : Type = Core_T_VOID
+@soa
+type Point = (x: I64, y: I64)
 
-def ()    : Void = Core_O_VOID
-def nil   : Nil  = Core_O_NIL
-def true  : Bool = Core_O_TRUE
-def false : Bool = Core_O_FALSE
-def BS    : Str  = "\b"
-def HT    : Str  = "\t"
-def NL    : Str  = "\n"
-def CR    : Str  = "\r"
+val points = Point(1024)
 
-def Real : Int  -> Real         = { x in x.toDouble }
-def Int  : Real -> Int          = { x in x.toInt }
-def Int  : I64  -> Int          = { x in x.toInt }
-def Int  : Bool -> Int          = { x in if (x)  1 else 0 }
-def I64  : Int  -> I64          = { x in x.toLong }
-def Str  : Str  -> Str          = { x in x.toString }
-def Str  : I64  -> Str          = { x in x.toString }
-def Str  : Int  -> Str          = { x in x.toString }
-def Str  : Real -> Str          = { x in x.toString }
-def Str  : Bool -> Str          = { x in x.toString }
-def -    : Int  -> Int          = { x in -x }
-def -    : I64  -> I64          = { x in -x }
-def -    : Real -> Real         = { x in -x }
-def not  : Bool -> Bool         = { x in !x }
-def and  : Bool -> Bool -> Bool = { x, y in x && y }
-def or   : Bool -> Bool -> Bool = { x, y in x || y }
-def +    : Int  -> Int  -> Int  = { x, y in x + y }
-def +    : I64  -> I64  -> I64  = { x, y in x + y }
-def +    : Real -> Real -> Real = { x, y in x + y }
-def -    : Int  -> Int  -> Int  = { x, y in x - y }
-def -    : I64  -> I64  -> I64  = { x, y in x - y }
-def -    : Real -> Real -> Real = { x, y in x - y }
-def *    : Int  -> Int  -> Int  = { x, y in x * y }
-def *    : I64  -> I64  -> I64  = { x, y in x * y }
-def *    : Real -> Real -> Real = { x, y in x * y }
-def /    : Int  -> Int  -> Real = { x, y in x.toDouble / y.toDouble }
-def /    : Real -> Real -> Real = { x, y in x / y }
-def div  : Int  -> Int  -> Int  = { x, y in x / y }
-def div  : I64  -> I64  -> I64  = { x, y in x / y }
-def mod  : Int  -> Int  -> Int  = { x, y in x % y }
-def mod  : I64  -> I64  -> I64  = { x, y in x % y }
-def >=   : Int  -> Int  -> Bool = { x, y in x >= y }
-def >=   : Real -> Real -> Bool = { x, y in x >= y }
-def <=   : Int  -> Int  -> Bool = { x, y in x <= y }
-def <=   : Real -> Real -> Bool = { x, y in x <= y }
-def >    : Int  -> Int  -> Bool = { x, y in x > y }
-def >    : Real -> Real -> Bool = { x, y in x > y }
-def <    : Real -> Real -> Bool = { x, y in x < y }
-def <    : Int  -> Int  -> Bool = { x, y in x < y }
-def !=   : Int  -> Int  -> Bool = { x, y in x != y }
-def !=   : Real -> Real -> Bool = { x, y in x != y }
-def !=   : Bool -> Bool -> Bool = { x, y in x != y }
-def !=   : Str  -> Str  -> Bool = { x, y in x != y }
-def ==   : Int  -> Int  -> Bool = { x, y in x == y }
-def ==   : Real -> Real -> Bool = { x, y in x == y }
-def ==   : Bool -> Bool -> Bool = { x, y in x == y }
-def ==   : Str  -> Str  -> Bool = { x, y in x == y }
+type Either(a', b') = Left(a') | Right(b');
 
-def +=   : Atom -> Expr -> Expr = { x, y in '($x = $x + $y) }
-def -=   : Atom -> Expr -> Expr = { x, y in '($x = $x - $y) }
-def *=   : Atom -> Expr -> Expr = { x, y in '($x = $x * $y) }
+type Tree(a') = Leaf(a') | Node(left: Tree(a'), right: Tree(a'));
 
-fun Core_print : Str  -> ()   = { x in print(x) }
-fun Core_input : ()   -> Str  = { x in System.Console.readLine }
-fun Core_quote : Expr -> Expr = { x in AST.Node(AST.Tag.Quote, List(x)) }
-fun Core_time  : ()   -> I64  = { java.lang.System.currentTimeMillis() }
+type List(a') = Nil | Cons(a', List(a'));
+
+fun List(list: Varargs(A)): List(A) = list;
+
+type Array(element')
+type Table(key', value')
+
+type Term = Atom(String) | Term(List(Term));
+
+/// TODO: remove the AST type
+/// Removing the AST data type will make working with syntax trees seamless.
+/// However, a language extension, like Haskell's FlexibleInstances, must be written first.
+///
+/// ```
+/// #language(flexible_instances)
+/// protocol Term(a') = ...
+/// instance Term(String) = ...
+/// instance Term(List(a')) where Term(a') = ...
+/// ```
+
+type Bool;
+type Int;
+type Float;
+type Int8;
+type Int16;
+type Int32;
+type Int64;
+type Float32;
+type Float64;
+
+type Env = ();
+
+instance AST(Atom):
+
+instance Term(List(Term)):
+
+protocol Equatable(A) = {
+    fun `==`(x: A, y: A): Bool;
+};
+
+protocol Comparable(A) where Equatable(A) = {
+    fun `<`(x: A, y: A): Bool;
+};
+
+instance Comparable(Int) = {
+    fun `==`(x: Int, y: Int): Bool = x == y;
+    fun `<`(x: Int, y: Int): Bool = x < y;
+};
 
 */
 
+def for_classic(init, cond, post, body) = quasiquote({
+    unquote(init);
+    while (unquote(cond)) {
+        unquote(body)();
+        unquote(post);
+    };
+});
 
-// Operator group precedence relations must form a DAG
-// (directed acyclic graph)
+def do_while(cond, body) = quasiquote({
+    var first_loop = true;
+    while (first_loop or unquote(cond)) {
+        first_loop = false;
+        unquote(body)();
+    };
+});
+
+var x = 2;
+x += 3;
+println(x);
+
+println("testing for_classic:");
+for_classic (let i = 0, i < 10, i += 1) [
+    print(i, " ");
+];
+println("");
+
+println("testing do_while:");
+do_while (false) [
+    println(first_loop); // macro hygiene
+    println("in loop");
+];
 
 /*
-Pragma reference:
+fact := [x in if (x == 0) BigInt(1) else x * fact(x - BigInt(1))];
 
-#operatorgroup(name: Atom, kind: Atom, gt: Atom = nil, lt: Atom = nil)
-    kind = fx | fy | xfy | yfx | xfx | xf | yf
+fibo := [n in
+    var a = 0; var b = 1; var i = 0;
+    while (i < n) {
+        let tmp = a;
+        a = b;
+        b = tmp + b;
+        i = i + 1;
+    };
+    a;
+];
 
-#operator(group: Atom, names: Atom...)
+benchmark := [(n, lambda) in
+    x := 0;
+    i := 1;
+    while (i < n) {
+        start := time();
+        lambda();
+        x += Int(time() - start);
+        i += 1;
+    };
+    x / n;
+];
+
+println("hello, world!");
+println(benchmark(100, [fact(BigInt(100))]), "ms");
+println(fact(10));
+println(3.14);
+println("Hello, World!");
 */
 
-#operatorgroup(Assignment, xfy)
-#operatorgroup(Command, fy, gt: Assignment)
-#operatorgroup(Disjunction, yfx, gt: Command)
-#operatorgroup(Conjunction, yfx, gt: Disjunction)
-#operatorgroup(Negation, fy,  gt: Conjunction)
-#operatorgroup(Comparison, xfx, gt: Negation)
-#operatorgroup(Addition, yfx, gt: Comparison)
-#operatorgroup(Multiplication, yfx, gt: Addition)
-#operatorgroup(NumberSign, fx, gt: Multiplication)
-#operatorgroup(Quotation, fx, gt: NumberSign)
-
-#operator(Assignment, =, +=, -=, *=)
-#operator(Disjunction, or)
-#operator(Conjunction, and)
-#operator(Negation, not)
-#operator(Comparison, ==, !=, <, <=, >, >=)
-#operator(Addition, +, -)
-#operator(Multiplication, *, /, div, mod)
-#operator(NumberSign, -)
-#operator(Quotation, ')
-
-// Before you can use your custom operators,
-// they have to be compiled (for now)
-
-#operatorcompile()
-
-// Type definitions are optional _for now_, and the type system is incomplete,
-// so don't expect type checking
-
-// assignment to an operator requires backquotes
-
-let print: Any -> () = { it in
-    Core_print(Str(it))
-}
-
-let input: () -> Str = {
-    Core_input()
-}
-
-let println: Any -> () = { it in
-    print(it)
-    print(NL)
-}
-
-let time: () -> I64 = {
-    Core_time()
-}
-
-// You can pass around lambdas!
-
-// In C-like languages the following definition might look like this:
-// fun bench(passes: Int, lambda: () -> ()) -> Int { ... }
-// conclusion: types are written like in Haskell!
-
-let bench: Int -> (() -> ()) -> Int = { passes, lambda in
-    let sum = I64(0)
-    let i = 0
-    while (i < passes) {
-        let t0 = time()
-        lambda()
-        let t1 = time()
-        sum += t1 - t0
-        i += 1
-    }
-    Int(sum div I64(passes))
-}
-
-
-let ptime: (() -> ()) -> () = { lambda in
-    let dt = bench(1, lambda)
-    print("took: "); print(dt); println("ms")
-}
-
+/*
+def!(foo, (x), x);
+def!(bar, (x, y, z), quote(x = y + z));
+foo(u);
+bar(v, 2, 3);
+*/

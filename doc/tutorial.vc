@@ -1,0 +1,567 @@
+
+// Vitamin doesn't care if your use case is niche, it just does what you want.
+
+// Table of Contents
+//
+// . Comments
+// . Modules
+// . Imports
+// . Global Scope
+// . Main Function
+// . Constants, Variables and Types
+// . Arrays and Pointers
+// . Conditional Statement
+// . Loops
+// . Switch Statement
+// . Functions
+// . Structures
+// . Unions
+
+
+// ## Comments
+
+//  Single-line comments
+
+/*
+    Multi-line comments
+
+    /*
+        Can be nested
+    */
+*/
+
+/// # Documentation comments
+/// support `markdown`
+
+/**
+    Multi-line documentation comments
+*/
+
+
+/// ## Modules
+
+// Namespaces are modules
+// There can be multiple modules in a file
+
+// Code blocks are delimited by curly braces.
+// Any style is allowed, but the one used here is preferred.
+
+module Math {
+    // by convention indent content inside modules _once_
+    fun sqrt(x: Double): Double {
+        // ...
+    }
+}
+
+module Matrix {
+    // ...
+}
+
+
+// ## Imports
+
+// `use` declarations provide a convenient import mechanism.
+// Also, by the way, there are no header files.
+
+// you can use C functions normally, by importing `external` headers
+// by default everything is imported into the global namespace.
+// to prevent namespace pollution use `scoped` and `as` to encapsulate the code in a module
+use scoped external "stdio.h" as Cstdio
+
+// import only specific elements
+use scoped external "string.h" (strcpy, strcat)
+
+// or import everithing and hide some elements
+use external "string.h" hiding (strcpy, strcat)
+
+// The automatically generated `Cstdlib` module contains the entire C standard library.
+// Including modules doesn't bloat binaries or increase compilation times.
+// You only pay for the things you actually use (no pun intended).
+// This goes for all native modules, as efficient use of resources is one of the main design goals.
+use scoped Cstdlib
+
+// On the other hand, the hand-crafted `VitaminC` module contains an _opinionated_
+// interface to the C standard library. Use it if you want to.
+use VitaminC
+
+// ## Global Scope
+
+// Declarations exists outside the `main` function. Semicolons are optional,
+// they should only be used with multiple statements on one line.
+
+// Global constant names are UPPER_SNAKE_CASE by convention.
+
+// Functions begin with the `fun` keyword (to make you think programming is fun!).
+// Signature declarations are not needed. The compiler takes care of them for you,
+// so you can safely call functions declared below your current position in file.
+
+// ## Main Function
+
+// The program execution starts in the `main` function.
+// It's `argc` and `argv` arguments are optional.
+// You must return an Int at the end.
+
+// ## Constants, Variables and Types
+
+fun learn_values() {
+    // Create constants with the `let` keyword, and variables with the `var` keyword.
+    // Type specification is mandatory (at least for now).
+    // All Vitamin type names are written in PascalCase by convention.
+    // Declarations have the following form: 
+    //      keyword name ':' type = expression
+
+    // Constant declaration must also have assignment
+    let the_answer: Int = 42
+    // Type inference allows you to omit the types in assignment
+    let pi = 3.14 // Double
+
+    // Variable declaration without assignment
+    var letter: Char
+    letter = 'A'
+    letter = 'B'
+
+    // Multiple declaration
+    var alpha, beta = 'A', 'B'
+    alpha = beta = 'X'
+
+    // Basic types
+
+    // There is a Bool type
+    var good_mood = true
+    // Array type with specified size is a C pointer
+    let primes: [5]Int = [2, 3, 5, 7, 11]
+    // Normal access, bounds not checked
+    primes[0] // -> 2
+    primes[4] // -> 11
+    // Arrays are dynamic by default (see dynamic arrays)
+    let five = [1, 2, 3, 4, 5] // Int[]
+
+    five: [int, 5] = [1, 2, 3, 4, 5]
+
+    int[5]
+
+    // Pointer to Array of (Int, with size 5)
+    *Array(Int, 5)
+
+    // Array of (Pointer to Int, with size 5)
+    Array(*Int, 5)
+
+    [int,5]*
+
+    {}
+
+    []
+
+    (*[*int], [int]) -> ()
+
+    const * const int[]
+
+    // Array of arrays
+    let eye = [ // [][]Int
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1], // a trailing comma is allowed
+    ]
+
+
+    // Implicit type conversions are disallowed
+    // Instead, use the `as` operator
+    let cha: Int = 'A'        // ERROR
+    let chb: Int = 'B' as Int // OK
+    let chc: Rune = 'C'       // OK
+    // Unsafe type casting uses the `as!` operator
+    let str: Rune* = "probably an error" as! Int*
+
+    // String literals can be assigned to raw pointers.
+    // Unicode support in literals is built-in!
+    // Strings are null terminated like in C.
+    // Escape sequences are the same
+    // Trigraphs are removed
+    var char_string: Char* = "Maybe fancy unicode here!"
+
+    // `NULL` is renamed to `nil`
+    var char_null_pointer: Char* = nil
+
+
+    // All the operator friends are here!
+    // +, -, *, /, %, ++, --
+    // ==, !=, >, <, !, &&, ||
+    // ~, &, |, ^, <<, >>
+    // As well as the assignment versions
+    // +=, -=, *=, ...
+    //
+    // &&, || short circuit
+
+    // Division `/` operator _always_ returns a real number
+    5 / 2 // -> 2.5
+
+    // Integer quotient
+    5 div 2 // -> 2
+
+    // Modulo operator is renamed to `mod`
+    3 mod 2 // -> 1
+
+    // There is a `**` exponentiation operator
+    2**8 // -> 256
+}
+
+// ## Control Flow
+
+// fun, if, else, while, for, case, struct, enum
+
+fun learn_control_flow (count some other: Int)
+    printf "hello, world!\n"
+
+    if x > y:
+        print("x is bigger")
+    else if y > x:
+        print("y is bigger")
+    else:
+        print("x equals y")
+
+    begin:
+        i: s64 = 0
+        while i <= 10:
+            printf("%\n", i)
+
+    i = 0
+    do:
+        print("%\n", i)
+    while i <= 10
+
+
+    for i: s64 = 0; i <= 10; i++:
+        print(i)
+
+    case system_region():
+        "en_US":
+            print("Ameeeericaaa")
+        "en_GB":
+            print("Great Britain")
+        _:
+            print("Unsupported locale")
+
+
+
+
+fun learn_control_flow() {
+    // Elvis operator
+    let x: Int, y: Int = 5, 7
+    let max1: Int = x > y ? x : y
+
+    // Parentheses are _optional_ and discouraged
+    // Single line block _must_ be surrounded in braces
+    if x > y {
+        println("x is bigger")
+    } else if x < y {
+        println("y is bigger")
+    } else {
+        println("x and y are equal")
+    }
+
+    // The `for` loop is still here
+    for var i: Int = 0; i <= 10; ++i {
+        printf("%d\n", ii)
+    }
+
+    // `while` and `repeat` (renamed `do`)
+    var j: Int = 0
+    while true {
+        printf("%d\n", j)
+        if j > 10 {
+            break
+        }
+        j++
+    }
+
+    var k: Int = 0
+    do {
+        printf("%d\n", k)
+    } while ++kk <= 10
+
+    // The `switch` statements _do not fall through_,
+    // To fall through use the `fall` statement
+    // The `fallswitch` statement can be used to use the original C functionality.
+    //
+    // The `_` default case is not required
+    // the cases do must be const expressions (for now?)
+    // The compiler will warn if the switch is not exhaustive
+    let a: Int = 2
+    switch a {
+        case 0:
+            println("zero")
+        case 1:
+            println("one")
+            fall
+        default:
+            println("default")
+    }
+}
+
+// ## Functions
+
+fun add(x: Int, y: Int): Int {
+    return x + y
+}
+
+fun reverse(string: Char*, length: Size) {
+    for var i = 0; i < length div 2; i++ {
+        let temp: Char = string[i]
+        string[i] = string[length - i - 1]
+        string[length - i - 1] = temp
+    }
+}
+
+fun swap (x y: *Int, args: Varargs(Any), kwarg1: String = "", kwarg2: String = "")
+    temp = *x
+    *x = *y
+    *y = temp
+
+fun swap(x: Int*, y: Int*) {
+    let temp: Int = *x
+    *x = *y
+    *y = temp
+}
+
+fun fibonacci(n: Int): Int {
+    if n <= 0 { return 0 }
+    if n == 1 { return 1 }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+// ## Structures
+
+fun learn_structures() {
+    // Initializing structures. There is no `{0}`, as implicit casting is disallowed.
+    // But argument labels can be skipped
+    //
+    let r: Rectangle = Rectangle(width: 5, height: 10)
+    let r2: Rectangle = Rectangle(0, 0)
+    area(r) // area(r: Rectangle) is called
+    area(&r) // area(r: Rectangle*) is called
+}
+
+struct Rectangle {
+    width: Int
+    height: Int
+}
+
+// Pass structure by value (copy)
+fun area(r: Rectangle): Int {
+    return r.width * r.height
+}
+
+// Pass structure by reference (pointer)
+fun area(r: Rectangle*): Int {
+    // There is no `->` arrow operator. Access to pointer field == dereference.
+    return r.width * r.height
+}
+
+
+// A packed structure
+struct FloatGuts {
+    #bits(23)
+    fraction: U32 // TODO: new syntax
+    #bits(8)
+    exponent: U32
+    #bits(1)
+    sign: U32
+}
+
+// ## Enumerations
+
+// enum cases are PascalCase by convention, and
+enum Animal {
+    Dog, Cat, Frog
+}
+
+enum Color {
+
+}
+
+fun learn_enums() {
+    // Enum cases must be qualified...
+    let favourite_animal = Animal.Dog
+
+    // ...except when the context is obvious
+    switch favourite_animal {
+        .Frog -> printf("amphibian\n")
+        .Cat -> printf("feline\n")
+        .Dog -> printf("canine\n")
+    }
+}
+
+// ## Unions
+
+fun learn_unions() {
+    var x: MyFloat
+    x.f = 3.14
+    printf("%f = %d %x %x", x.f, x.guts.fraction, x.guts.exponent, x.guts.sign)
+}
+
+union MyFloat {
+    guts: FloatGuts
+    f: Float
+}
+
+
+
+
+// And this is the end... not!
+// Lots of helpful features described below were added to Vitamin.
+
+
+
+
+//
+// # New features
+//
+
+// ## Dynamic Arrays
+
+{
+    // dynamic arrays are not raw pointers
+    // they are used by default
+    var primes: []Int = [2, 3, 5]
+    primes.length // -> 3
+}
+
+// ## Algebraic data types
+
+struct Array(length: u64)
+
+enum Optional(T: Type)  {
+    Some(T)
+    None
+}
+
+enum Tree (T: Type) {
+    Leaf
+    Node(T, Tree(T), Tree(T))
+}
+
+// ## Optional Types
+
+// With algebraic datatypes come Optionals, Eithers, and all the others
+
+{
+
+}
+
+// ## For-Each loop
+
+{
+    var primes = [2, 3, 5]
+    for prime in primes {
+
+    }
+
+    for i in range(primes.length) {
+        printf("%d ", primes[i]) // -> 2 3 5
+    }
+}
+
+// ## Automatic SOA (shamelessly taken from Jai)
+
+Vector3: struct {
+    x: Float = 1
+    y: Float = 2
+    z: Float = 3
+}
+
+// Just add a compiler directive before the struct, and that's it!
+@SOA
+struct Vector3SOA {
+    x: Float = 1
+    y: Float = 2
+    z: Float = 3
+}
+
+{
+    let a: [4]Vector3    // memory: 1 2 3 1 2 3 1 2 3 1 2 3
+    let a: [4]Vector3SOA // memory: 1 1 1 1 2 2 2 2 3 3 3 3
+}
+
+// ## Struct Pointer Ownership
+
+struct Node {
+    @owned a: Node*
+    @owned b: Node*
+}
+
+{
+    var p = new Node
+    p.a = new Node
+    p.b = new Node
+    del p // p.a and p.b are deleted
+}
+
+// ## Function Inlining
+
+@inline
+@no_inline
+
+// ## Algebraic Data Types Algebraic data types are expressed as unions in C
+
+
+// ## Lambdas
+
+{
+    fun pow1(base: Double, exp: Double): Double { return base**exp }
+
+    // Lambda syntax is almost the same as the normal function syntax
+    let pow2 = (base: Double, exp: Double): Double { return base**exp }
+
+    // However, the `return` is opitonal
+    let pow3 = (base: Double, exp: Double): Double { base**exp }
+
+    // The return type can be easily inferred
+    let pow4 = (base: Double, exp: Double) { base**exp }
+
+    // Named arguments can have implicit names
+    let pow4 = (Double, Double) { $1**$2 }
+
+    // When _passing_ a lambda argument types are optional too
+    var my_numbers = [8,5,4,6,8,5,0]
+    sort(my_numbers, { $1 < $2 })
+}
+
+// ## Pattern Matching
+
+
+// ## More Control Flow
+
+{
+    // There's a new `for in` loop
+    for var i: Int in range(0, 10) {
+        printf("%d\n", i)
+    }
+}
+
+
+
+// Basic types
+
+I8  I16 I32 I64 I128 // int   8/16/32/64 bit
+U8  U16 U32 U64 U128 // uint  8/16/32/64 bit
+F16 F32 F64 F128 // half/single/double/quadruple
+
+// Smart types
+
+Int Size Real   // alias to the largest signed/unsigned/floating
+
+// Tuple types
+
+(Int Int Int)
+
+[Int]
+[Int, 10]
+[Int?, 10]?
+
+Int[]
+Int[10]
+Int?[10]?
+
+Int**
+
