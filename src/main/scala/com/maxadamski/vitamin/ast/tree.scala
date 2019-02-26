@@ -28,10 +28,11 @@ case class Atom(var value: String) extends Tree {
   def encodePratt(ops: List[String]): List[Token] = Nil
 
   def sexpr(pretty: Boolean, level: Int = 0): String = {
+    import scala.reflect.runtime.universe._
     if (value.isEmpty) return "''"
     //if (value.matches("[^#@A-Za-z0-9!?]+")) return "'" + value + "'"
     if (value.matches("\\s+")) return "'" + value + "'"
-    value
+    Literal(Constant(value)).toString.stripPrefix("\"").stripSuffix("\"")
   }
 
   def cons(other: Tree): Tree = other match {

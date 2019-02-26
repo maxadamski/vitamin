@@ -107,7 +107,7 @@ object Vitamin {
   def main(args: Array[String]): Unit = {
     var args2 = args.toList
     if (args2.isEmpty)
-      args2 = "res/tests/basic.vc" :: Nil
+      args2 = "res/stdlib.vc" :: Nil
     val arguments = parseArgs(args2)
     verifyArgs(arguments)
 

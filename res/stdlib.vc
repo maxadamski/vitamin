@@ -248,16 +248,16 @@ x += 3;
 println(x);
 
 println("testing for_classic:");
-for_classic (let i = 0, i < 10, i += 1) [
+for_classic (let i = 0, i < 10, i += 1) {
     print(i, " ");
-];
+};
 println("");
 
 println("testing do_while:");
-do_while (false) [
+do_while (false) {
     println(first_loop); // macro hygiene
     println("in loop");
-];
+};
 
 /*
 fact := [x in if (x == 0) BigInt(1) else x * fact(x - BigInt(1))];

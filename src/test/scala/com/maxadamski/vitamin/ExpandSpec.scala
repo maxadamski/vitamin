@@ -12,10 +12,10 @@ class ExpandSpec extends FunSpec {
   def mkEnv(): Env = {
     val env = new Env()
     env.parser.opGroups = Map(
-      "comma" -> OpGroup("comma", Fixity.LeftChain, Associativity.Left, None, None),
+      "comma" -> OpGroup("comma", Fixity.LeftChain, Associativity.Left, None, None)
     )
     env.parser.opNames = Set(
-      OpName("comma", ","),
+      OpName("comma", ",")
     )
     env.parser.updateParser()
     env

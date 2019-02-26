@@ -3,40 +3,28 @@ package com.maxadamski.vitamin.parser
 import math.max
 import reflect.ClassTag
 import collection.JavaConverters._
-
-import com.maxadamski.vitamin.gen.VitaminCParser._
+import com.maxadamski.vitamin.gen.VitaminParser._
 import com.maxadamski.vitamin.gen._
-import com.maxadamski.vitamin.ast.{Tree, Term, Atom, Rule, Span}
+import com.maxadamski.vitamin.ast.{Atom, Rule, Span, Term, Tree}
 import com.maxadamski.vitamin.ast.Term._
 import org.antlr.v4.runtime._
+import org.antlr.v4.runtime.tree.ParseTree
 
 object Parser {
-  def parseString(string: String): Tree = {
-    parseInput(new ANTLRInputStream(string))
-  }
+  def parseExpr(x: String): Tree = parseRule(new ANTLRInputStream(x), p => p.expr())
 
-  def parseFile(path: String): Tree = {
-    parseInput(new ANTLRFileStream(path))
-  }
+  def parseFile(x: String): Tree = parseRule(new ANTLRFileStream(x), p => p.file())
 
-  def parseExpr(string: String): Tree = {
-    val lexer = new VitaminCLexer(new ANTLRInputStream(string))
+  def parseRule(input: CharStream, rule: VitaminParser => ParseTree): Tree = {
+    val lexer = new VitaminLexer(input)
     val tokens = new CommonTokenStream(lexer)
-    val parser = new VitaminCParser(tokens)
+    val parser = new VitaminParser(tokens)
     val visitor = new VitaminCVisitor()
-    visitor.visit(parser.expr)
-  }
-
-  def parseInput(input: CharStream): Tree = {
-    val lexer = new VitaminCLexer(input)
-    val tokens = new CommonTokenStream(lexer)
-    val parser = new VitaminCParser(tokens)
-    val visitor = new VitaminCVisitor()
-    visitor.visit(parser.program)
+    visitor.visit(rule(parser))
   }
 }
 
-private class VitaminCVisitor extends VitaminCBaseVisitor[Tree] {
+private class VitaminCVisitor extends VitaminParserBaseVisitor[Tree] {
   implicit class ParserRuleContextExtension(ctx: ParserRuleContext) {
     def mkTerm(data: List[Tree]): Term = withRule(Term(data))
 
@@ -65,40 +53,10 @@ private class VitaminCVisitor extends VitaminCBaseVisitor[Tree] {
     }
   }
 
-  override def visitProgram(ctx: ProgramContext): Tree =
-    visit(ctx.chunk)
-
-  override def visitChunk(ctx: ChunkContext): Tree =
+  override def visitBody(ctx: BodyContext): Tree =
     ctx.mkTerm(BLOCK :: ctx.expr.map(visit))
 
-  /*
-  override def visitExprDef(ctx: ExprDefContext): Tree =
-    ctx.mkTerm(DEF :: visit(ctx.atom) :: ctx.expr.map(visit))
-
-  override def visitExprFun(ctx: ExprFunContext): Tree =
-    ctx.mkTerm(FUN :: visit(ctx.atom) :: ctx.expr.map(visit))
-
-  override def visitExprLet(ctx: ExprLetContext): Tree =
-    ctx.mkTerm(LET :: ctx.expr.map(visit))
-  */
-
-  override def visitExprIf(ctx: ExprIfContext): Tree =
-    ctx.mkTerm(IF :: ctx.expr.map(visit))
-
-  override def visitExprWhile(ctx: ExprWhileContext): Tree =
-    ctx.mkTerm(WHILE :: ctx.expr.map(visit))
-
-  override def visitExprFor(ctx: ExprForContext): Tree =
-    ctx.mkTerm(FOR :: ctx.expr.map(visit))
-
-  override def visitExprUse(ctx: ExprUseContext): Tree = {
-    val args = ctx.expr.map(visit)
-    val mode = if (ctx.text.contains("select")) "select" else "except"
-    val qual = if (ctx.text.contains("qualified")) TRUE else FALSE
-    ctx.mkTerm(USE :: Atom(mode) :: qual :: args)
-  }
-
-  override def visitExprFlat(ctx: ExprFlatContext): Tree = {
+  override def visitExpr(ctx: ExprContext): Tree = {
     ctx.prim.map(visit).map(expandFlat) match {
       case head :: Nil => head
       case list => ctx.mkTerm(PARSE :: list.map(expandFlat))
@@ -110,16 +68,19 @@ private class VitaminCVisitor extends VitaminCBaseVisitor[Tree] {
     case _ => x
   }
 
-  override def visitPrimList(ctx: PrimListContext): Tree = ctx.expr.map(visit) match {
+  override def visitFile(ctx: FileContext): Tree = visit(ctx.body)
+
+  override def visitList(ctx: ListContext): Tree = ctx.expr.map(visit) match {
     //case head :: Nil => head
     case list => ctx.mkTerm(TUPLE :: list)
   }
 
-  override def visitPrimCall(ctx: PrimCallContext): Tree = {
-    val callee = visit(ctx.callee)
-    val args = ctx.primList.map(visit)
+  override def visitPrim(ctx: PrimContext): Tree = {
+    if (ctx.lite != null) return visit(ctx.lite)
+    val callee = visit(ctx.call)
+    val args = ctx.list.map(visit)
     val res = args.fold(callee)((sum, it) => ctx.mkTerm(sum :: toArguments(it)))
-    if (ctx.primLambda != null) res.asInstanceOf[Term].value :+= visit(ctx.primLambda)
+    if (ctx.func != null) res.asInstanceOf[Term].value :+= visit(ctx.func)
     res
   }
 
@@ -129,32 +90,9 @@ private class VitaminCVisitor extends VitaminCBaseVisitor[Tree] {
     case _ => ast :: Nil
   }
 
-  override def visitPrimLambda(ctx: PrimLambdaContext): Tree = {
+  override def visitFunc(ctx: FuncContext): Tree = {
     val params = if (ctx.expr != null) visit(ctx.expr) else Term(Nil)
-    ctx.mkTerm(LAMBDA :: params :: visit(ctx.chunk) :: Nil)
-  }
-
-  override def visitPrimBlock(ctx: PrimBlockContext): Tree =
-    visit(ctx.chunk)
-
-  override def visitSymbol(ctx: SymbolContext): Tree =
-    ctx.mkAtom(ctx.text)
-
-  override def visitStr(ctx: StrContext): Tree = {
-    val text = StringContext.treatEscapes(ctx.text.stripPrefix("\"").stripSuffix("\""))
-    ctx.mkTerm(STRING :: Atom(text) :: Nil)
-  }
-
-
-  override def visitNum(ctx: NumContext): Tree = {
-    val text = ctx.text.toLowerCase
-    val sign = if (text.contains("-")) "-" else "+"
-    val args: List[Tree] = text.stripPrefix("-").stripPrefix("+").split('.') match {
-      case Array(integer, decimal) => Atom(integer) :: Atom(decimal) :: Nil
-      case Array(integer) => Atom(integer) :: Atom("") :: Nil
-      case _ => throw new Exception("impossible@visitVNum")
-    }
-    ctx.mkTerm(NUMBER :: Atom(sign) :: args)
+    ctx.mkTerm(LAMBDA :: params :: visit(ctx.body) :: Nil)
   }
 
   override def visitAtom(ctx: AtomContext): Tree = {
@@ -167,5 +105,54 @@ private class VitaminCVisitor extends VitaminCBaseVisitor[Tree] {
     leaf.escaped = quoted
     leaf
   }
+
+  override def visitLite(ctx: LiteContext): Tree = {
+    if (ctx.Num1 != null) return visitNum1(ctx, ctx.Num1.getText)
+    if (ctx.Num2 != null) return visitNum2(ctx, ctx.Num2.getText)
+    if (ctx.Str1 != null) return visitStr1(ctx, ctx.Str1.getText)
+    if (ctx.Str2 != null) return visitStr2(ctx, ctx.Str2.getText)
+    if (ctx.Symb != null) return visitSymb(ctx, ctx.Symb.getText)
+    throw new Exception("impossible")
+  }
+
+  def visitNum1(ctx: LiteContext, str: String): Tree = {
+    val bases = Map('b' -> 2, 'o' -> 8, 'x' -> 16)
+    val (radix, number) = if (str.startsWith("0")) {
+      (bases(1).toString, str.substring(2).replace("_", ""))
+    } else {
+      val Array(x, y) = str.split("#", 1)
+      (x, y.replace("_", ""))
+    }
+    ctx.mkTerm(NUMBER :: Atom(radix) :: Atom(number) :: Atom("") :: Nil)
+  }
+
+  def visitNum2(ctx: LiteContext, str: String): Tree = {
+    val args: List[Tree] = str.split('.') match {
+      case Array(integer, decimal) => Atom(integer) :: Atom(decimal) :: Nil
+      case Array(integer) => Atom(integer) :: Atom("") :: Nil
+      case _ => throw new Exception("impossible@visitVNum")
+    }
+    ctx.mkTerm(NUMBER ::  args)
+  }
+
+  def processStr(str: String, leftSep: String, rightSep: String): (String, String) = {
+    val x = str.stripSuffix(rightSep).stripPrefix(leftSep).split(leftSep, 1)
+    val (sigil, text) = x match { case Array(x) => ("", x); case Array(x, y) => (x, y) }
+    (sigil, StringContext.treatEscapes(text))
+  }
+
+  def visitStr1(ctx: LiteContext, str: String): Tree = {
+    val (f, text) = processStr(str, "\"", "\"")
+    val term = ctx.mkTerm(STRING :: Atom(text) :: Nil)
+    if (f.nonEmpty) Term(Atom(f"sigil_$f") :: term :: Nil) else term
+  }
+
+  def visitStr2(ctx: LiteContext, str: String): Tree = {
+    val (f, text) = processStr(str, "\"\"\"", "\"\"\"")
+    val term = ctx.mkTerm(STRING :: Atom(text) :: Nil)
+    if (f.nonEmpty) Term(Atom(f"sigil_$f") :: term :: Nil) else term
+  }
+
+  def visitSymb(ctx: LiteContext, str: String): Tree = ctx.mkAtom(str)
 }
 
