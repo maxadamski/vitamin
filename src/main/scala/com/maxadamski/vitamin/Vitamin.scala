@@ -3,13 +3,13 @@ package com.maxadamski.vitamin
 import collection.mutable.{ArrayBuffer, Map => MutableMap}
 import System.err.{println => eprintln}
 import System.exit
-import java.nio.file.Paths
+import java.io.{File, FileInputStream}
+import java.nio.file.{Files, Paths}
 
 import com.maxadamski.vitamin.ast.{Atom, Term, Tree}
 import com.maxadamski.vitamin.runtime.Core.SyntaxError
 import parser._
 import runtime._
-
 import ast.Term._
 import TypeSystem._
 
@@ -40,7 +40,7 @@ object Vitamin {
        |        print the program at the specified compilation LEVEL
        |
        | EXAMPLE
-       |    vc stdlib.vc main.vc
+       |    vc stdlib.md main.vc
        |
        | NOTES
        |    FILEs are evaluated in the order they're given
@@ -184,13 +184,21 @@ object Vitamin {
     val eq_a = sat(tc(tn("Eq"), tn("'a")))
     val all_a = forall(tn("'a"))
 
+    val lexer = new Lexer()
+
     args2 foreach { file =>
       println(s"-- [$file] ------")
       env.file = file
 
-      var parsed = Parser.parseFile(file)
-      println("-- parsed   ------")
-      println(parsed)
+
+
+      //var parsed = Parser.parseFile(file)
+      val bytes = Files.readAllBytes(Paths.get(file)).toList
+      val lexed = lexer.tokens(bytes)
+      println("-- lexed   ---------")
+      println(lexed)
+
+      val parsed = Term(Nil)
 
       try {
         val expanded = Core.expand(env, toplevel = true)(parsed)
