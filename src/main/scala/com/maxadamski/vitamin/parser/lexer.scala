@@ -35,6 +35,7 @@ object LexerByteClasses {
   val COM2_L   : ListClass = List('/', '*')
   val COM2_R   : ListClass = List('*', '/')
   val STR1     : ListClass = List('"')
+  val STR3     : ListClass = List('`')
   val STR2     : ListClass = List('"', '"', '"')
 }
 
@@ -162,6 +163,8 @@ class Lexer {
         tokens :+= tok(lexComment2())
       } else if (QUOTE(b)) {
         tokens :+= StringToken(None, lexString().toArray)
+      } else if (QUASI(b)) {
+        tokens :+= StringToken(None, lexStringN(1, STR3, STR3).toArray)
       } else if (DIGIT(b)) {
         tokens :+= lexNumber()
       } else if (SEPARATOR(b)) {

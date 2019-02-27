@@ -190,8 +190,6 @@ object Vitamin {
       println(s"-- [$file] ------")
       env.file = file
 
-
-
       //var parsed = Parser.parseFile(file)
       val bytes = Files.readAllBytes(Paths.get(file)).toList
       val lexed = lexer.tokens(bytes)
