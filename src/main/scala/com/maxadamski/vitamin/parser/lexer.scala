@@ -2,41 +2,43 @@ package com.maxadamski.vitamin.parser
 
 object LexerByteClasses {
   type Class = Byte => Boolean
-  type ListClass = List[Byte]
+  type ByteList = List[Byte]
 
-  def NL: Class = _ == '\n'
-  def CR: Class = _ == '\r'
-  def TAB: Class = _ == '\t'
-  def SPC: Class = _ == ' '
-  def ESC: Class = _ == '\\'
-  def EOF: Class = _ == '\0'
-  def DOT: Class = _ == '.'
-  def SEMI: Class = _ == ';'
-  def HASH: Class = _ == '#'
-  def QUOTE: Class = _ == '"'
-  def QUASI: Class = _ == '`'
+  val NL   : Byte = '\n'
+  val CR   : Byte = '\r'
+  val TAB  : Byte = '\t'
+  val SPC  : Byte = ' '
+  val ESC  : Byte = '\\'
+  val EOF  : Byte = '\0'
+  val DOT  : Byte = '.'
+  val SEMI : Byte = ';'
+  val HASH : Byte = '#'
+  val QUOTE: Byte = '"'
+  val QUASI: Byte = '`'
 
-  def ALPHA      : Class = x => x >= 'a' && x <= 'z' || x >= 'A' && x <= 'Z'
-  def DIGIT      : Class = x => x >= '0' && x <= '9'
-  def WHITE      : Class = x => x == '\t' || x == ' '
-  def ATOM_HEAD  : Class = x => ALPHA(x) || List('_', '#', '@').contains(x)
-  def ATOM_TAIL  : Class = x => ALPHA(x) || DIGIT(x) || List('_', '!', '?').contains(x)
-  def SYMB_HEAD  : Class = x => ":<>=.*/~^$&|!?%+-" contains x
-  def SYMB_TAIL  : Class = x => SYMB_HEAD(x) || ("@#" contains x)
-  def LPAREN     : Class = x => x == '('
-  def SEPARATOR  : Class = x => x == ',' || x == ';'
+  val COM1  : ByteList = List('/', '/')
+  val COM2_L: ByteList = List('/', '*')
+  val COM2_R: ByteList = List('*', '/')
+  val STR1  : ByteList = List('"')
+  val STR3  : ByteList = List('`')
+  val STR2  : ByteList = List('"', '"', '"')
+  val LGROUP: ByteList = List('{', '[', '(')
+  val RGROUP: ByteList = List('}', ']', ')')
+
+  def ALPHA    : Class = x => x >= 'a' && x <= 'z' || x >= 'A' && x <= 'Z'
+  def DIGIT    : Class = x => x >= '0' && x <= '9'
+  def WHITE    : Class = x => x == '\t' || x == ' '
+  def ATOM_HEAD: Class = x => ALPHA(x) || List('_', '#', '@').contains(x)
+  def ATOM_TAIL: Class = x => ALPHA(x) || DIGIT(x) || List('_', '!', '?').contains(x)
+  def SYMB_HEAD: Class = x => ":<>=.*/~^$&|!?%+-" contains x
+  def SYMB_TAIL: Class = x => SYMB_HEAD(x) || ("@#" contains x)
+  def LPAREN   : Class = x => x == '('
+  def SEPARATOR: Class = x => x == ',' || x == ';'
 
   def NOT_NEWLINE: Class = x => x != '\n' && x != '\r'
   def DIGITS1_H  : Class = x => DIGIT(x)
   def DIGITS1_T  : Class = x => DIGIT(x) || x == '_'
   def EXP        : Class = x => x == 'e' || x == 'E'
-
-  val COM1     : ListClass = List('/', '/')
-  val COM2_L   : ListClass = List('/', '*')
-  val COM2_R   : ListClass = List('*', '/')
-  val STR1     : ListClass = List('"')
-  val STR3     : ListClass = List('`')
-  val STR2     : ListClass = List('"', '"', '"')
 }
 
 class Lexer {
@@ -92,20 +94,24 @@ class Lexer {
 
   // -- Common matchers
 
+  private def matches(matcher: ByteList): Boolean = peekn(matcher.length) == matcher
+  private def matches(matcher: Byte): Boolean = matches(_ == matcher, peek())
+  private def matches(matcher: Class): Boolean = matches(matcher, peek())
+
   private def matches(matcher: Class, x: Option[Byte]): Boolean = x match {
     case Some(b) if matcher(b) => true
     case _ => false
   }
 
-  private def matches(matcher: Class): Boolean = matches(matcher, peek())
-
-  private def matches(matcher: ListClass, n: Int): Boolean = peekn(n) == matcher
-
-  private def eatOne(matcher: Byte => Boolean): Option[Byte] = {
+  private def eatOne(matcher: Class): Option[Byte] = {
     if (matches(matcher, peek())) eat() else None
   }
 
-  private def eatStar(matcher: Byte => Boolean): List[Byte] = {
+  private def eatOne(matcher: Byte): Option[Byte] = {
+    eatOne(_ == matcher)
+  }
+
+  private def eatStar(matcher: Class): List[Byte] = {
     var buffer = List[Byte]()
     while (matches(matcher, peek())) buffer :+= eat().get
     buffer
@@ -118,74 +124,123 @@ class Lexer {
 
   // -- Custom lexer code
 
+  def lexNLCR(): List[Token] = {
+    var tokens = List[Token]()
+    lexNewline()
+    if (mode.isEmpty || mode.head == "{}") {
+      // newline means semicolon if a block is open
+      tokens :+= tok("EOS")
+      while (matches(NL) || matches(CR)) lexNewline()
+    } else if (mode.head == "ESC") {
+      // pop escape mode
+      mode = mode.tail
+    }
+    tokens
+  }
+
+  def lexESC(): List[Token] = {
+    eat()
+    mode +:= "ESC"
+    Nil
+  }
+
+  def lexLGROUP(): List[Token] = {
+    val b = eat().get
+    mode +:= lgroup(b)
+    tok(b) :: Nil
+  }
+
+  def lexRGROUP(): List[Token] = {
+    val b = eat().get
+    val m = rgroup(b)
+    if (mode.head.isEmpty)
+      throw new Exception(f"unmatched parenthesis $m")
+    if (mode.head != m)
+      throw new Exception(f"unmatched parenthesis $m, currently ${mode.head} is open")
+    mode = mode.tail
+    var tokens = tok(b) :: Nil
+    if (matches(LPAREN))
+      tokens :+= tok("CAL")
+    tokens
+  }
+
+  def lexEOF(): List[Token] = {
+    // check if all parentheses have been closed
+    if (mode.nonEmpty && List("()", "{}", "[]").contains(mode.head))
+      throw new Exception(f"parentheses not closed ${mode.head} despite end of file")
+    Nil
+  }
+
+  def lexSEP(): List[Token] = {
+    tok(eat().get) :: Nil
+  }
+
+  def lexWS(): List[Token] = {
+    // ignore whitespace
+    eatStar(WHITE)
+    Nil
+  }
+
+  def lexQUOTE(): List[Token] = {
+    StringToken(None, lexString().toArray) :: Nil
+  }
+
+  def lexQUASI(): List[Token] = {
+    StringToken(None, lexStringN(STR3, STR3).toArray) :: Nil
+  }
+
+  def lexNUMBER(): List[Token] = {
+    lexNumber() :: Nil
+  }
+
+  def lexSYMB(): List[Token] = {
+    val atom = eatn(1) ++ eatStar(SYMB_TAIL)
+    var tokens = tok(atom) :: Nil
+    if (matches(LPAREN)) tokens :+= tok("CAL")
+    tokens
+  }
+
+  def lexATOM(): List[Token] = {
+    // new atom
+    val atom = eatn(1) ++ eatStar(ATOM_TAIL)
+    // if the atom is actually a sigil, also lex string
+    var tokens = List[Token]()
+    if (matches(STR1)) {
+      tokens :+= StringToken(Some(atom.toArray), lexString().toArray)
+    } else {
+      tokens :+= tok(atom)
+      if (matches(LPAREN)) tokens :+= tok("CAL")
+    }
+    tokens
+  }
+
+  def lexCOM1(): List[Token] = {
+    tok(lexComment1()) :: Nil
+  }
+
+  def lexCOM2(): List[Token] = {
+    tok(lexComment2()) :: Nil
+  }
+
   def tokens(bytes: List[Byte]): List[Token] = {
     next = bytes
     var tokens = List[Token]()
     while (next.nonEmpty) {
-      var Some(b) = peek()
-      if (NL(b) || CR(b)) {
-        lexNewline()
-        if (mode.isEmpty || mode.head == "{}") {
-          // newline means semicolon if a block is open
-          tokens :+= tok("EOS")
-          while (matches(NL) || matches(CR)) lexNewline()
-        } else if (mode.head == "ESC") {
-          // pop escape mode
-          mode = mode.tail
-        }
-      } else if (ESC(b)) {
-        eat()
-        mode +:= "ESC"
-      } else if (lgroup contains b) {
-        eat()
-        mode +:= lgroup(b)
-        tokens :+= tok(b)
-      } else if (rgroup contains b) {
-        eat()
-        val m = rgroup(b)
-        if (mode.head.isEmpty)
-          throw new Exception(f"unmatched parenthesis $m")
-        if (mode.head != m)
-          throw new Exception(f"unmatched parenthesis $m, currently ${mode.head} is open")
-        mode = mode.tail
-        tokens :+= tok(b)
-        if (matches(LPAREN)) tokens :+= tok("CAL")
-      } else if (EOF(b)) {
-        // check if all parentheses have been closed
-        if (mode.nonEmpty && List("()", "{}", "[]").contains(mode.head))
-          throw new Exception(f"parentheses not closed ${mode.head} despite end of file")
-      } else if (WHITE(b)) {
-        // ignore whitespace
-        eatStar(WHITE)
-      } else if (matches(COM1, 2)) {
-        tokens :+= tok(lexComment1())
-      } else if (matches(COM2_L, 2)) {
-        tokens :+= tok(lexComment2())
-      } else if (QUOTE(b)) {
-        tokens :+= StringToken(None, lexString().toArray)
-      } else if (QUASI(b)) {
-        tokens :+= StringToken(None, lexStringN(1, STR3, STR3).toArray)
-      } else if (DIGIT(b)) {
-        tokens :+= lexNumber()
-      } else if (SEPARATOR(b)) {
-        tokens :+= tok(eat().get)
-      } else if (SYMB_HEAD(b)) {
-        val atom = eatn(1) ++ eatStar(SYMB_TAIL)
-        tokens :+= tok(atom)
-        if (matches(LPAREN)) tokens :+= tok("CAL")
-      } else if (ATOM_HEAD(b)) {
-        // new atom
-        val atom = eatn(1) ++ eatStar(ATOM_TAIL)
-        // if the atom is actually a sigil, also lex string
-        if (matches(STR1, 1)) {
-          tokens :+= StringToken(Some(atom.toArray), lexString().toArray)
-        } else {
-          tokens :+= tok(atom)
-          if (matches(LPAREN)) tokens :+= tok("CAL")
-        }
-      } else {
-        throw new Exception(f"unknown token ${b.toChar}")
-      }
+      tokens :+= if (matches(NL) || matches(CR)) lexNLCR()
+      else if (matches(ESC)) lexESC()
+      else if (matches(LGROUP)) lexLGROUP()
+      else if (matches(RGROUP)) lexRGROUP()
+      else if (matches(EOF)) lexEOF()
+      else if (matches(WHITE)) lexWS()
+      else if (matches(COM1)) lexCOM1()
+      else if (matches(COM2_L)) lexCOM2()
+      else if (matches(QUOTE)) lexQUOTE()
+      else if (matches(QUASI)) lexQUASI()
+      else if (matches(DIGIT)) lexNUMBER()
+      else if (matches(SEPARATOR)) lexSEP()
+      else if (matches(SYMB_HEAD)) lexSYMB()
+      else if (matches(ATOM_HEAD)) lexATOM()
+      else throw new Exception(f"unknown token ${peek().get.toChar}")
     }
     tokens
   }
@@ -201,25 +256,25 @@ class Lexer {
   }
 
   private def lexString(): List[Byte] = {
-    if (matches(STR2, 3))
-      lexStringN(3, STR2, STR2, multiline = true)
+    if (matches(STR2))
+      lexStringN(STR2, STR2, multiline = true)
     else
-      lexStringN(1, STR1, STR1)
+      lexStringN(STR1, STR1)
   }
 
-  private def lexStringN(DC: Int, LD: ListClass, RD: ListClass, multiline: Boolean = false): List[Byte] = {
+  private def lexStringN(LD: ByteList, RD: ByteList, multiline: Boolean = false): List[Byte] = {
     // ld/rd: left/right delimiter
     // dc: length of delimiter
-    var buffer = eatn(DC)
+    var buffer = eatn(LD.length)
     // peek().get is unsafe!
-    while (!matches(RD, DC) && (multiline || matches(NOT_NEWLINE))) {
+    while (!matches(RD) && (multiline || matches(NOT_NEWLINE))) {
       if (matches(ESC)) buffer :+= eat().get
       val b = eat().getOrElse(
         throw new Exception("end of file while string is open")
       )
       buffer :+= b
     }
-    buffer ++= eatn(DC)
+    buffer ++= eatn(RD.length)
     buffer
   }
 
@@ -242,10 +297,10 @@ class Lexer {
     var level = 1
     var buffer = eat().get :: eat().get :: Nil
     while (level > 0 && next.nonEmpty) {
-      if (matches(COM2_L, 2)) {
+      if (matches(COM2_L)) {
         buffer ++= eat().get :: eat().get :: Nil
         level += 1
-      } else if (matches(COM2_R, 2)) {
+      } else if (matches(COM2_R)) {
         buffer ++= eat().get :: eat().get :: Nil
         level -= 1
         if (level < 0)
