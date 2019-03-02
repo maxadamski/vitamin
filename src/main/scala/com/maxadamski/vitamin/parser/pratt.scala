@@ -42,13 +42,13 @@ object Fixity extends Enumeration {
 case class Operator(name: String, precedence: Int, fixity: Fixity, associativity: Associativity)
 
 case class NullOp(
-  nud: (PrattParser, Token, Int) => Either[PrattError, PrattCall],
-  rbp: Int, nbp: Int
+                   nud: (PrattParser, Token, Int) => Either[PrattError, PrattCall],
+                   rbp: Int, nbp: Int
 )
 
 case class LeftOp(
-  led: (PrattParser, Token, Int, PrattCall) => Either[PrattError, PrattCall],
-  lbp: Int, rbp: Int, nbp: Int
+                   led: (PrattParser, Token, Int, PrattCall) => Either[PrattError, PrattCall],
+                   lbp: Int, rbp: Int, nbp: Int
 )
 
 case class PrattCall(head: Token, var tail: List[PrattCall])
@@ -230,12 +230,12 @@ object PrattParser {
   val BOF_TOKEN = Token(BOF, Nil)
 
   private def makeLeft(name: String, led: (PrattParser, Token, Int, PrattCall) => Either[PrattError, PrattCall],
-    lbp: Int, rbp: Int, nbp: Option[Int] = None) = {
+                       lbp: Int, rbp: Int, nbp: Option[Int] = None) = {
     name -> LeftOp(led, lbp, rbp, nbp.getOrElse(rbp))
   }
 
   private def makeNull(name: String, nud: (PrattParser, Token, Int) => Either[PrattError, PrattCall],
-    rbp: Int, nbp: Option[Int] = None) = {
+                       rbp: Int, nbp: Option[Int] = None) = {
     name -> NullOp(nud, rbp, nbp.getOrElse(rbp))
   }
 

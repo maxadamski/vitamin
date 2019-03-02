@@ -38,7 +38,7 @@
 
 #### Grammar
 ```
-Whitespace ::= [ \t]+ ;
+Whitespace ::= [ \n\r\t\v\f\0]+ ;
 ```
 
 ```
@@ -62,23 +62,40 @@ Multi line comments begin with `/*`, end with `*/`, and can be nested.
 
 #### Grammar
 ```
+Comment  ::= Comment1 | Comment2
 Comment1 ::= '//' [^\r\n]*
 Comment2 ::= '/*' ( Comment2 | . )* '*/'
 ```
 
 ### Atoms
-Like in the C language an identifier consists of underscores `_`,
-lowercase `a-z` and uppercase `A-Z` letters of the english alphabet, and numbers `0-9`,
-but cannot begin with a number.
-A single underscore is a reserved name, and cannot be used as an identifier.
+An atom is a string of any unicode characters except whitespace.
+
+At the lexical level, there are two special groups of atoms: strong and weak separators.
+
+When a strong separator is found the lexer stops reading the atom and continues onto another rule.
+
+A weak separator is only converted into it's own token only if it's immediately followed by a strong separator.
+For the purposes of this rule, whitespace, comments and parentheses are also strong separators.
 
 #### Grammar
 ```
-AtomHead1 ::= [A-Za-z_]
-AtomTail1 ::= [A-Za-z0-9_]*
-Atom1     ::= AtomHead1 AtomTail1
-Atom2     ::= 
+Atom ::= .+
+// characters separated by space
+SSep ::= . , ; // /* \ ( ) [ ] { } " ` \t \v \n \r \f \0 space
+WSep ::= :
 ```
+
+#### Examples
+```
+x y    --> x y
+x.y    --> x . y
+x,y    --> x , y
+x:+y   --> x:+y
+x :+ y --> x :+ y
+x :, y --> x : , y
+x: y --> x : y
+```
+
 
 ### Numbers
 The `_` number separator is allowed after the most significant digit.

@@ -7,6 +7,14 @@
     /* nested
         comment */
       */
+foo // trailing comment
+x y
+x.y
+x,y
+x:+y
+x :+ y
+x :, y
+x: y
 hello world
 stat1
 stat2
@@ -61,15 +69,18 @@ json"""big string with a sigil"""
 """some \n escapes \t and \  such \\"""
 """intepolation is ${x + 2} not $done during lexing"""
 
+`"'.*-+'"`
+`escaped atom`
+`a1 26 ___7tom,`
+
 expr;expr
 expr,expr
-
-@annotation
 #core_form
 hello!
 h_e_l__lo?
 hello:world
 hello::world
+x+++y
 x++y**z
 xyz
 x+y*z
@@ -90,8 +101,18 @@ x *(y + z)
 (x) -> (y)
 (x)->(y)
 
-if (x) {
-    false
-} else {
-    true
+let x: Int = 2
+
+fun fib(n: Int): Int = {
+    if (n > 1) {
+        fib(n - 1) + fib(n - 2)
+    } else {
+        n
+    }
 }
+
+while (x == 0) {
+    x += 1
+}
+
+x1 ; x2

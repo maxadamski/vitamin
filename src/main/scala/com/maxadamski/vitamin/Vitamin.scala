@@ -12,6 +12,9 @@ import parser._
 import runtime._
 import ast.Term._
 import TypeSystem._
+import jdk.nashorn.internal.parser.Lexer.LexerToken
+import lexer.{Lexer, Token => LexerToken}
+import lexer.Lexer.lexVitaminC
 
 object Vitamin {
   case class Arguments(
@@ -104,10 +107,20 @@ object Vitamin {
     }
   }
 
+  def bench[U](n: Int)(f: => U): Double = {
+    var sum: Long = 0
+    for (i <- 0 to n) {
+      val t = System.nanoTime()
+      f
+      sum += System.nanoTime() - t
+    }
+    sum / n * 1e-9
+  }
+
   def main(args: Array[String]): Unit = {
     var args2 = args.toList
     if (args2.isEmpty)
-      args2 = "res/stdlib.vc" :: Nil
+      args2 = "res/tests/lexer.vc" :: Nil
     val arguments = parseArgs(args2)
     verifyArgs(arguments)
 
@@ -184,18 +197,19 @@ object Vitamin {
     val eq_a = sat(tc(tn("Eq"), tn("'a")))
     val all_a = forall(tn("'a"))
 
-    val lexer = new Lexer()
-
     args2 foreach { file =>
       println(s"-- [$file] ------")
       env.file = file
 
       //var parsed = Parser.parseFile(file)
-      val bytes = Files.readAllBytes(Paths.get(file)).toList
-      val lexed = lexer.tokens(bytes)
-      println("-- lexed   ---------")
-      println(lexed)
-
+      val bytes = Files.readAllBytes(Paths.get(file))
+      var lexed: Array[lexer.Token] = Array()
+      val dt = bench(10) {
+        val lexer = new Lexer()
+        lexed = lexer.tokenize(bytes, lexVitaminC)
+      }
+      println(lexed.mkString("\n"))
+      println(f"lexed in $dt%.8f s")
       val parsed = Term(Nil)
 
       try {
