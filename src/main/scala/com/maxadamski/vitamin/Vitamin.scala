@@ -7,8 +7,8 @@ import java.io.{File, FileInputStream}
 import java.nio.file.{Files, Paths}
 
 import com.maxadamski.vitamin.ast.{Atom, Term, Tree}
-import com.maxadamski.vitamin.runtime.Core.SyntaxError
-import parser._
+import com.maxadamski.vitamin.runtime.Core.{DynamicIL, SyntaxError}
+import parser2._
 import runtime._
 import ast.Term._
 import TypeSystem._
@@ -107,20 +107,27 @@ object Vitamin {
     }
   }
 
-  def bench[U](n: Int)(f: => U): Double = {
+  def bench[U](n: Int)(f: => U): (Double, U) = {
     var sum: Long = 0
-    for (i <- 0 to n) {
+    var res: Option[U] = None
+    for (i <- 1 to n) {
       val t = System.nanoTime()
-      f
+      res = Some(f)
       sum += System.nanoTime() - t
     }
-    sum / n * 1e-9
+    sum / n * 1e-9 -> res.get
+  }
+
+  def benchAndPrint[U](text: String, n: Int = 1)(f: => U): U = {
+    val (dt, res) = bench(1)(f)
+    println(f"$text took $dt%.7fs")
+    res
   }
 
   def main(args: Array[String]): Unit = {
     var args2 = args.toList
     if (args2.isEmpty)
-      args2 = "res/tests/lexer.vc" :: Nil
+      args2 = "res/tests/pratt.vc" :: Nil
     val arguments = parseArgs(args2)
     verifyArgs(arguments)
 
@@ -128,59 +135,22 @@ object Vitamin {
     env.parser.opGroups = Map()
     env.parser.updateParser()
 
-    env.variables = MutableMap[String, Any](
-      "true" -> true,
-      "false" -> false,
-      "Nil" -> Nil
-    )
-
     val functions = Map[String, List[Any] => Any](
       "eval" -> { case List(env: Env, x: Core.DynamicIL.Form) => Core.eval(env)(x) },
-      "," -> { args => args },
-      "List" -> { args => args },
       "Term" -> {
         case List(x: List[Tree]) => Term(x)
       },
       "Atom" -> {
         case List(x: String) => Atom(x)
       },
-      "atom?" -> {
-        case List(Atom(_)) => true
-        case List(_) => false
-      },
-      "term?" -> {
-        case List(Term(_)) => true
-        case List(_) => false
-      },
-      "head" -> {
-        case List(Term(head :: _)) => head
-        case List(head :: _) => head
-      },
-      "tail" -> {
-        case List(Term(_ :: tail)) => Term(tail)
-        case List(_ :: tail) => tail
-      },
       "cons" -> {
         //case List(x: Tree, Nil) => x cons Term(Nil)
         case List(x: Tree, y: Tree) => x cons y
         case List(x: Any, y: List[Any]) => x :: y
-        case other => throw new Exception(f"expected (T, List(T)), got $other")
       },
       "append" -> {
+        case List(x: Array[_], y: Array[_]) => x ++ y
         case List(Term(x), Term(y)) => Term(x ++ y)
-        case x: List[List[_]] => x.reduce(_ ++ _)
-        case other => throw new Exception(f"expected (List(T), List(T)), got $other")
-      },
-      "typeof" -> { case List(x) =>
-        x match {
-          case _: Boolean => "Bool"
-          case _: Int => "Int"
-          case _: Float => "Float"
-          case _: String => "String"
-          case _: Atom => "Atom"
-          case _: Term => "Term"
-          case _ => "Any"
-        }
       }
     )
 
@@ -193,40 +163,32 @@ object Vitamin {
     ScalaBuiltins.typesKind2.foreach(t => env.kindOf(t.x) = 2)
     env.kindOf("->") = 3
 
-    import ScalaBuiltins.{tn, tc, fun}
-    val eq_a = sat(tc(tn("Eq"), tn("'a")))
-    val all_a = forall(tn("'a"))
-
     args2 foreach { file =>
       println(s"-- [$file] ------")
       env.file = file
 
-      //var parsed = Parser.parseFile(file)
+      val t0 = System.nanoTime()
+
       val bytes = Files.readAllBytes(Paths.get(file))
-      var lexed: Array[lexer.Token] = Array()
-      val dt = bench(10) {
-        val lexer = new Lexer()
-        lexed = lexer.tokenize(bytes, lexVitaminC)
-      }
-      println(lexed.mkString("\n"))
-      println(f"lexed in $dt%.8f s")
-      val parsed = Term(Nil)
+      val phase1 = benchAndPrint("-- phase 1 (lexer) ") { new Lexer().tokenize(bytes, lexVitaminC) }
+      val phase2 = benchAndPrint("-- phase 2 (parser)") { new parser1.Parser(phase1).parseProg() }
+      //println(f"-- parsed\n$parsed")
+      val phase3 = benchAndPrint("-- phase 3 (expand)") { Core.expand(env, toplevel = true)(phase2) }
+      //println(f"-- expanded\n$expanded")
+      val phase4 = benchAndPrint("-- phase 4 (verify)") { Core.transform(env.extend())(phase3)._1 }
 
-      try {
-        val expanded = Core.expand(env, toplevel = true)(parsed)
-        println("-- expanded ------")
-        println(expanded)
+      println("-- running program")
 
-        println("-- running  ------")
-        val (form, formType) = Core.transform(env.extend())(expanded)
-        Core.eval(env)(form)
-        //println("exit (0)")
-      } catch {
-        case SyntaxError(message) =>
-          eprintln("-- syntax error --")
-          eprintln(message)
-          exit(1)
-      }
+      val t1 = System.nanoTime()
+      Core.eval(env)(phase4)
+
+      val dt1 = (System.nanoTime() - t1) * 1e-9
+      val dt0 = (System.nanoTime() - t0) * 1e-9
+
+      println()
+      println(f"-- exited with status code 0")
+      println(f"-- run time $dt1%.7fs")
+      println(f"-- all time $dt0%.7fs")
     }
   }
 }

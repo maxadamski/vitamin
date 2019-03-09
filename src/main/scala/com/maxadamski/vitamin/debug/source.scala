@@ -3,38 +3,29 @@ package com.maxadamski.vitamin.debug
 import util.control.Breaks._
 import java.io.RandomAccessFile
 
-import com.maxadamski.vitamin.ast.Span
+import com.maxadamski.vitamin.lexer.Span
+
 
 object Source {
-  val END = "\33[0m"
-  val BOLD = "\33[1m"
-  val UNDER = "\33[4m"
-  val BLACK = "\33[30m"
-  val RED = "\33[31m"
-  val GREEN = "\33[32m"
-  val YELLOW = "\33[33m"
-  val BLUE = "\33[34m"
-  val VIOLET = "\33[35m"
-  val BEIGE = "\33[36m"
-  val WHITE = "\33[37m"
+  case class ByteRange(a: Int, b: Int)
 
-  def readSpan(file: RandomAccessFile, span: Span): String = {
-    val bytes = new Array[Byte](span.stop - span.start + 1)
-    file.seek(span.start)
+  // read bytes from file in range [a, b)
+  def read(file: RandomAccessFile, range: ByteRange): String = {
+    val bytes = new Array[Byte](range.b - range.a + 1)
+    file.seek(range.a)
     file.readFully(bytes)
     new String(bytes)
   }
 
-  // returns the span, expanded to contain the entire line
-  def lineSpan(file: RandomAccessFile, span: Span): Span = {
+  // expands byte range to contain whole lines
+  def expandedRange(file: RandomAccessFile, range: ByteRange): ByteRange = {
+    var ByteRange(start, stop) = range
     val EOL = Array('\n', '\r')
-    var start = span.start
-    var stop = span.stop
 
     breakable {
       while (true) {
         file.seek(start)
-        if (EOL.contains(file.readByte())) {
+        if (EOL contains file.readByte) {
           start += 1
           break
         }
@@ -48,7 +39,7 @@ object Source {
     breakable {
       while (true) {
         file.seek(stop)
-        if (EOL.contains(file.readByte())) {
+        if (EOL contains file.readByte) {
           stop -= 1
           break
         }
@@ -59,17 +50,45 @@ object Source {
       }
     }
 
-    Span(start, stop)
+    ByteRange(start, stop)
+  }
+}
+
+object Formatter {
+  val END = "\33[0m"
+  val BOLD = "\33[1m"
+  val UNDER = "\33[4m"
+
+  val BLACK = "\33[30m"
+  val RED = "\33[31m"
+  val GREEN = "\33[32m"
+  val YELLOW = "\33[33m"
+  val BLUE = "\33[34m"
+  val VIOLET = "\33[35m"
+  val BEIGE = "\33[36m"
+  val WHITE = "\33[37m"
+
+  def formatLines(lines: Array[String], y0: Int, y1: Int): Array[String] = {
+    // add a line number to each line
+    val fmt = "%0" + y1.toString.length + "d"
+    val numbers = (y0 to y1).map(y => fmt format y)
+    (numbers zip lines).map(x => f"${x._1} | ${x._2}").toArray
   }
 
-  def readExcerpt(filePath: String, span: Span): (String, Span) = {
-    val file = new RandomAccessFile(filePath, "r")
-    val span2 = lineSpan(file, span)
-    val string = readSpan(file, span2)
-    file.close()
-    (string, Span(span.start - span2.start, span.stop - span2.start + 1))
+  def highlightLines(lines: Array[String], y0: Int, x0: Int, y1: Int, x1: Int): Array[String] = {
+    // highlight all chars in lines if in range
+    if (y0 == y1) {
+      val a = lines(y0).substring(0, x0)
+      val b = lines(y0).substring(x0, x1)
+      val c = lines(y0).substring(x1)
+      lines(y0) = f"$a$BOLD$UNDER$b$END$c"
+    } else {
+
+    }
+    lines
   }
 
+  /*
   def lineNumber(line: Int, format: String): String = {
     format.format(line) + "|"
   }
@@ -100,27 +119,28 @@ object Source {
     number + lineError(error) + " " + highlightedColumns2(source, x0, x1)
   }
 
-  def highlightedSource(lines: Array[(String, Span)], start: Int): String = {
+  def highlightedSource(lines: Array[(String, ByteRange)], start: Int): String = {
     val stop = start + lines.length
     val numbers = Range(start, stop)
     val format = "%0" + stop.toString.length + "d"
 
-    val formatted = (numbers zip lines).map { case (y, (line, span)) =>
-      val error = !(span.start == 0 && span.stop == 0) || (span.start == -1 && span.stop == -1)
-      highlightedLine(line, format, error, y, span.start, span.stop)
+    val formatted = (numbers zip lines).map { case (y, (line, range)) =>
+      val error = !(start == 0 && stop == 0) || (start == -1 && stop == -1)
+      highlightedLine(line, format, error, y, start, stop)
     }
 
     formatted.mkString("\n")
   }
 
-  def errorExcerpt(filePath: String, span: Span, lineAnchor: Int): String = {
+  def errorExcerpt(filePath: String, range: ByteRange, lineAnchor: Int): String = {
     val (source, relativeSpan) = readExcerpt(filePath, span)
     val lines = source.split("\\r?\\n")
     val spec = if (lines.length == 1)
       lines.map(_ -> relativeSpan)
     else
-      lines.map(_ -> Span(0, 0))
+      lines.map(_ -> Span((0, 0, 0), (0, 0, 0)))
     highlightedSource(spec, lineAnchor)
   }
+  */
 }
 

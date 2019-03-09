@@ -1,11 +1,12 @@
 # Vitamin C Standard Library
 
+## Operators
+`operator(name, binding-power, template)`
+
 ## Variables
 
-### Constant Definition
-`let _ = _`
-
 ### Variable Definition
+`let _ = _`
 `var _ = _`
 
 ### Assignment
@@ -15,22 +16,57 @@
 ## Control Flow
 
 ### If Expression
-`if ( _ ) _ else _` 
+`if _ { _ }`
+`if _ { _ } else { _ }` 
 
 ### Match Expression
-`match _`
+`match _ { _ }`
 
-### For Loop
-`for ( _ ) _` 
 
-### While Loop
-`while ( _ ) _`
+#### Examples
+```
+let x = match color {
+    case 0xFF0000 ->
+        "red"
+        
+    case 0x00FF00 ->
+        "green"
+        
+    case 0x0000FF ->
+        "blue"
+        
+    case _ ->
+        "other"
+}
+```
 
-### Do-While Loop
-`do_while ( _ ) _`
 
-### C-Style For Loop
-`c_for ( _ ; _ ; _ ) _`
+### Loops
+`for _ in _ { _ }` 
+`for _ , _ , _ { _ }`
+`while _ { _ }`
+`repeat { _ } while _`
+
+##### Examples
+```
+for i in range(10) {
+    print(i)
+}
+
+for var i = 0, i < 10, i += 1 {
+    print(i)
+}
+
+var j = 0
+while j < 10 {
+    print(j)
+    j += 1
+}
+
+repeat {
+    print("only printed once")
+} while false
+```
 
 
 ## Data Types

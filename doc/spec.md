@@ -93,7 +93,7 @@ x,y    --> x , y
 x:+y   --> x:+y
 x :+ y --> x :+ y
 x :, y --> x : , y
-x: y --> x : y
+x: y   --> x : y
 ```
 
 
@@ -146,7 +146,7 @@ String2 ::= '"""' ('\\' '"' | [^"""])* '"""'
 "string \" with \t escape chars \n"
 sigil"string with a sigil"
 """multi-line " string "" with \""" escapes """
-json"""big string with a sigil"""
+sigil"""big string with a sigil"""
 """
     multi-line
     strings
@@ -155,6 +155,146 @@ json"""big string with a sigil"""
 
 
 ## Expressions
+
+### Stage-1 Grammar
+```
+prog ::= EOS* ( expr ( EOS+ expr )* )? EOS*
+expr ::= prim+
+prim ::= BEG prog END | Atom | Num | Str
+```
+Where BEG: `{`, END: `}`, EOS: `;`
+
+### Stage-2 Grammar
+```
+e   ::= e_n | e_r | e_l
+e_n ::= E   op_nonass   E
+e_r ::=   ( op_prefix | E op_r )+ E
+e_l ::= E ( op_suffix | op_l E )+
+```
+
+### Operators
+Vitamin support user-defined mixfix operators.
+These can not only be infix, prefix and infix, but also consist of multiple parts.
+
+Mixfix operator are defined as a sequence of atoms and holes (expression placeholders),
+where there is at least one atom between each consecutive pair of holes.
+
+Each operator is assigned to a precedence group.
+A precedence group can contain multiple operators,
+but an operator can belong to only one precedence group.
+
+A precedence group can form greater/smaller than relations with other groups.
+Precedence group relations form a directed acyclic graph.
+
+Vitamin uses _partial operator precedence_, so if operators `f` and `g` are unrelated,
+then using them next to each other is a syntax error, and using paretheses is required.
+This allows users to avoid specifying unintuitive precedence relations,
+so for example logic and arithmetic operators can be unrelated.
+
+Operator precedence relations are not transitive.
+- `f ≐ f` is true (reflexivity)
+- if `f ≐ g`, then `g ≐ f` (symmetry)
+- if `f ≐ g` and `g ≐ h`, then `f ≐ h` (transitivity)
+
+- `f ⋖ f` is false (irreflexivity)
+- if `f ⋖ g`, then `g ⋖ f` does not follow (assymetry)
+- if `f ⋖ g` and `g ⋖ h`, then `f ⋖ h` does **not** follow (intransitivity)
+- if `f ≐ g` and `f ⋖ h`, then `g ⋖ h`
+
+When assigning precedence groups,
+operators are distinguished by their first atom and it's position.
+
+##### Examples
+- Operator `f _` will have the same precedence as `f _ g _ h`,
+    but not `g _` or `_ f _ g _ h`.
+
+#### Holes
+Now consider an operator of precedence `p`.
+
+- If the operator contains a hole `_`, it expects an expression of precedence `q >= p`
+- If the operator contains a hole `↑`, it expects an expression of precedence `q > p`
+- If the operator contains a hole `→` preceded by atom `◊`,
+    it expects `n >= 1` expressions of precedence `q > p` separated by `◊`.
+    
+##### Examples
+- `_ , →` will match `x1 , x2 , ... , xn` as `(, x1 x2 ... xn)`
+- `_ + ↑` - left associative addition
+- `↑ ^ _` - right associative exponentiation
+- `if _ then _ else _` will match `if x then y else z`, but not `if if a then b else c then x else y`
+
+##### Notes
+Internally, an operator is either a null or a left parselet.
+Null parselets are parser rules invoked when an operator begins with an atom,
+while left parselets are invoked when an operator starts with a hole.
+Other programming languages using top-down operator parsing,
+would implement prefix operators as null parselets,
+and infix/suffix operators as left parselets.
+
+### Vitamin C Operators
+
+The function call syntax in Vitamin is effectively represented like this:
+```
+call/0 ::= _ ( )
+call/1 ::= _ ( _ )
+call/N ::= _ ( _ , → )
+
+anon/0 ::= _ ( ) { _ }
+anon/1 ::= _ ( _ ) { _ }
+anon/N ::= _ ( _ , → ) { _ }
+```
+
+Other standard operators:
+```
+set  --> _ = ↑
+add  --> _ + ↑
+sub  --> _ - ↑
+mul  --> _ * ↑
+fdiv --> _ / ↑
+exp  --> ↑ ^ _
+idiv --> _ div ↑
+imod --> _ mod ↑
+neg  --> - ↑
+
+tuple  --> _ , →
+lpair  --> ↑ : _
+rpair  --> _ -> ↑
+
+concat --> _ ++ →
+cons   --> ↑ :: _
+
+not  --> not _
+and  --> _ and ↑
+or   --> _ or ↑
+
+notin  --> _ not in _
+in     --> _ in _
+
+setadd --> ↑ += ↑
+setsub --> ↑ += ↑
+setmul --> ↑ *= ↑
+setdiv --> ↑ /= ↑
+
+eq   --> _ == →
+ne   --> _ != →
+le   --> _ <= →
+ge   --> _ >= →
+lt   --> _ < →
+gt   --> _ > →
+
+defcon    --> let _ = _
+defvar    --> var _ = _
+defmacro  --> def _ ( _ ) = _
+deffun/3  --> fun _ ( _ ) = _
+deffun/4  --> fun _ ( _ ) : _ = _
+deftype   --> type _ = _
+defdata   --> data _ = _
+defprot   --> protocol _ = _
+definst   --> instance _ = _
+
+cond/1 --> if ( _ ) _
+cond/2 --> if ( _ ) _ else _
+loop/1 --> while ( _ ) _
+```
 
 
 ## Macros

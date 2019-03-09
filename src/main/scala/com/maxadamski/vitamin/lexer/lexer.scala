@@ -2,57 +2,29 @@ package com.maxadamski.vitamin.lexer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.Breaks._
-import Utils._
+import com.maxadamski.vitamin.Utils.btoe
 import TokenType.TokenType
+import Matchers._
 
 object TokenType extends Enumeration {
   type TokenType = Value
-  val Atom, Com, Num, Str, Spec = Value
-}
-
-case class Span(a: (Int, Int), b: (Int, Int)) {
-  override def toString = f"${a._1}:${a._2}-${b._1}:${b._2}"
+  val ATOM, Num, Str, EOS, BEG, END = Value
 }
 
 case class Token(t: TokenType, x: Array[Array[Byte]], span: Option[Span] = None) {
-  override def toString = {
+  override def toString: String = {
     val compStr = x.map(b => f"'${btoe(b)}'").mkString(" ")
     val spanStr = if (span.nonEmpty) f" ${span.get}" else ""
     f"<$t $compStr$spanStr>"
   }
 }
 
-sealed trait Matcher
-
-case class MSeq(bytes: Byte*) extends Matcher {
-  override def toString = bytes.map(b => f"'${b.toChar}'").mkString(" & ")
-  def matches(x: Array[Byte]): Boolean = bytes.toArray sameElements x
-  val length: Int = bytes.length
-}
-
-case class MAlt(bytes: Byte*) extends Matcher {
-  override def toString = bytes.map(b => f"'${b.toChar}'").mkString(" | ")
-  def matches(x: Byte): Boolean = bytes contains x
-}
-
-case class MFun(lambda: Byte => Boolean) extends Matcher {
-  def matches(x: Byte): Boolean = lambda(x)
-}
-
 case class Mode(name: String, pos: Int, line: Int, char: Int) {
   override def toString = f"<mode $name line $line:$char>"
 }
 
-object Utils {
-  import reflect.runtime.universe.{Literal, Constant}
-  import java.nio.charset.StandardCharsets.UTF_8
-
-  def escape(raw: String): String = Literal(Constant(raw)).toString.drop(1).dropRight(1)
-  def btoe(x: Array[Byte]): String = escape(btos(x))
-  def btos(x: Array[Byte]): String = new String(x, UTF_8)
-  def stob(x: String): Array[Byte] = x.getBytes(UTF_8)
-  def tok(t: TokenType, b: Array[Byte], s: Span) = Token(t, Array(b), Some(s))
-  def tok(t: TokenType, b: Array[Array[Byte]], s: Span) = Token(t, b, Some(s))
+case class Span(a: (Int, Int, Int), b: (Int, Int, Int)) {
+  override def toString = f"${a._2}:${a._3}-${b._2}:${b._3}"
 }
 
 class Lexer {
@@ -67,7 +39,7 @@ class Lexer {
   def available: Int = len - pos
   def isEmpty: Boolean = pos == len
   def nonEmpty: Boolean = !isEmpty
-  def point: (Int, Int) = (line, char)
+  def point: (Int, Int, Int) = (pos, line, char)
 
   def next1(): Byte = next(1).head
   def peek1: Byte = peek(1).headOption getOrElse '\0'
@@ -90,7 +62,6 @@ class Lexer {
   }
 
   def peek(n: Int): Array[Byte] = {
-    //if (!can_peek(n)) throw new Exception(f"lexer wanted to get '$n' bytes but the buffer has length '$len'")
     buf.slice(pos, (pos + n) min len)
   }
 
@@ -110,7 +81,7 @@ class Lexer {
   def tokenize(bytes: Array[Byte], lex: Lexer => Array[Token]): Array[Token] = {
     buf = bytes
     len = bytes.length
-    var tokens = ArrayBuffer[Token]()
+    val tokens = ArrayBuffer[Token]()
     while (available > 0) {
       tokens ++= lex(this)
     }
@@ -119,35 +90,9 @@ class Lexer {
 }
 
 object Lexer {
-  val CR     = MAlt('\r')
-  val ESC    = MAlt('\\')
-  val EOF    = MAlt('\0')
-  val DOT    = MAlt('.')
-  val SEMI   = MAlt(';')
-  val COM1   = MSeq('/', '/')
-  val COM2   = MSeq('/', '*')
-  val COM2_R = MSeq('*', '/')
-  val STR    = MAlt('`', '"')
-  val STR1_1 = MSeq('"')
-  val STR1_2 = MSeq('`')
-  val STR2_1 = MSeq('"', '"', '"')
-  val WS     = MAlt('\t', '\n', '\r', '\f', ' ')
-  val NL     = MAlt('\n', '\r')
-  val LPAR   = MAlt('(', '[', '{')
-  val RPAR   = MAlt(')', ']', '}')
-  val SEP    = MAlt('.', ',', ';')
-  val WSEP   = MAlt(':')
-  val SSEP   = MAlt('.', ',', ';', '(', ')', '[', ']', '{', '}', '"', '`', '\t', '\n', '\r', '\f', '\0', ' ')
-  val EXP1   = MAlt('e', 'E')
-  val EXP2   = MAlt('p', 'P')
-  val ALPHA  = MFun(b => b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z')
-  val DIGIT  = MFun(b => b >= '0' && b <= '9')
-  val NUM    = DIGIT
-  val NUM_T  = MFun(b => b == '_' || (DIGIT matches b))
+  def tok(t: TokenType, b: Array[Byte], s: Span) = Token(t, Array(b), Some(s))
 
-  val EOS = Token(TokenType.Spec, Array(stob("EOS")), None)
-  val MODE_ESC = "ESC"
-  val MODE_COM = "COM"
+  def tok(t: TokenType, b: Array[Array[Byte]], s: Span) = Token(t, b, Some(s))
 
   def MODE_PAR(b: Byte): String = b match {
     case '(' | ')' => "("
@@ -173,7 +118,7 @@ object Lexer {
   }
 
   def lexATOM(it: Lexer): Array[Token] = {
-    var atom: ArrayBuffer[Byte] = ArrayBuffer()
+    val atom: ArrayBuffer[Byte] = ArrayBuffer()
     var weak: Option[Token] = None
     var (start, end) = (it.point, it.point)
     breakable {
@@ -184,16 +129,16 @@ object Lexer {
           if (SSEP matches b(1)) {
             val sepStart = it.point
             val buf = Array(it.next1())
-            weak = Some(tok(TokenType.Atom, buf, Span(sepStart, it.point)))
+            weak = Some(tok(TokenType.ATOM, buf, Span(sepStart, it.point)))
             break
           }
         }
-        atom :+= it.next1()
+        atom.append(it.next1())
         end = it.point
       }
     }
     var tokens = Array[Token]()
-    if (atom.nonEmpty) tokens :+= tok(TokenType.Atom, atom.toArray, Span(start, end))
+    if (atom.nonEmpty) tokens :+= tok(TokenType.ATOM, atom.toArray, Span(start, end))
     if (weak.nonEmpty) tokens :+= weak.get
     tokens
   }
@@ -201,7 +146,7 @@ object Lexer {
   def lexSEP(it: Lexer): Array[Token] = {
     val start = it.point
     val b = it.next1()
-    Array(tok(TokenType.Atom, Array(b), Span(start, it.point)))
+    Array(tok(TokenType.ATOM, Array(b), Span(start, it.point)))
   }
 
   def lexSEMI(it: Lexer): Array[Token] = {
@@ -237,8 +182,9 @@ object Lexer {
 
   def lexSTR(it: Lexer): Array[Token] = {
     val start = it.point
+    val typ = if (it.peek1 == '`') TokenType.ATOM else TokenType.Str
     val buffer = lexSTR_1_3(it)
-    Array(tok(TokenType.Str, Array(buffer), Span(start, it.point)))
+    Array(tok(typ, Array(buffer), Span(start, it.point)))
   }
 
   private def lexSTR_1_3(it: Lexer): Array[Byte] = {
@@ -275,11 +221,13 @@ object Lexer {
   // Comment1 and Comment2
 
   def lexCOM1(it: Lexer): Array[Token] = {
-    var buffer = ArrayBuffer[Byte]()
+    val buffer = ArrayBuffer[Byte]()
     val start = it.point
     buffer ++= it.next(2)
     while (!(NL matches it.peek1)) buffer ++= it.next(1)
-    Array(tok(TokenType.Com, buffer.toArray, Span(start, it.point)))
+    // ignore comments for now
+    //Array(tok(TokenType.Com, buffer.toArray, Span(start, it.point)))
+    Array()
   }
 
   def lexCOM2(it: Lexer): Array[Token] = {
@@ -301,7 +249,9 @@ object Lexer {
         buffer ++= it.next(1)
       }
     }
-    Array(tok(TokenType.Com, buffer.toArray, Span(start, it.point)))
+    // ignore comments for now
+    //Array(tok(TokenType.Com, buffer.toArray, Span(start, it.point)))
+    Array()
   }
 
   def lexNL(it: Lexer): Array[Token] = {
@@ -330,7 +280,10 @@ object Lexer {
     val start = it.point
     it.pushMode(MODE_PAR(b))
     it.next1()
-    Array(tok(TokenType.Atom, Array(b), Span(start, it.point)))
+    if (b == '{')
+      Array(BEG.copy(span = Some(Span(start, it.point))))
+    else
+      Array(tok(TokenType.ATOM, Array(b), Span(start, it.point)))
   }
 
   def lexRPAR(it: Lexer): Array[Token] = {
@@ -343,7 +296,10 @@ object Lexer {
       throw new Exception(f"unmatched parenthesis '${b.toChar}' at ${it.line}:${it.char}, currently '${it.mode.head.name}' at ${it.mode.head.line}:${it.mode.head.char} is open")
     it.next1()
     it.popMode()
-    Array(tok(TokenType.Atom, Array(b), Span(start, it.point)))
+    if (b == '}')
+      Array(END.copy(span = Some(Span(start, it.point))))
+    else
+      Array(tok(TokenType.ATOM, Array(b), Span(start, it.point)))
   }
 
   def lexESC(it: Lexer): Array[Token] = {

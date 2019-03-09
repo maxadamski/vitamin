@@ -6,81 +6,15 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import collection.mutable.{Map => MutableMap}
 import PartialFunction._
-
-import com.maxadamski.vitamin.parser._
-import com.maxadamski.vitamin.ast.{Atom, PrattDecoder, Term, Tree}
+import com.maxadamski.vitamin.parser2.{BadMix, BadPrecedenceLeft, BadPrecedenceNull, OpGroup, OpName, OpUtils, PrattError, PrattParser, Reason, UnexpectedEOF, UnknownLeft, UnknownNull, Error => ParserError}
+import com.maxadamski.vitamin.ast.{Atom, Term, Tree}
 import com.maxadamski.vitamin.ast.Term._
 import com.maxadamski.vitamin.debug.Error._
 import com.maxadamski.vitamin.runtime.TypeSystem._
 import TypeSystem._
-import Core.{require, panic}
-
-object TypeSystem {
-  case class Poly(typ: Type, ctx: List[Spec] = Nil) {
-    override def toString: String = {
-      typ.toString + (if (ctx.nonEmpty) ctx.mkString(" where (", " ", ")") else "")
-    }
-  }
-
-  sealed trait Type {
-    override def toString: String = this match {
-      case TypeName(x) => x
-      case TypeCons(TypeName("->"), List(x, y)) => f"($x -> $y)"
-      case TypeCons(TypeName(","), args) => args.mkString("(", ", ", ")")
-      case TypeCons(head, tail) => tail.mkString(f"$head(", " ", ")")
-    }
-  }
-
-  case class TypeName(x: String) extends Type
-  case class TypeCons(x: Type, y: List[Type]) extends Type
-
-  sealed trait Spec
-  case class sat(x: TypeCons) extends Spec
-  case class forall(x: TypeName) extends Spec
-  //case class pred(x: String, y: Type) extends Spec
-
-  def kindOf(env: Env, ctx: List[Spec])(typ: Type): Int = typ match {
-    case TypeCons(head, tail) =>
-      kindOf(env, ctx)(head) - tail.length
-    case it@TypeName(name) =>
-      if (ctx contains forall(it)) return 1
-      val local = env.findKindOf(name)
-      require(typ, local.nonEmpty, "undefined type")
-      local.get.kindOf(name)
-  }
-
-  def validateType(env: Env)(ctx: List[Spec], typ: Type): Unit = {
-    val (arity, given) = typ match {
-      case TypeCons(head, tail) =>
-        tail.foreach(validateType(env)(ctx, _))
-        head match {
-          case TypeName(",") => (tail.length, tail.length) // tuples have arbitrary kind >= 3
-          case _ => (kindOf(env, ctx)(head) - 1, tail.length)
-        }
-      case it@TypeName(_) =>
-        (kindOf(env, ctx)(it) - 1, 0)
-    }
-    require(typ, arity == given, f"type constructor takes $arity arguments, but was given $given")
-  }
-
-  def validatePoly(env: Env)(poly: Poly): Unit = validateType(env)(poly.ctx, poly.typ)
-
-  def unifies(typeA: Type, typeB: Type): Boolean = (typeA, typeB) match {
-    case (TypeName(x), TypeName(y)) => x == y
-    case (TypeCons(x, u), TypeCons(y, v)) => unifies(x, y) && (u zip v).forall { case (a, b) => unifies(a, b) }
-    case _ => false
-  }
-
-  def unifies(x: TypeSystem.Poly, y: TypeSystem.Poly): Boolean = unifies(x.typ, y.typ)
-
-  def validatedApply(f: Poly, args: List[Poly]): Poly = (f, args) match {
-    case (t, Nil) =>
-      t
-    case (Poly(TypeCons(TypeName("->"), List(x, y)), ctx), head :: tail) =>
-      require(None, unifies(Poly(x, ctx), head), s"argument type mismatch - expected: $x, got $head")
-      validatedApply(Poly(y, ctx), tail)
-  }
-}
+import Core.{panic, require}
+import com.maxadamski.vitamin.ScalaBuiltins
+import com.maxadamski.vitamin.debug.Report
 
 object Core {
   type BuiltinLambda = List[Any] => Any
@@ -91,49 +25,46 @@ object Core {
   val CONS = Atom("cons")
   val TERM = Atom("Term")
   val APPEND = Atom("append")
-  
-  implicit class EitherExtension[Left, Right](value: Either[Left, Right]) {
-    def map[T](transform: Right => T): Either[Left, T] = value match {
-      case Left(inner) => Left(inner)
-      case Right(inner) => Right(transform(inner))
-    }
-
-    def toOption(): Option[Right] = value match {
-      case Left(_) => None
-      case Right(inner) => Some(inner)
-    }
-  }
 
   case class SyntaxError(message: String) extends Exception
   case class RuntimeError(message: String) extends Exception
 
-  def reportPrattError(env: Env)(error: PrattError): Unit = {
-    val (reason, curr, last) = (error.reason, error.curr, error.last)
-    val message = reason match {
-      case Reason.UnexpectedEOF =>
-        error__parser__unexpected_eof(env)
-      case Reason.UnexpectedNull =>
-        error__parser__null_unexpected_token(env, curr)
-      case Reason.UnexpectedLeft =>
-        error__parser__null_unexpected_token(env, curr)
-      case Reason.UnknownLeft =>
-        error__parser__left_not_registered(env, curr)
-      case Reason.UnknownNull =>
-        error__parser__null_not_registered(env, curr)
-      case Reason.BadPrecedenceLeft =>
-        error__parser__left_bad_precedence(env, curr, last)
-      case Reason.BadPrecedenceNull =>
-        error__parser__null_bad_precedence(env, curr, last)
+  def reportPrattError(env: Env)(error: ParserError): String = error match {
+    case UnexpectedEOF(last) =>
+      error__parser__unexpected_eof(env)
+    case BadPrecedenceLeft(curr, last) =>
+      error__parser__left_bad_precedence(env, curr, last)
+    case BadPrecedenceNull(curr, last) =>
+      error__parser__null_bad_precedence(env, curr, last)
+    case UnknownLeft(curr, last) =>
+      error__parser__left_not_registered(env, curr)
+    case UnknownNull(curr, last) =>
+      error__parser__null_not_registered(env, curr)
+    case BadMix(name, expected, actual) =>
+      env.node = actual
+      error__parser__bad_mix(env, name, expected, actual)
+    case PrattError(reason, curr, last) =>
+      reason match {
+        case Reason.UnexpectedNull =>
+          error__parser__null_unexpected_token(env, curr)
+        case Reason.UnexpectedLeft =>
+          error__parser__null_unexpected_token(env, curr)
+      }
+  }
+
+  def require(env: Env, term: Any, pred: Boolean, message: String): Unit = {
+    if (!pred) panic(env, term, message)
+  }
+
+  def panic(env: Env, term: Any, message: String): Nothing = {
+    val m = term match {
+      case x: Tree =>
+        Report.compileError2(env, x, name = "fatal error", body = message)
+      case _ =>
+        f"$term - $message"
     }
-    throw new Exception(message)
-  }
-
-  def require(term: Any, pred: Boolean, message: String): Unit = {
-    if (!pred) panic(term, message)
-  }
-
-  def panic(term: Any, message: String): Nothing = {
-    throw new Exception(f"$term: $message")
+    eprintln(m)
+    throw new Exception()
   }
 
   def toType(ast: Tree): Type = ast match {
@@ -146,7 +77,10 @@ object Core {
 
   def toTerm(x: Any): Tree = x match {
     case x: Tree => x
-    case x: List[_] => Term(x.map(toTerm))
+    case x: Array[_] =>
+      val t = Term(x.map(toTerm).toList)
+      t.span = t.compSpan
+      t
     case _ => throw new Exception(f"cannot cast $x to term!")
   }
 
@@ -159,6 +93,8 @@ object Core {
     case class App(x: Form, y: List[Form]) extends Form
     case class Fun(head: List[String], body: Form) extends Form
     case class Seq(x: List[Form]) extends Form
+    case class Loop(x: Form, y: Form) extends Form
+    case class Cond(x: Form, y: Form, z: Form) extends Form
   }
 
   // -- SPECIAL FORMS ----------------------------------------------------------
@@ -168,10 +104,12 @@ object Core {
       val newEnv = env.extend()
       newEnv.node = it
       // if the parser was successful, decode the result
-      val result = newEnv.parser.parse(it).map(PrattDecoder.decode(_))
-      // otherwise report the error
-      result.left.map(reportPrattError(newEnv))
-      (result.toOption.getOrElse(Term(Nil)), true)
+      val result = newEnv.parser.parse(it)
+      result.mapErr { e =>
+        eprintln(reportPrattError(env)(e))
+        throw new Exception(e.toString)
+      }
+      (result.get, true)
     case _ =>
       (tree, false)
   }
@@ -184,14 +122,14 @@ object Core {
       val y = qq_parse(env)(x)
       if (list) Term(TUPLE :: y :: Nil) else y
     case Term(List(UNQUOTE_SPLICING, x)) =>
-      require(ast, list, "cannot unquote-splicing here!")
+      require(env, ast, list, "cannot unquote-splicing here!")
       qq_parse(env)(x)
     case Term(List(QUASIQUOTE, x)) =>
       quasiquote(env)(quasiquote(env)(x), list = list)
     case Term(head :: tail) =>
       val one = quasiquote(env)(head, list = true)
       val two = quasiquote(env)(Term(tail))
-      val it = Term(APPEND :: one :: two :: Nil)
+      val it = if (two == Term(TUPLE :: Nil)) one else Term(APPEND :: one :: two :: Nil)
       if (list) Term(TUPLE :: it :: Nil) else it
     case Term(Nil) =>
       Term(TUPLE :: Nil)
@@ -214,163 +152,230 @@ object Core {
       Term(BLOCK :: nonEmpty)
 
     case Term(UNQUOTE :: _) =>
-      panic(tree, "cannot unquote outside of a quasiquote")
+      panic(env, tree, "cannot unquote outside of a quasiquote")
 
     case Term(UNQUOTE_SPLICING :: _) =>
-      panic(tree, "cannot unquote_splicing outside of a quasiquote")
+      panic(env, tree, "cannot unquote_splicing outside of a quasiquote")
 
     case Term(QUASIQUOTE :: args) => // macro
-      require(tree, args.length == 1, s"wrong number of arguments - expected 1, got ${args.length}")
+      require(env, tree, args.length == 1, s"wrong number of arguments - expected 1, got ${args.length}")
       quasiquote(env)(args(0))
 
-    case Term(Atom("#operator_group") :: args) =>
-      require(tree, args.length == 4, s"wrong number of arguments - expected 4, got ${args.length}")
-      require(tree, args.forall(_.isInstanceOf[Atom]), f"wrong argument types - expected (Atom, Atom, Atom, Atom)")
-      val Atom(name) :: Atom(kind) :: Atom(maybeGt) :: Atom(maybeLt) :: Nil = args
+    case Term(Atom("op") :: args) =>
+      require(env, tree, args.length == 3, s"wrong number of arguments - expected 3, got ${args.length}")
+      // todo: check for errors
+      val Term(List(Atom("number"), Atom(fixityRaw), _)) = args(0)
+      val Atom(name) = args(1)
+      val Atom(patternRaw) = args(2)
+      val fixity = fixityRaw.toInt
+      val pattern = patternRaw.split(" ")
+      env.parser.addMix(fixity, name, pattern)
 
-      val (fixity, associativity) = OpUtils.opKind(kind)
-      val gt = if (maybeGt != "nil") Some(maybeGt) else None
-      val lt = if (maybeLt != "nil") Some(maybeGt) else None
-      val group = OpGroup(name, fixity, associativity, gt, lt)
-      env.parser.addGroup(group)
       Term(Nil)
 
-    case Term(Atom("#operator") :: args) =>
-      require(tree, args.length == 2, f"wrong number of arguments - expected 2, got ${args.length}")
-      require(tree, args.forall(_.isInstanceOf[Atom]), "wrong argument types - expected (Atom, Atom)")
-      val Atom(group) :: Atom(name) :: Nil = args
-
-      val opName = OpName(group, name)
-      env.parser.addName(opName)
-      env.parser.updateParser()
-      Term(Nil)
-
-    case Term(DEF :: rawArgs) => // desugar macro definition
+    case Term(Atom("core-def") :: rawArgs) => // desugar macro definition
       val args = rawArgs.map(expand(env))
       val (name, head, body) = args match {
         case Term(Atom(_1) :: _2) :: _3 :: Nil => (_1, _2, _3)
         case Term(Atom(_1) :: _2) :: Nil => (_1, _2, Term(Nil)) // forward declaration
-        case _ => panic(tree, f"wrong number of arguments - expected 2, got ${args.length}")
+        case _ => panic(env, tree, f"wrong number of arguments - expected 2, got ${args.length}")
       }
       val formals = head map {
         case Atom(x) => x
-        case _ => panic(tree, f"invalid macro formals $head, expected Tuple(Term)")
+        case _ => panic(env, tree, f"invalid macro formals $head, expected Tuple(Term)")
       }
       env.macros += name -> Macro(formals, body, env)
       Term(Nil)
 
-    case Term(Atom("lambda") :: args) =>
-      require(tree, args.length == 2, "wrong number of arguments - expected lambda(head, body)")
-      val atoms = args(0) match {
-        case it@Atom(_) => it :: Nil
-        case it@Term(TUPLE :: x) => x
-        case _ => panic(tree, "bad lambda parameters expected Atom or Tuple(Atom)")
-      }
-      val param = atoms map {
-        case it@Atom(_) => it
-        case _ => panic(tree, "bad lambda parameters expected Atom or Tuple(Atom)")
-      }
-      Term(Atom("lambda") :: Term(param) :: expand(env)(args(1)) :: Nil)
+    case Term((head@Atom("core-fun")) :: args) =>
+      require(env, tree, args.length == 2, s"wrong number of arguments - expected 2, got ${args.length}")
 
-    case Term(Atom("typfun") :: args) =>
-      require(tree, args.length >= 2, "wrong number of arguments - expected >= 2")
+      def expandParamName(inner: Tree): Atom = inner match {
+        case it@Atom(_) => it
+        case _ => panic(env, inner, "bad lambda parameter name, expected Atom")
+      }
+
+      def expandParam(inner: Tree): Term = inner match {
+        case it@Atom(_) => Term(it :: Term(Nil) :: Nil)
+        case it@Term(Atom("core-type") :: x :: y :: Nil) => Term(expandParamName(x) :: y :: Nil)
+        case _ => panic(env, inner, "bad lambda parameter, expected 'atom' or 'atom : type'")
+      }
+
+      def expandParams(inner: Tree): Term = inner match {
+        case Term(Atom(",") :: tail) => Term(tail.map(expandParam))
+        case Term(Nil) => Term(Term(Atom("_") :: Atom("Unit") :: Nil) :: Nil)
+        case _ => Term(expandParam(inner) :: Nil)
+      }
+
+      def expandSpec(inner: Tree): Term = inner match {
+        case it@Term(Atom("->") :: x :: y :: Nil) => Term(expandParams(x) :: y :: Nil)
+        case it => Term(expandParams(it) :: Term(Nil) :: Nil)
+      }
+
+      val spec = expandSpec(expand(env)(args.head))
+      val body = expand(env)(args(1))
+      Term(Atom("core-fun!") :: spec :: body :: Nil)
+
+    case Term((head@Atom("core-let")) :: args) =>
+      require(env, tree, args.length == 2, s"wrong number of arguments - expected 2, got ${args.length}")
+
+      def expandLeftName(inner: Tree): Atom = inner match {
+        case it@Atom(_) => it
+        case _ => panic(env, inner, "bad left hand side variable pattern, expected Atom")
+      }
+
+      def expandLeft(inner: Tree): Tree = inner match {
+        case it@Term(Atom("core-type") :: x :: y :: Nil) => Term(expandLeftName(x) :: y :: Nil)
+        case _ => Term(expandLeftName(inner) :: Term(Nil) :: Nil)
+      }
+
+      val lhs = expandLeft(expand(env)(args.head))
+      val rhs = expand(env)(args(1))
+      Term(Atom("core-let!") :: lhs :: rhs :: Nil)
+
+    case Term(Atom("core-pair") :: args) =>
+      require(env, tree, args.length >= 2, "wrong number of arguments - expected >= 2")
       Term(Atom("->") :: args.map(expand(env)))
 
-    case Term(Atom("typtup") :: args) =>
-      require(tree, args.length >= 2, "wrong number of arguments - expected >= 2")
+    case Term(Atom("core-list") :: args) =>
+      require(env, tree, args.length >= 2, "wrong number of arguments - expected >= 2")
       Term(Atom(",") :: args.map(expand(env)))
-
-    case Term(Atom("defvar") :: args) =>
-      require(tree, args.length == 3, "wrong number of arguments - expected defvar(name, type, expr)")
-      Term(Atom("defvar") :: args.map(expand(env)))
 
     case Term(Atom(name) :: _) if env.findMacro(name).nonEmpty =>
       val parsed = parse_once(env)(tree)._1
       val Term(_ :: tail) = parse_once(env)(tree)._1
-      val args = tail.map(expand(env))
       val Macro(params, body, local) = env.findMacro(name).get.macros(name)
-      require(args, params.length == args.length, "wrong number of arguments")
+      require(env, tree, params.length == tail.length, s"$name was given the wrong number of arguments - expected ${params.length}, got ${tail.length}")
+      val args = tail.map(expand(env))
       (params zip args) foreach { x => local.variables += x }
-      val expr = expand(local)(body)
-      val (exprForm, exprType) = transform(local)(expr)
+      params foreach { x => local.typeOf += x -> Poly(TypeName("Term")) }
+      val (exprForm, exprType) = transform(local)(expand(local)(body))
       var res1 = eval(local)(exprForm)
       val res2 = toTerm(res1)
       val res3 = expand(local)(res2)
       res3
 
+    case Term(args) =>
+      Term(args.map(expand(env)))
+
     case _ =>
       tree
+
   }
 
+  // -- TRANSFORM -----------------------------------------------------------------
+
   def transformNumber(env: Env, hint: Option[Poly] = None)(
-    sign: String, integer: String, fraction: String
+    integer: String, fraction: String
   ): (DynamicIL.Form, Poly) = {
       // todo: check if number looses precision
       val T = List("I8", "I16", "I32", "I64", "F32", "F64")
       val float = fraction.nonEmpty
       val str = if (float) f"$integer.$fraction" else integer
-      val sgn = sign match {
-        case "+" => +1
-        case "-" => -1
-        case _ => panic(None, f"invalid number sign $sign")
-      }
       val t = hint match {
         case Some(Poly(TypeName(x), _)) if T contains x => x
-        case _ => if (float) "F64" else "I64"
+        case _ => if (float) "F32" else "I32"
       }
       val x: Any = t match {
-        case "I8"  => sgn * str.toByte
-        case "I16" => sgn * str.toShort
-        case "I32" => sgn * str.toInt
-        case "I64" => sgn * str.toLong
-        case "F32" => sgn * str.toFloat
-        case "F64" => sgn * str.toDouble
+        case "I8"  => str.toByte
+        case "I16" => str.toShort
+        case "I32" => str.toInt
+        case "I64" => str.toLong
+        case "F32" => str.toFloat
+        case "F64" => str.toDouble
       }
       DynamicIL.Val(x) -> Poly(TypeName(t))
   }
 
   def transform(env: Env, hint: Option[Poly] = None)(ast: Tree): (DynamicIL.Form, Poly) = ast match {
     case Atom(name) =>
-      val local = env.findTypeOf(name)
-      require(ast, local.nonEmpty, f"reference to undefined variable $name")
+      val local = env.findVariable(name)
+      require(env, ast, local.nonEmpty, f"reference to undefined variable $name")
+      require(env, ast, local.get.typeOf contains name, f"variable $name has undefined type")
       val varType = local.get.typeOf(name)
       DynamicIL.Get(name) -> varType
 
-    case Term(Atom("defvar") :: Atom(name) :: rawType :: varExpr :: Nil) =>
-      // check if variable is not defined
-      require(ast, !(env.typeOf contains name), f"attempting to redefine the variable $name")
-      val varType = toPoly(rawType)
-      validatePoly(env)(varType)
-      val (exprForm, exprType) = transform(env, Some(varType))(varExpr)
-      validatePoly(env)(exprType)
-      require(varExpr, unifies(varType, exprType), f"type mismatch - expected: $varType, got: $exprType")
-      // check if varType and exprType unify
-      env.typeOf(name) = exprType
-      val mutable = true
-      DynamicIL.Let(name, exprForm, mutable) -> exprType
+    case Term(Atom("quote") :: x :: Nil) =>
+      DynamicIL.Val(x) -> Poly(TypeName("Term"))
 
-    case Term(Atom("setvar") :: Atom(name) :: varExpr :: Nil) =>
+    case Term(Atom(",") :: h :: t) =>
+      val (headForm, headType) = transform(env)(h)
+      val tailForms = t.map(transform(env)).map(_._1)
+      // TODO: check if list is homogenous
+      val elements = (headForm :: tailForms).toArray map eval(env)
+      DynamicIL.Val(elements) -> Poly(TypeCons(TypeName("Array"), headType.typ :: Nil), headType.ctx)
+
+    case Term(Atom("core-let!") :: lhsExpr :: rhsExpr :: Nil) =>
+      // check if variable is not defined
+      var (lhsName, lhsType) = lhsExpr match {
+        case Term(Atom(varName) :: Term(Nil) :: Nil) => varName -> None
+        case Term(Atom(varName) :: varType :: Nil) => varName -> Some(toPoly(varType))
+        case _ => panic(env, ast, "unknown lhs")
+      }
+      var (rhsForm, rhsType) = transform(env, lhsType)(rhsExpr)
+      require(env, ast, !(env.typeOf contains lhsName), f"attempting to redefine the variable $lhsName")
+      // check if left and right types unify
+
+      validatePoly(env)(rhsType)
+      if (lhsType.nonEmpty) {
+        val (a, b) = unify(env, ast)(lhsType.get, rhsType)
+        lhsType = Some(a)
+        rhsType = b
+      }
+
+      env.variables(lhsName) = null
+      env.typeOf(lhsName) = rhsType
+
+      val mutable = true
+      DynamicIL.Let(lhsName, rhsForm, mutable) -> rhsType
+
+    case Term(Atom("core-set") :: Atom(name) :: rhsExpr :: Nil) =>
       // check if variable varName is defined
       val local = env.findTypeOf(name)
-      require(ast, local.nonEmpty, f"assignment to undefined variable $name")
-      val varType = local.get.typeOf(name)
-      // check if variable varType and exprType unifies
-      val (exprForm, exprType) = transform(env, Some(varType))(varExpr)
-      require(varExpr, unifies(varType, exprType), f"type mismatch - expected: $varType, got: $exprType")
-      DynamicIL.Set(name, exprForm) -> exprType
+      require(env, ast, local.nonEmpty, f"assignment to undefined variable $name")
+      val lhsType = local.get.typeOf(name)
+      // check if variable varType and rhsType unifies
+      val (rhsForm, rhsType) = transform(env, Some(lhsType))(rhsExpr)
+      val (lhsTypeUni, rhsTypeUni) = unify(env, ast)(lhsType, rhsType)
+      DynamicIL.Set(name, rhsForm) -> rhsTypeUni
 
-    case Term(NUMBER :: Atom(sign) :: Atom(integer) :: Atom(fraction) :: Nil) =>
-      transformNumber(env, hint)(sign, integer, fraction)
+    case Term(NUMBER :: Atom(integer) :: Atom(fraction) :: Nil) =>
+      transformNumber(env, hint)(integer, fraction)
 
     case Term(STRING :: Atom(string) :: Nil) =>
       val bytes = string.getBytes(UTF_8)
       val t = Poly(TypeCons(TypeName("Array"), TypeName("I8") :: Nil))
       DynamicIL.Val(bytes) -> t
 
-    case Term(LAMBDA :: Term(rawFormals) :: bodyExpr :: Nil) =>
-      val formals = rawFormals.map(_.asInstanceOf[Atom].value)
-      val (bodyForm, bodyType) = transform(env)(bodyExpr)
-      DynamicIL.Fun(formals, bodyForm) -> bodyType
+    case Term(Atom("core-fun!") :: specExpr :: bodyExpr :: Nil) =>
+
+      def transformParam(inner: Tree) = inner match {
+        case Term(Atom(name) :: Term(Nil) :: Nil) => panic(env, specExpr, "lambda parameter type inference not implemented")
+        case Term(Atom(paramName) :: paramType :: Nil) => paramName -> toType(paramType)
+      }
+
+      def transformSpec(inner: Tree): (List[(String, Type)], Option[Type]) = inner match {
+        case Term(Term(params) :: Term(Nil) :: Nil) => params.map(transformParam) -> None
+        case Term(Term(params) :: bodyType2 :: Nil) => params.map(transformParam) -> Some(toType(bodyType2))
+      }
+
+      val (specParams, returnType) = transformSpec(specExpr)
+
+      val local = env.extend()
+      specParams foreach { case (name, typ) =>
+        local.variables(name) = null
+        local.typeOf(name) = Poly(typ)
+      }
+      val (bodyForm, bodyType) = transform(local)(bodyExpr)
+      val returnType2 = returnType.getOrElse(bodyType.typ)
+      val (paramNames, paramTypes) = (specParams.map(_._1), specParams.map(_._2))
+
+      val paramsType = TypeCons(TypeName("->"), TypeCons(TypeName(","), paramTypes) :: returnType2 :: Nil)
+
+      DynamicIL.Fun(specParams.map(_._1), bodyForm) -> Poly(paramsType)
+
+    case Term(BLOCK :: Nil) =>
+      DynamicIL.Seq(Nil) -> TypeSystem.Poly(TypeSystem.TypeName("Unit"), Nil)
 
     case Term(BLOCK :: args) =>
       val local = env.extend()
@@ -381,38 +386,71 @@ object Core {
 
     //case Term(QUOTE :: term :: Nil) =>
 
+    case Term(Atom("core-loop") :: x :: y :: Nil) =>
+      val ((condForm, condType), (bodyForm, _)) = (transform(env)(x), transform(env.extend())(y))
+      unify(env, ast)(condType, Poly(TypeName("Bool")))
+      DynamicIL.Loop(condForm, bodyForm) -> Poly(TypeName("Unit"))
+
+    case Term(Atom("core-cond") :: x :: t :: f :: Nil) =>
+      val (condForm, condType) = transform(env)(x)
+      val (tForm, tType) = transform(env)(t)
+      val (fForm, fType) = transform(env)(f)
+      unify(env, ast)(condType, Poly(TypeName("Bool")))
+      val (lhsType, rhsType) = unify(env, ast, any = true)(tType, fType)
+      DynamicIL.Cond(condForm, tForm, fForm) -> rhsType
+
     case Term(head :: tail) =>
       val ((headForm, headType), args) = (transform(env)(head), tail.map(transform(env)))
       val (argForms, argTypes) = (args.map(_._1), args.map(_._2))
       // todo: check if headType args unify with argTypes
-      DynamicIL.App(headForm, argForms) -> validatedApply(headType, argTypes)
-
-    case Term(Nil) =>
-      DynamicIL.Seq(Nil) -> Poly(TypeName("Unit"))
+      DynamicIL.App(headForm, argForms) -> validatedApply(env, ast)(headType, argTypes)
   }
 
   // -- EVALUATE ---------------------------------------------------------------
 
   def eval(env: Env)(form: DynamicIL.Form): Any = form match {
     case DynamicIL.Val(x) => x
-    case DynamicIL.Get(x) => env.findVariable(x).get.variables(x)
-    case DynamicIL.Set(x, y) => env.findVariable(x).get.variables(x) = eval(env)(y)
-    case DynamicIL.Let(x, y, _) => env.variables(x) = eval(env)(y)
-    case DynamicIL.Fun(x, y) => Lambda(x, y, env)
+
+    case DynamicIL.Get(x) =>
+      env.findVariable(x).get.variables(x)
+
+    case DynamicIL.Set(x, y) =>
+      env.findVariable(x).get.variables(x) = eval(env)(y)
+
+    case DynamicIL.Let(x, y, _) =>
+      env.variables(x) = eval(env)(y)
+
+    case DynamicIL.Fun(x, y) =>
+      Lambda(x, y, env)
+
     case DynamicIL.App(x, y) =>
       val args = y.map(eval(env))
       val res = eval(env)(x) match {
         case Lambda(params, body, local) =>
           params.zip(args).foreach(local.variables += _)
           eval(local)(body)
-        case x =>
-          x.asInstanceOf[BuiltinLambda](args)
+        case lambda =>
+          lambda.asInstanceOf[BuiltinLambda](args)
       }
       res
+
     case DynamicIL.Seq(x) =>
       val local = env.extend()
       val res = x.map(eval(local))
       if (res.nonEmpty) res.last else ()
+
+    case DynamicIL.Loop(x, y) =>
+      val local = env.extend()
+      var res = eval(local)(x)
+      while (res == true) {
+        eval(local)(y)
+        res = eval(local)(x)
+      }
+
+    case DynamicIL.Cond(x, y, z) =>
+      val local = env.extend()
+      val res = eval(local)(x)
+      eval(local)(if (res == true) y else z)
   }
 }
 

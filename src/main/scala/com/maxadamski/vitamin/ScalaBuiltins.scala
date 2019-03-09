@@ -11,7 +11,8 @@ object ScalaBuiltins {
   def mapStr[T](a: Array[Byte])(f: String => T): Unit = f(btos(a))
 
   def mkTypes(x: String): List[TypeName] = x.split(' ').map(TypeName).toList
-  def fun(args: Type*): Type = args.toList.reduceRight { (sum, x) => TypeCons(TypeName("->"), List(sum, x)) }
+  //def fun(args: Type*): Type = args.toList.reduceRight { (sum, x) => TypeCons(TypeName("->"), List(sum, x)) }
+  def fun(args: Type*): Type = TypeCons(TypeName("->"), tup(args.dropRight(1): _*) :: args.last :: Nil)
   def tup(args: Type*) = TypeCons(TypeName(","), args.toList)
   def arr(x: Type): TypeCons = TypeCons(array, x :: Nil)
   def tn(x: String): TypeName = TypeName(x)
@@ -24,8 +25,8 @@ object ScalaBuiltins {
     x.map { t => f"sys_${name}_${t.x}" -> Poly(fun(t, t, ret)) }
 
   // monomorphic types
-  private val aa = tn("'a")
-  private val bottom = tn("'bottom")
+  private val aa = tn("a")
+  private val bottom = tn("bottom")
   private val array = tn("Array")
 
   // built-in types
@@ -36,6 +37,7 @@ object ScalaBuiltins {
   private val ostream = tn("OStream")
   private val istream = tn("IStream")
   private val array_a = Poly(tc(array, aa), forall(aa) :: Nil)
+  private val term = tn("Term")
 
   // convenience
   private val List(i8, i16, i32, i64) = integers
@@ -59,7 +61,22 @@ object ScalaBuiltins {
     List("trunc", "round").map(mkRetFun(_, i64)(floating)),
     List("floor", "ceil").map(mkIdFun(_, 2)(floating)),
     num.map(a => num.map(b => f"sys_${a.x}_to_${b.x}" -> Poly(fun(a, b), Nil)))
-  ).flatten.flatten
+  ).flatten.flatten ++ List[(String, Poly)](
+    "sys_I8_to_Str"  -> Poly(fun(i8,  arr(i8))),
+    "sys_I16_to_Str" -> Poly(fun(i16, arr(i8))),
+    "sys_I32_to_Str" -> Poly(fun(i32, arr(i8))),
+    "sys_I64_to_Str" -> Poly(fun(i64, arr(i8))),
+    "sys_F32_to_Str" -> Poly(fun(f32, arr(i8))),
+    "sys_F64_to_Str" -> Poly(fun(f64, arr(i8))),
+    "sys_lt_I8"  -> Poly(fun(i8,  i8,  bool)),
+    "sys_lt_I16" -> Poly(fun(i16, i16, bool)),
+    "sys_lt_I32" -> Poly(fun(i32, i32, bool)),
+    "sys_lt_I64" -> Poly(fun(i64, i64, bool)),
+    "sys_lt_F32" -> Poly(fun(f32, f32, bool)),
+    "sys_lt_F64" -> Poly(fun(f64, f64, bool)),
+    "sys_arr_get" -> Poly(fun(arr(aa), i32, aa), forall(aa) :: Nil),
+    "sys_arr_len" -> Poly(fun(arr(aa), i32), forall(aa) :: Nil)
+  )
 
   val manualVariableTypes: List[(String, Poly)] = List(
     "sys_eq" -> Poly(fun(aa, aa, bool), forall(aa) :: Nil),
@@ -68,16 +85,27 @@ object ScalaBuiltins {
     "sys_fos_write" -> Poly(fun(ostream, arr(i8), unit)),
     "sys_stdin" -> Poly(istream),
     "sys_stdout" -> Poly(ostream),
-    "sys_stderr" -> Poly(ostream)
+    "sys_stderr" -> Poly(ostream),
+    "append" -> Poly(fun(arr(aa), arr(aa), arr(aa)), forall(aa) :: Nil),
+    "quote" -> Poly(fun(aa, term), forall(aa) :: Nil)
   )
 
   val variables: Map[String, Any] = Map(
     "sys_stdin" -> System.in,
     "sys_stdout" -> System.out,
-    "sys_stderr" -> System.err
+    "sys_stderr" -> System.err,
+    "true" -> true,
+    "false" -> false,
+    "Nil" -> Nil
   )
 
   val functions: Map[String, List[Any] => Any] = Map(
+    "sys_I8_to_Str"  ->  { case List(x: Byte  ) => stob(x.toChar.toString) },
+    "sys_I16_to_Str" ->  { case List(x: Short ) => stob(x.toString) },
+    "sys_I32_to_Str" ->  { case List(x: Int   ) => stob(x.toString) },
+    "sys_I64_to_Str" ->  { case List(x: Long  ) => stob(x.toString) },
+    "sys_F32_to_Str" ->  { case List(x: Float ) => stob(x.toString) },
+    "sys_F64_to_Str" ->  { case List(x: Double) => stob(x.toString) },
     "sys_I16_to_I8" ->  { case List(x: Short ) => x.toByte },
     "sys_I32_to_I8" ->  { case List(x: Int   ) => x.toByte },
     "sys_I64_to_I8" ->  { case List(x: Long  ) => x.toByte },

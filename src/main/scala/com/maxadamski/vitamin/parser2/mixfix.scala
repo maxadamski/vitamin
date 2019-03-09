@@ -1,9 +1,6 @@
-package com.maxadamski.vitamin.parser
+package com.maxadamski.vitamin.parser2
 
 import collection.mutable.{Map => MutableMap}
-
-import Fixity.Fixity
-import Associativity.Associativity
 
 case class OpGroup(
   name: String, fix: Fixity, ass: Associativity,
@@ -12,6 +9,18 @@ case class OpGroup(
 )
 
 case class OpName(group: String, name: String)
+
+sealed trait Associativity
+case class RightAssoc() extends Associativity
+case class LeftAssoc() extends Associativity
+case class NoneAssoc() extends Associativity
+
+sealed trait Fixity
+case class Infix(associativity: Associativity) extends Fixity
+case class Prefix() extends Fixity
+case class Suffix() extends Fixity
+
+case class Operator(name: String, precedence: Int, fixity: Fixity)
 
 object OpUtils {
   def topologicalSort(graph: Map[String, List[String]]): List[String] = {
@@ -57,26 +66,12 @@ object OpUtils {
     names.flatMap { name =>
       if (groups.contains(name.group)) {
         val group = groups(name.group)
-        Some(Operator(name.name, group.precedence, group.fix, group.ass))
+        Some(Operator(name.name, group.precedence, Prefix()))
       } else {
         // warn that operator was not created
         println(s"operator $name not created")
         None
       }
     }.toList
-  }
-
-  // this should be a library function
-  def opKind(kind: String): (Fixity, Associativity) = kind match {
-    case "xfxfx" => (Fixity.LeftChain, Associativity.None)
-    case "fxfx" => (Fixity.NullMix, Associativity.None)
-    case "xfx" => (Fixity.Infix, Associativity.None)
-    case "xfy" => (Fixity.Infix, Associativity.Right)
-    case "yfx" => (Fixity.Infix, Associativity.Left)
-    case "fx" => (Fixity.Prefix, Associativity.None)
-    case "fy" => (Fixity.Prefix, Associativity.Right)
-    case "xf" => (Fixity.Suffix, Associativity.None)
-    case "yf" => (Fixity.Suffix, Associativity.Left)
-    case _ => throw new Exception("Unknown parser kind")
   }
 }
