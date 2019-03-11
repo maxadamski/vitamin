@@ -1,0 +1,158 @@
+
+op(10, core-par, `( _? )`)
+op(10, core-blk, `{ _? }`)
+
+op(14, core-set, `_ = _`)
+
+op(15, core-def, `macro _ = _`)
+op(15, core-let, `let _ = _`)
+
+op(25, core-loop, `while _ { _? }`)
+op(25, core-cond, `if _ { _? } else { _? }`)
+op(25, crazy-loop, `for _ in _ to _ { _? }`)
+
+op(27, core-list, `_ , _+`)
+op(28, core-fun, `_ => _`)
+op(29, core-pair, `_ -> _`)
+op(30, core-type, `_ : _`)
+
+op(31, core-cond, `_ ? _ : _`)
+
+op(31, sys_and_Bool, `_ and _`)
+
+op(32, sys_or_Bool, `_ or _`)
+
+op(33, sys_not_Bool, `not _`)
+
+op(35, sys_eq_Any, `_ == _`)
+op(35, sys_ne_I32, `_ != _`)
+op(35, sys_lt_I32, `_ < _`)
+op(35, sys_gt_I32, `_ > _`)
+op(35, sys_le_I32, `_ <= _`)
+op(35, sys_ge_I32, `_ >= _`)
+
+op(40, sys_add_I32, `_ + _!`)
+op(40, sys_sub_I32, `_ - _!`)
+
+op(45, sys_mul_I32, `_ * _!`)
+op(45, sys_div_I32, `_ / _!`)
+
+op(50, sys_neg_I32, `- _`)
+
+op(55, sys_arr_get, `_ [ _ ]`)
+
+//op(, invoke, `_ ( _ , _+ )`)
+
+macro core-blk(x) = x
+
+macro core-par(x) = x
+
+macro print(x) = quasiquote(sys_fos_write(sys_stdout, unquote(x)))
+
+macro length(x) = quasiquote(sys_arr_len(unquote(x)))
+
+let sys_not_Bool = (x: Bool) -> Bool => x ? false : true
+
+let sys_and_Bool = (x: Bool, y: Bool) -> Bool => x ? y : false
+
+let sys_or_Bool = (x: Bool, y: Bool) -> Bool => x ? true : y
+
+let sys_le_I32 = (x: I32, y: I32) -> Bool => x < y or x == y
+
+let sys_ge_I32 = (x: I32, y: I32) -> Bool => not x < y
+
+let sys_gt_I32 = (x: I32, y: I32) -> Bool => not x <= y
+
+let print-char = (x: I8) -> Unit => print(sys_I8_to_Str(x))
+
+let print-int = (x: I32) -> Unit => print(sys_I32_to_Str(x))
+
+let print-str = (s: Array(I8)) -> Unit => {
+    let i = 0
+    let n = length(s)
+    while i < n {
+        let b = s[i]
+        print-char(b)
+        i = i + 1
+    }
+}
+
+let newline = () -> Unit => print-char(sys_I32_to_I8(10))
+
+let println = (x: Array(I8)) -> Unit => {
+    print-str(x)
+    newline()
+}
+
+macro swap(a, b) = quasiquote({
+    let __tmp__ = unquote(a);
+    unquote(a) = unquote(b);
+    unquote(b) = __tmp__;
+})
+
+macro crazy-loop(name, a, b, body) = quasiquote({
+    let unquote(name) = unquote(a)
+    let __end__ = unquote(b)
+    while unquote(name) <= __end__ {
+        unquote(body)
+        unquote(name) = unquote(name) + 1
+    }
+})
+
+let factorial = (n: I32) -> I32 => {
+    let x = 1
+    for i in 1 to n {
+        x = x * i
+    }
+    x
+}
+
+println("-- test hello")
+println("Hello, World!")
+
+println("-- test swap")
+let u = 7
+let v = 64
+swap(u, v)
+print-str("u = ")
+print-int(u)
+newline()
+print-str("v = ")
+print-int(v)
+newline()
+
+println("-- test factorial)
+for i in 0 to 10 {
+    print-int(factorial(i))
+    newline()
+}
+
+println("-- test cond")
+let answer = "Blue"
+if answer == "Green" {
+    println("Green's my favourite!")
+} else {
+    print-str(answer)
+    println(" is fine too")
+}
+
+println("-- test to-upper")
+
+let to-upper = (s: Array(I8)) -> Array(I8) => {
+    let n = length(s)
+    let x = sys_arr_new_I8(n)
+    for i in 0 to n - 1 {
+        let char = sys_I8_to_I32(sys_arr_get(s, i))
+        if 97 <= char and char <= 122 {
+            sys_arr_set_I8(x, i, sys_I32_to_I8(sys_sub_I32(char, 32)))
+        } else {
+            sys_arr_set_I8(x, i, sys_I32_to_I8(char))
+        }
+    }
+    x
+}
+
+let mixed = "Ala ma kota"
+let upper = to-upper(mixed)
+println(mixed)
+println(upper)

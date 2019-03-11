@@ -68,6 +68,7 @@ object ScalaBuiltins {
     "sys_I64_to_Str" -> Poly(fun(i64, arr(i8))),
     "sys_F32_to_Str" -> Poly(fun(f32, arr(i8))),
     "sys_F64_to_Str" -> Poly(fun(f64, arr(i8))),
+    "sys_eq_Any" -> Poly(fun(aa,  aa,  bool), forall(aa) :: Nil),
     "sys_lt_I8"  -> Poly(fun(i8,  i8,  bool)),
     "sys_lt_I16" -> Poly(fun(i16, i16, bool)),
     "sys_lt_I32" -> Poly(fun(i32, i32, bool)),
@@ -75,7 +76,9 @@ object ScalaBuiltins {
     "sys_lt_F32" -> Poly(fun(f32, f32, bool)),
     "sys_lt_F64" -> Poly(fun(f64, f64, bool)),
     "sys_arr_get" -> Poly(fun(arr(aa), i32, aa), forall(aa) :: Nil),
-    "sys_arr_len" -> Poly(fun(arr(aa), i32), forall(aa) :: Nil)
+    "sys_arr_set_I8" -> Poly(fun(arr(i8), i32, i8, i8)),
+    "sys_arr_len" -> Poly(fun(arr(aa), i32), forall(aa) :: Nil),
+    "sys_arr_new_I8" -> Poly(fun(i32, arr(i8)))
   )
 
   val manualVariableTypes: List[(String, Poly)] = List(
@@ -87,7 +90,9 @@ object ScalaBuiltins {
     "sys_stdout" -> Poly(ostream),
     "sys_stderr" -> Poly(ostream),
     "append" -> Poly(fun(arr(aa), arr(aa), arr(aa)), forall(aa) :: Nil),
-    "quote" -> Poly(fun(aa, term), forall(aa) :: Nil)
+    "quote" -> Poly(fun(aa, term), forall(aa) :: Nil),
+    "true" -> Poly(bool),
+    "false" -> Poly(bool)
   )
 
   val variables: Map[String, Any] = Map(
@@ -222,7 +227,7 @@ object ScalaBuiltins {
     "sys_arr_set_F32" ->  { case List(a: Array[Float]  , i: Int, x: Float  ) => a(i) = x },
     "sys_arr_set_F64" ->  { case List(a: Array[Double] , i: Int, x: Double ) => a(i) = x },
     "sys_arr_set_Bool" -> { case List(a: Array[Boolean], i: Int, x: Boolean) => a(i) = x },
-    "sys_arr_set_Any" ->  { case List(a: Array[Any]    , i: Int, x: Any    ) => a(i) = x },
+    "sys_arr_set" ->  { case List(a: Array[Any]    , i: Int, x: Any    ) => a(i) = x },
     "sys_arr_get"  -> { case List(a: Array[_], i: Int) => a(i) },
     "sys_arr_len"  -> { case List(a: Array[_]) => a.length },
     "sys_getenv" -> { case List(a: Array[Byte]) => withStr(a)(System.getenv) },

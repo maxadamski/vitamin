@@ -6,22 +6,14 @@ op(13, core-def, `macro _ = _`)
 op(13, core-let, `let _ = _`)
 op(15, core-loop, `while _ { _? }`)
 op(15, core-cond, `if _ { _ } else { _ }`)
-
-
 op(18, core-list, `_ , _+`)
-
 op(20, core-fun, `_ => _`)
 op(21, core-pair, `_ -> _`)
 op(22, core-type, `_ : _`)
-
 op(60, sys_arr_get, `_ [ _ ]`)
-
 //op(50, _, `_ ( _ , _+ )`)
-
 //op(51, cast, `_ as _!`)
-
 op(61, sys_lt_I32, `_ < _!`)
-
 op(62, sys_add_I32, `_ + _!`)
 
 /*
@@ -41,19 +33,6 @@ macro cfor(x, y, z, body) = quasiquote({
         unquote(z)
     }
 })
-
-
-//sys_fos_write(sys_stdout, sys_I64_to_Str(sys_add_I64(2, 3)))
-//println(sys_I64_to_Str(10))
-//var x: I32 = hoola hoop
-
-// lambda syntax
-//let f1 = x => nil
-//let f2 = x, y => nil
-//let f3 = x: A => nil
-//let f3 = (x: A) => nil
-//let f4 = (x: A, y: B) => nil
-//let f5 = (x: A, y: B) -> C => nil
 
 /*
 protocol Show(a)   { let show: a -> String }
@@ -93,24 +72,3 @@ let noid = void
 print-str("void")
 void()
 noid()
-
-
-
-// https://akuklev.livejournal.com/1139711.html
-// "adjacent operators are in non-associative precedence group"
-//
-// a directed edge a -> b means "a binds more than b"
-// prefix operators are non-associative or right-associative
-// suffix operators are non-associative or left-associative
-// operator group can only
-
-//(200, _, `_ ( _ , # )`)
-//(200, _, `_ ( _ )`)
-//(200, _, `_ ( )`)
-
-/*
-op(300, let, `let _ = _`)
-op(350, describe, `describe _ { _ }`)
-op(350, it, `it _ { _ }`)
-*/
-

@@ -127,7 +127,7 @@ object Vitamin {
   def main(args: Array[String]): Unit = {
     var args2 = args.toList
     if (args2.isEmpty)
-      args2 = "res/tests/pratt.vc" :: Nil
+      args2 = "res/tests/demo.vc" :: Nil
     val arguments = parseArgs(args2)
     verifyArgs(arguments)
 
@@ -174,7 +174,8 @@ object Vitamin {
       val phase2 = benchAndPrint("-- phase 2 (parser)") { new parser1.Parser(phase1).parseProg() }
       //println(f"-- parsed\n$parsed")
       val phase3 = benchAndPrint("-- phase 3 (expand)") { Core.expand(env, toplevel = true)(phase2) }
-      //println(f"-- expanded\n$expanded")
+      println(f"-- expanded")
+      println(phase3)
       val phase4 = benchAndPrint("-- phase 4 (verify)") { Core.transform(env.extend())(phase3)._1 }
 
       println("-- running program")

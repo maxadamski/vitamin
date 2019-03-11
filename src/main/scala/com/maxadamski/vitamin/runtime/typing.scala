@@ -160,7 +160,7 @@ object TypeSystem {
     val sub = CoreType.unify(a, b)
     if (sub.isErr) {
       if (any) return (Poly(TypeName("Any")), Poly(TypeName("Any")))
-      panic(env, ast, s"unification of $a and $b failed with error ${sub.getError}")
+      panic(env, ast, s"$ast unification of $a and $b failed with error ${sub.getError}")
     }
 
     val subf = substituteType(sub.get) _
