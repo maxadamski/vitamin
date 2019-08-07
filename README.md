@@ -1,3 +1,3 @@
 # The Vitamin Language
 
-And make programming even more fun with Vitamin!
+Make programming even more fun with Vitamin!
