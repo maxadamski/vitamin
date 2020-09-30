@@ -1,7 +1,6 @@
-__pycache__
-.mypy_cache
-.idea
-notes
-target/
-*.class
-*.log
+ignore/
+*.bak
+
+__pycache__/
+*.py[cod]
+*.so

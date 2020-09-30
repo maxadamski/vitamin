@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import argparse
+
+from sys import stdin, stderr
+from os.path import dirname, exists
+from os import environ
+
+from src.utils import show_token, show_expr, show_trace, print_error, print_header, Error
+from src.scan import scan, indent
+from src.parse import parse
+from src.run import init_env, run_file, run_input, Env
+from src.repl import run_repl
+
+args = None
+
+def maybe_print_trace(err):
+    if args.debug is not None:
+        print('>>> BEGIN STACK TRACE')
+        print(show_trace(err)[:-1])
+        print('<<< END STACK TRACE')
+
+def print_benchmark():
+    from src.run import times
+    print_header('runtime stats')
+    for phase, time in times.items():
+        print(f'{phase.ljust(6," ")} {time:.6f}s')
+    total = sum(times.values())
+    print(f'total  {total:.6f}s')
+
+def parse_args():
+    global args
+    phases = 'scan,indent,parse,run,exit'
+    parser = argparse.ArgumentParser(prog='rx', description='Take your vitamins')
+    parser.add_argument('input', metavar='FILE', nargs='*', help='input source file')
+    parser.add_argument('-d', '--debug', metavar='PHASE', nargs='*', help=f'debug phase output ({phases})')
+    parser.add_argument('-L', '--library-path', metavar='PATH', nargs=1, help=f'add PATH path to library search')
+    parser.add_argument('-p', '--prelude-path', metavar='PATH', help=f'instead of the default, import a custom prelude at PATH')
+    parser.add_argument('-P', '--no-prelude', action='store_true', help=f'disable implicit prelude import')
+    parser.add_argument('-s', '--silent', action='store_true', help=f'run repl without printing the greeting message')
+    parser.add_argument('-b', '--benchmark', action='store_true', help=f'report time spent on compilation phases')
+    args = parser.parse_args()
+    phases = phases.split(',')
+    if args.debug:
+        for phase in args.debug:
+            if phase and phase not in phases:
+                print(f'error: no phase {phase}', file=stderr)
+                exit(1)
+    for path in args.input:
+        if not exists(path) and path != '-':
+            print(f'error: no such file `{path}`', file=stderr)
+            exit(1)
+    return args
+
+if __name__ == '__main__':
+    parse_args()
+
+    try:
+        env = Env()
+        init_env(env)
+        if not args.no_prelude:
+            if args.prelude_path is not None:
+                run_file(env, path=args.prelude_ptah, search=False)
+            else:
+                run_file(env, path='prelude.v', search=True)
+
+        if args.input:
+            for path in args.input:
+                if path == '-':
+                    text = sys.stdin.read()
+                    run_input(env, text)
+                else:
+                    run_file(env, path, search=False)
+        else:
+            run_repl(env, silent=args.silent, vi_mode=False)
+
+    except Error as err:
+        maybe_print_trace(err)
+        print_error(err)
+        exit(1)
+
+    except Exception as err:
+        if args.debug is None:
+            print('fatal error: run with --debug to see stack trace')
+        maybe_print_trace(err)
+        exit(1)
+
+    if args.benchmark:
+        print_benchmark()
+
