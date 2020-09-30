@@ -49,8 +49,8 @@ def print_help():
         :h, :help \tShow this message
         :clear    \tClear the screen
         :run FILE \tRun file in the current environment
-        :env local\tShow names of local variables
-        :env using\tShow names of variables imported from other scopes
+        :env vars \tShow names of local variables
+        :env used \tShow names of variables imported from other scopes
     """))
 
 def run_repl(env, silent=False, debug=False, vi_mode=True):
@@ -72,12 +72,12 @@ def run_repl(env, silent=False, debug=False, vi_mode=True):
                 clear()
             elif text.startswith(':env'):
                 info = text[4:].lstrip(' ')
-                if info == 'local':
-                    for name, (_, typ) in env.vars.items():
-                        print(name, ':', vrepr(typ))
-                if info == 'using':
-                    for name, (_, typ) in env.uses.items():
-                        print(name, ':', vrepr(typ))
+                if info == 'vars':
+                    for name, var in env.vars.items():
+                        print(name, ':', vrepr(var.type))
+                if info == 'used':
+                    for name, var in env.used.items():
+                        print(name, ':', vrepr(var.type))
             elif text.startswith(':run'):
                 path = text[4:].lstrip(' ')
                 run_file(env, path, search=False)
