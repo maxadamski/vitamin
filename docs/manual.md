@@ -17,10 +17,57 @@ Here is how a simple Vitamin program looks.
 
 # Lexical structure
 
-## Names
- 
+A Vitamin file is a series of atoms.
+
+## Atoms
+
+### Name
+
+A name is an identifier composed of one or more alphanumeric characters, where the first character is a letter or underscore. Next characters can also be digits or dashes.
+
+**Warning**
+
+Because dashes are valid name characters, the following sequence is scanned as one identifier.
+
+	x-y   # x-y
+
+To use the common subtraction operator, you have to add whitespace between the `-` character.
+
+	x - y # x  -  y
+
+
+### Symbols
+
+A symbol is an identifier composed of one or more non-alphanumeric characters.
+
+**Exception**
+
+If a dash `-` is preceded by symbol characters and is immediately followed by a digit, it is not added to the previous symbol, but created as a separate atom. As a consequence, you do not need to whitespace before dashes, which follow symbols, but precede number literals.
+
+	arr[5:-2]  # arr  [  5  :  -  2  ]
+
+
+### Separators
+
+A separator is a particular sequence of characters, which are greedily combined into atoms. Example separators include commas `,`, semicolons `;` and many kinds of parentheses `(` and `)`, `[` and `]`, `{` and `}`. If a bar `|` follows an opening brace, or precedes a closing brace, it is added to the atom. This results in the following two-character separators: `(|` and `|)`, `[|` and `|]`, `{|` and `|}`. 
+
+
+## Indentation
+
+Vitamin keeps track of the indentation level.
+
+If the first atom on a new line is preceded by some number of tabs and spaces, a special atom is added to the token list.
+
+- If the sequence of tabs and spaces is identical to the previous line a `$CNT` atom is emitted.
+- If the prefix of the sequence fully matches the sequence at top of the indentation stack, the new sequence is pushed onto the stack and an `$IND` atom is emitted.
+- If the prefix of the sequence fully matches a sequence on the stack, then values are popped from the stack until this sequence is at the top. For each popped value a `$DED` atom is emitted.
+- Otherwise the indentation is inconsistent at this line and an error is raised.
 
 ## Groups
+
+Characters between opening and closing parentheses form a group. A group is also formed between the `$IND` and `$DED` atoms.
+
+Characters inside a group are lexically analyzed and parsed on-demand, so a syntax macro can receive the raw character stream, instead of the token or expression stream, if you desire. This bypasses the Vitamin lexer and parser, so you can perform completely custom analysis.
 
 
 # Literals 
