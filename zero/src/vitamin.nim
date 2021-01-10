@@ -85,6 +85,7 @@ proc repl(env: ref Env, silent: bool = false) =
     while true:
         if not noise.read_line(): break
         let line = noise.get_line()
+        let cmd = line.strip()
 
         if lines.len > 0:
             # TODO: preload buffer with the current indentation level
@@ -100,16 +101,16 @@ proc repl(env: ref Env, silent: bool = false) =
             noise.set_prompt(prompt_ok)
             lines = @[]
 
-        elif line == ":h" or line == ":help":
+        elif cmd == ":h" or cmd == ":help":
             echo repl_help
-        elif line == ":q" or line == ":quit" or line == ":exit":
+        elif cmd == ":q" or cmd == ":quit" or cmd == ":exit":
             break
-        elif line == ":env":
+        elif cmd == ":env":
             print_env(env)
-        elif line == ":cls" or line == ":clear":
+        elif cmd == ":cls" or cmd == ":clear":
             stdout.write "\x1b[2J\x1b[H"
-        elif line.starts_with(":run"):
-            let args = line.split(" ")
+        elif cmd.starts_with(":run"):
+            let args = cmd.split(" ")
             if args.len != 2:
                 echo "Usage:  :del FILE"
                 continue
@@ -118,8 +119,8 @@ proc repl(env: ref Env, silent: bool = false) =
                 echo fmt"File {path} doesn't exist!"
                 continue
             eval_file(env, path)
-        elif line.starts_with(":del"):
-            let args = line.split(" ")
+        elif cmd.starts_with(":del"):
+            let args = cmd.split(" ")
             if args.len != 2:
                 echo "Usage:  :del NAME"
                 continue
@@ -129,6 +130,8 @@ proc repl(env: ref Env, silent: bool = false) =
                 continue
             env.vars.del(name)
             echo fmt"Deleted {name}"
+        elif cmd == "":
+            continue
         else:
             # TODO: check if expression is complete with parser
             var exp = line

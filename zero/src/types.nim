@@ -57,11 +57,17 @@ template mkval*(x: Mem): Val = Val(kind: vMem, mem: x)
 template mkval*(x: Fun): Val = Val(kind: vFun, fun: x)
 template mkval*(x: BuiltinFun): Val = Val(kind: vBuiltinFun, builtin_fun: x)
 
-proc atom*(x: string, tag: AtomTag = aSym, pos: Option[Position] = none(Position)): Atom =
-    Atom(value: x, tag: tag, pos: pos)
+proc atom*(x: string, tag: AtomTag = aSym, pos: Position): Atom =
+    Atom(value: x, tag: tag, pos: some(pos))
+
+proc atom*(x: string, tag: AtomTag = aSym): Atom =
+    Atom(value: x, tag: tag, pos: none(Position))
 
 template term*(x: openArray[Exp]): Term =
     Term(nodes: x)
+
+proc pos*(y, x, yy, xx: int, file: ref string = nil): Position =
+    Position(start_line: y, start_char: x, stop_line: yy, stop_char: xx, file: file)
 
 proc extend*(env: ref Env): ref Env =
     var child = new Env
