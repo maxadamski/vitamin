@@ -143,7 +143,7 @@ Variables cannot be redefined.
 
 ## Assumptions
 
-You can assume a type of a variable, before defining it.
+You can assume a type of a variable, before defining it. Variables cannot be used before definition.
 
 	x : A
 
@@ -170,38 +170,42 @@ Names of variables may be reused in an inner scope. In this situation, the varia
 
 Although you can't redefine variables, you can define a variable as mutable memory, which can be written to with the assignment operator `:=`.
 
-	a = ref 3
-	a := 4
+	mut a := 42
+	a := 0
+	assert a == 0
 
 Symmetrically, there is a way to place a value in immutable memory (protected memory location), which cannot be written to. The following is practically equivalent to a regular variable definition.
 
-	b = iref 42
+	imm b := 42
 	assert-error b := 0
 
 
 **Internals**
 
-Given the following functions in scope:
+| allocator | ref | get | set | new |     del     |
+|-----------|:---:|:---:|:---:|:---:|:-----------:|
+| heap      | all | all | mut | mut | mut         |
+| stack     | all | all | mut | mut | mut (dummy) |
+| temp      | all | all | mut | mut | mut (dummy) |
+| gc        | all | all | mut | mut | mut (dummy) |
+| rc        | all | all | mut | mut | mut (dummy) |
 
-	Mut.new : (A: Type, count: Size = 1) -> Mut(A)
-	Mut.del : (x: Mut(A)) -> Unit
-	Mut.get : (x: Mut(A)) -> A
-	Mut.set : (x: Mut(A), value: A) -> Unit
+	Mut = opaque (a: Type) -> Type => Size
+	Imm = opaque (a: Type) -> Type => Size
+	heap, stack, temp, gc, rc : Allocator
 
-	Gc.new, Gc.get, Gc.set
-	
-	Mut-Stack.new : (A: Type) -> Mut-Stack(A)
-	Mut-Stack.get : (x: Mut-Stack(A)) -> A
-	Mut-Stack.set : (x: Mut-Stack(A), value: A) -> Unit
+	new : (allocator: Allocator = _, type: Type, value: ?type = none) -> Mut(type)
+	ref : (allocator: Allocator = _, value: A) -> Imm(A)
+	ref : (allocator: Allocator = _, value: A) -> Mut(A)
+	del : (allocator: Allocator = _, memory: Mut(A)) -> Unit
+	get : (memory: Mut(A) | Imm(A)) -> A
+	set : (memory: Mut(A), value: A) -> A
 
-	Imm.ref : (x: A) -> Imm(A)
-	Imm.get : (x: Imm(A)) -> A
-
-	Imm-Stack.ref : (x: A) -> Imm-Stack(A)
-	Imm-Stack.get : (x: Imm-Stack(A)) -> A
-
-1. `var x : A` is the same as `x = Mut.new(A)`
-2. `var x := e` is the same as `x = Mut.ref(e)`
+- `var x : t` is the same as `x = mut(t)`
+- `var x := e` is the same as `x: Mut(type-of(e)) = ref(e)`
+- `let x := e` is the same as `x: Imm(type-of(e)) = ref(e)`
+- `x := e` is the same as `set(x, e)`
+- `x` is automatically dereferenced with `get(x)`, when used in an expression (implicit conversion)
 
 Using memory in an expression automatically dereferences it.
 
@@ -290,7 +294,6 @@ This table doesn't use shorthand forms for clarity.
 	x: A             | immutable(A) x    | constant  A
 	x: imm A         | A const x         | read-only A
 	x: mut A         | A x               | mutable   A
-	x: imm A         | immutable(A*) x   | constant  pointer to constant  A
 	x: imm ptr A     | n/a               | constant  pointer to read-only A
 	x: ptr mut A     | n/a               | constant  pointer to mutable   A
 	x: imm ptr A     | A const * const x | read-only pointer to read-only A
@@ -302,7 +305,7 @@ This table doesn't use shorthand forms for clarity.
 
 In Vitamin types are values.
 
-The type system is based on the Martin-Lof dependent type theory.
+The type system is based on the Martin-Löf dependent type theory.
 
 ## Universe Types
 
@@ -727,130 +730,3 @@ Minor inspirations:
 [intransitive-precedence]: https://blog.adamant-lang.org/2019/operator-precedence/
 [mixfix-operators]: http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.157.7899
 [row-polymorphism]: https://www.microsoft.com/en-us/research/publication/first-class-labels-for-extensible-rows
-
-
-
-# Appendix A - Core Types
-
-```vitamin
-# -- core.v
-
-# Machine number types
-U8 U16 U32 U64 : Type  # unsigned integers
-I8 I16 I32 I64 : Type  # signed integers
-F32 F64 : Type         # floating point
-Size : Type            # largest unsigned type
-
-# All values are subtypes of Any
-Any : Type = `&`()
-
-# There are no values of type Never
-Never : Type = `|`()
-
-# There is one value of type Unit - the empty structure `()`
-Unit : Type = {}
-
-# -- bool.v
-
-# There are two values of type Bool
-Bool : Type = [| true, false |] 
-
-# -- optional.v
-
-# There is one value of None
-None : Type = [| none |]
-
-# An optional is either a value of type `A` or `None`
-# Shorthand for `Optional(A)` is `?A` or `opt A`
-Optional = (A: Type) => A | None
-
-# -- memory.v
-
-Immutable-Memory = unique (A: Type) -> Type => A
-
-Mutable-Memory = unique (A: Type) -> Type => A
-
-Immutable-Pointer = unique (A: Type) -> Type => Size
-
-Mutable-Pointer = unique (A: Type) -> Type => Size
-
-# -- dynamic-array.v
-
-# Shorthand for `Dynamic-Array(A)` is `[A]`
-Dynamic-Array = (A: Type) => { length: USize = 0, capacity: USize = 0, buffer: &A }
-Dynamic-Array = (length: USize = 0, capacity: USize = 0) -> Dynamic-Array(A) => (length=length, capacity=capacity, buffer=allocate(...))
-
-# -- sized-array.v
-
-# Shorthand for `Sized-Array(n, A)` is `[n,A]`
-Sized-Array = (n: USize, A: Type) => { buffer: &A }
-
-# -- string.v
-
-String = { bytes: [U8] }
-```
-
-# Appendix B - Syntax Rules
-
-```
-parameter-s = '?' name (':' expression)?
-parameter-v = name ':' '..' expression
-parameter-n = name+ ':' expression
-parameter-1 = name (':' expression)? ('=' expression)?
-parameter = parameter-s | parameter-1 | parameter-n
-parameter-list = '(' parameter* parameter-v? (';' parameter*)? ','? ')'
-function-type = (parameter-list | expression) '->' expression
-function = (paramater-list ('->' expression)? | name) '=>' expression
-
-argument = (name '=')? expression
-apply = expression '(' (argument ',')** ')' ('do' function)?
-
-Parameter     | Sweet syntax      | Desugared syntax
---------------|-------------------|-----------------
-parameter     | x : A = a         | Par(x, a, A)
-parameter-1-1 | x                 | x : _ = @undefined
-parameter-1-2 | x : A             | x : A = @undefined
-parameter-1-3 | x = a             | x : _ = a
-parameter-s-1 | ?x                | x : _ = @implicit
-parameter-s-2 | ?x : A            | x : A = @implicit
-parameter-n-1 | x-1 ... x-n : A   | x-1 : A, ..., x-n : A
-
-Function      | Sweet syntax         | Desugared syntax
---------------|----------------------|-----------------
-function      | (x-1, ..., x-n) -> A | Func(Pars(x-1, ..., x-n), A)
-function-1    | (x) -> A             | (_: x) -> A
-function-2    | x -> A               | (_: x) -> A
-
-Function      | Sweet                      | Desugared
---------------|----------------------------|----------
-lambda        | (x-1, ..., p-n) -> A => y  | Lambda(Pars(x-1, ..., x-n), A, y)
-lambda-1      | (x-1, ..., p-n) => y       | (x-1, ..., p-n) -> _ => y
-lambda-2      | (x) => y                   | disallowed
-lambda-3      | x => y                     | (x : _) => y
-lambda-4      | f($1, ..., $n)             | ($1, ..., $n) => f($1, ..., $n)
-
-Argument      | Sweet        | Desugared
---------------|--------------|-----------------
-argument-1    | x = a        | Arg(x, a)
-argument-2    | a            | _ = a
-
-Type          | Sweet                    | Desugared
---------------|--------------------------|-----------------
-union         | A-1 | ... | A-n | ..a    | Union(A-1, ..., A-n, ..a)
-tuple         | {A-1, ..., A-n}          | Tuple(A-1, ..., A-n)
-structure     | {r-1, ..., r-n, ..a}     | Data(c-1, ..., c-n, ..a)
-tagged union  | enum { c-1, ..., c-n }   | Enum(c-1, ..., c-n)
-
-Enum Row      | Sweet                    | Desugared
---------------|--------------------------|-----------------
-enum-row-1    | x : (p-1, ..., p-n) -> T | Row(x, _, Func(Pars(p-1, ..., p-n), T))
-enum-row-2    | x                        | x : T 
-enum-row-3    | x : A                    | x : (_ : A) -> T
-
-Data Row      | Sweet                    | Desugared
---------------|--------------------------|-----------------
-data-row-1    | x : A = a                | Row(x, a, A)
-data-row-1    | x : A                    | x : A = @undefined
-data-row-1    | x = a                    | x : _ = a
-```
-

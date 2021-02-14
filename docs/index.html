@@ -1,13 +1,222 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Vitamin Lang</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="index.js"></script>
-  </head>
-  <body>
-	  <h1>The Vitamin Programming Language</h1>
-	  <p>Hello, world!<br>More information coming soon!</p>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <title>The Vitamin Programming Language</title>
+  <link rel="shortcut icon" type="image/png" href="favicon.png"/>
+</head>
+<style>
+.logo {
+  height: 28px;
+  padding-bottom: 5px;
+}
+
+body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 8px;
+  display: grid;
+  grid-template: auto auto 1fr auto / minmax(0, 1fr);
+  font-family: Helvetica, sans-serif;
+  min-height: 100vh;
+  font-size: 18px;
+}
+
+hr {
+  width: 100%;
+  border: none;
+  border-top: 1px solid #DBDBDB;
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: normal;
+}
+
+p {
+  line-height: 1.618;
+  max-width: 70ch;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  margin: 15px 0;
+}
+
+footer {
+  font-size: 12px;
+  color: gray;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-top: 30px;
+}
+
+#copyright {
+  margin: 20px 0;
+  font-size: 12px;
+}
+
+section {
+  display: grid;
+  grid-template-columns: auto minmax(80px, 400px);
+  grid-gap: 20px;
+  align-items: start;
+}
+
+nav a {
+  font-size: 16px;
+  color: black;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #444;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.header-left, .header-right {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.header-right {
+  justify-self: end;
+  overflow-x: auto;
+}
+
+.header-middle {
+  justify-self: center;
+}
+
+.header-left > a {
+  margin-right: 1.5ch;
+}
+
+.header-right > a {
+  margin-left: 1.5ch;
+}
+
+.mt-0 {margin-top: 0}
+
+pre {
+  border-radius: 3px;
+  border: 1px solid #DBDBDB;
+  background: whitesmoke;
+  color: #222222;
+  font-size: 12px;
+  padding: 10px;
+  overflow-x: auto;
+  word-wrap: normal;
+}
+
+code .k  { color: purple }
+code .kt { color: green }
+code .c  { color: gray }
+code .mi { color: darkorange }
+code .fc { color: blue }
+</style>
+<body>
+  <header>
+    <a class="header-left" href="/">
+      <img class="logo" src="logo.svg" alt="Vitamin logo">
+    </a>
+    <nav class="header-right">
+      <a href="https://github.com/maxadamski/vitamin/tags">Download</a>
+      <a href="https://github.com/maxadamski/vitamin/blob/master/docs/manual.md">Documentation</a>
+      <a href="https://github.com/maxadamski/vitamin/blob/master/docs/tutorial.v">Learn</a>
+      <a href="https://github.com/maxadamski/vitamin">Source</a>
+    </nav>
+  </header>
+
+  <hr>
+
+  <main>
+    <h2>The Vitamin Programming Language</h2>
+    <section>
+    <p class="mt-0">Vitamin is a general-purpose programming language with a rich type system, clear semantics, and great flexibility. Vitamin will give you ultimate power when you need it, and won't get in your way when you don't.</p>
+    <pre class="mt-0"><code>main = () =>
+  for i in 0..100
+    var x := ''
+    if i mod 3 == 0 do x += 'Fizz'
+    if i mod 5 == 0 do x += 'Buzz'
+    if x == '' do x = to-string(i)
+    print(x)</code></pre>
+    </section>
+
+
+    <h2>Feature Showcase</h2>
+    <h3>Dependent Types</h3>
+    <pre><code><span class="c"># Vectors of length `n` and element type `a` are pointers to mutable values of type `a`</span>
+Vector <span class="k">=</span> <span class="k">opaque</span> (n: <span class="kt">Size</span>, a: <span class="kt">Type</span>) <span class="k">=></span> {items: <span class="kt">&mut</span> a}
+
+<span class="c"># Parameters `n`, `m` and `a` will be computed and passed implicitly</span>
+concat <span class="k">=</span> (?n, ?m, ?a, x: <span class="kt">Vector</span>(n, a), y: <span class="kt">Vector</span>(m, a)) <span class="k">=></span>
+  items <span class="k">=</span> <span class="fc">new</span>(a, count<span class="k">=</span>n <span class="k">+</span> m)
+  <span class="fc">copy</span>(from<span class="k">=</span>x.items, to<span class="k">=</span>items, count<span class="k">=</span>n)
+  <span class="fc">copy</span>(from<span class="k">=</span>y.items, to<span class="k">=</span><span class="fc">offset</span>(items, n), count<span class="k">=</span>m)
+  (items<span class="k">=</span>items) <span class="k">as</span> <span class="kt">Vector</span>(n <span class="k">+</span> m, a) 
+
+result <span class="k">=</span> <span class="fc">concat</span>([<span class="mi">1 1 2</span>], [<span class="mi">3 5</span>])
+<span class="k">assert</span> result <span class="k">is</span> <span class="kt">Vector</span>(<span class="mi">5</span>, <span class="kt">Int</span>)
+<span class="k">assert</span> result <span class="k">==</span> [<span class="mi">1 1 2 3 5</span>]</code></pre>
+
+
+    <h3>Metaprogramming</h3>
+
+    <pre><code>my-assert = macro (expr: Term) =>
+  gensym op, x, y
+  quote
+    when $expr
+    case Term($op, $x, $y)
+      if not eval($expr)
+        when $op
+        case '==' print('Assertion failed: expected \($x) to equal \(eval($y)), but it was equal to \(eval($x))')
+        case 'is  print('Assertion failed: expected \($x) to have type \(eval($y)), but it had type \(type-of(eval($x)))')
+        case _    print('Unsupported assertion relation \($op)')
+    case _
+      print('Error: unsupported assertion \($expr)')
+    
+<span class="c"># Use macros just like regular functions</span>
+my-assert(2 == 2)</code></pre>
+
+    <h3>Custom Syntax</h3>
+    <pre><code>three-way-compare = (class: Comparable(a) = _, x y: a) -> Int =>
+  if x &lt; y return +1
+  if x > y return -1
+  return 0
+
+three-way-compare-syntax = Syntax(
+  <span class="c"># Grammar of this syntax rule</span>
+  grammar  = 'x "&lt;=>" y'
+  <span class="c"># Each syntax rule belongs to a precedence group</span>
+  group    = 'three-way-compare'
+  <span class="c"># Specify priority relations to existing syntax precedence groups</span>
+  priority = 'three-way-compare > definition'
+  <span class="c"># argument names of this function must match the names in the grammar string</span>
+  function = three-way-compare
+)
+
+<span class="c"># To use custom syntax you must call the `use-syntax` macro</span>
+use-syntax three-way-compare-syntax
+
+a = 0 <=> 1
+b = 1 <=> 1
+assert a == 1 and b == 0</code></pre>
+
+  </main>
+
+  <footer>
+    <hr>
+    <small id="copyright">&copy; Copyright 2018-2021 Max Adamski</small>
+  </footer>
+</body>
+
+<script>
+document.getElementById('copyright').innerHTML = '&copy; Copyright 2018-' + new Date().getFullYear().toString() + ' Max Adamski';
+</script>
 </html>
