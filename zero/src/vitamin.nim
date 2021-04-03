@@ -2,7 +2,7 @@ import os, strformat, strutils, sequtils
 import options, tables
 import noise
 
-import types, scan, parse
+import types, error, scan, parse
 
 const version = "Vitamin₀ v0.1.0"
 
@@ -24,19 +24,21 @@ Commands:
 
 const cmd_help = """
 Positional arguments:
-  INPUT ...           input source files (if none given, start REPL)
+  INPUT ...             input source files (if none given, start REPL)
 
 Optional arguments:
-  -h, --help          show this help message and exit
-  -V, --version       show version information
-  
-  -L, --library PATH  add PATH to library search path list
-  -p, --prelude FILE  overwrite the default prelude path with FILE
-  -P, --no-prelude    disable implicit prelude import
-  
-  -s, --no-greeting   disable REPL greeting
+  -h, --help            show this help message and exit
+  -V, --version         show version information
+  -L, --library PATH    add PATH to library search path list
+  -p, --prelude FILE    overwrite the default prelude path with FILE
+  -P, --no-prelude      disable implicit prelude import
+  -c, --command STRING  run program passed in STRING
+                        the remaining arguments will be passed as program arguments
+  -i, --interactive     enter REPL even if input files were provided
+  -I, --no-interactive  do not enter REPL even if no input files were provided
+  -S, --no-greeting     disable REPL greeting
   -d, --debug scan|indent|parse|run|stat
-                      show debug output for a compilation phase""".fmt
+                        show debug output for a compilation phase""".fmt
 
 var global_env = new Env
 
@@ -50,8 +52,9 @@ proc print_help =
 
 proc print_version =
     echo version
-    echo fmt"Compiled on {CompileDate} [Nim {NimVersion}]"
+    echo fmt"Compiled on {CompileDate} {CompileTime} [Nim {NimVersion}]"
     echo fmt"Copyright (c) 2018-{CompileDate[0..3]} Max Adamski"
+    echo "More at: https://maxadamski.com/vitamin"
     quit(0)
 
 proc print_env(env: ref Env) =
@@ -65,14 +68,19 @@ proc find_source(name: string, search: seq[string]): Option[string] =
         if file_exists(full): return some(full)
     return none(string)
 
-proc eval_string(env: ref Env, str: string) =
-    let tokens = indent(scan(str))
-    let exprs = parse(tokens)
-    # let result = eval(env, exprs)
+proc eval_string(env: ref Env, str: string, file: Option[string] = none(string)) =
+    try:
+        let tokens = scan(str, file).indent()
+        let exprs = to_seq(parse(global_parser, tokens))
+        #echo tokens.filter_it(it.tag in {aSym, aNum, aStr}).map_it(it.value).join(" ")
+        # let result = eval(env, exprs)
+    except VitaminError:
+        let error = cast[ref VitaminError](get_current_exception())
+        print_error(error)
 
 proc eval_file(env: ref Env, path: string) =
     let data = read_file(path)
-    eval_string(env, data)
+    eval_string(env, data, some(path))
     echo fmt"DEBUG: run {path}"
 
 proc repl(env: ref Env, silent: bool = false) =
@@ -144,12 +152,15 @@ proc repl(env: ref Env, silent: bool = false) =
             eval_string(env, exp)
 
 proc main =
-    var inputs, libs, debug: seq[string]
+    var inputs, libs, debug, command_args: seq[string]
     let vpath = get_env("VPATH")
     if vpath != "": libs = vpath.split(":")
     var prelude = none(string)
+    var command = none(string)
     var no_greeting = false
     var no_prelude = false
+    var force_interactive = false
+    var force_batch = false
     var i = 1
     while i <= param_count():
         case param_str(i)
@@ -159,7 +170,13 @@ proc main =
         of "-d", "--debug": i += 1; debug.add(param_str(i))
         of "-p", "--prelude": i += 1; prelude = some(param_str(i))
         of "-P", "--no-prelude": no_prelude = true
-        of "-s", "--no-greeting": no_greeting = true
+        of "-S", "--no-greeting": no_greeting = true
+        of "-i", "--interative": force_interactive = true
+        of "-I", "--no-interactive": force_batch = true
+        of "-c", "--command":
+            i += 1; command = some(param_str(i)); i += 1
+            while i <= param_count():
+                command_args.add(param_str(i)); i += 1
         else: inputs.add(param_str(i))
         i += 1
 
@@ -180,14 +197,20 @@ proc main =
 
     libs = libs.filterIt(dir_exists(it))
 
-    if inputs.len == 0:
-        repl(global_env, no_greeting)
-        quit(0)
-
     for path in inputs:
         if not file_exists(path): panic fmt"ERROR: input file {path} doesn't exist!"
         var local = global_env.extend()
         eval_file(local, path)
+
+    if command.is_some:
+        # TODO: pass command_args
+        for i, arg in command_args:
+            echo fmt"args[{i}] = {arg}"
+        echo command.get
+        eval_string(global_env, command.get)
+
+    if ((inputs.len == 0 and command.is_none) or force_interactive) and not force_batch:
+        repl(global_env, no_greeting)
 
 when is_main_module:
     main()

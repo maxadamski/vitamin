@@ -1,4 +1,6 @@
 ignore/
+zero/vcc
+
 *.bak
 
 __pycache__/

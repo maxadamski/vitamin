@@ -1,12 +1,18 @@
 import 'type.v'
 
-Arch = [| x86-64, i386, arm64 |]
-arch = Arch.x86-64
+x86-64 = unique
+i386   = unique
+arm64  = unique
+Arch   = x86-64 | i386 | arm64
+arch   = x86-64
 
-System = [| none, linux, macos, windows |]
-system = System.linux
+linux   = unique
+macos   = unique
+windows = unique
+System = none | linux | macos | windows
+system = linux
 
-use if arch == Arch.i386 or arch == Arch.x86-64
+use if arch == i386 or arch == x86-64
 	U8  = extern Type
 	U16 = extern Type
 	U32 = extern Type

@@ -3,22 +3,32 @@ U64 : Type
 I64 : Type
 F64 : Type
 
-Bool : Type
-None : Type
+true  = Unique()
+false = Unique()
+none  = Unique()
+
+Bool = Union(true, false)
+Tril = Union(none, Bool)
 
 String-Literal : Type
 Number-Literal : Type
 
-Size  = unique U64
-Int   = unique I64
-Float = unique F64
+Size  = Opaque(U64)
+Int   = Opaque(I64)
+Float = Opaque(F64)
 
-Any   = inter-type()
-Never = union-type()
-Unit  = {}
+Any   = Union()
+Never = Intersection()
+Unit  = Struct()
 
 type-of = (x: B) => B
 id = (x: A) => x
+
+Pointer = (A: Type) => Size
+
+use None = Enum(none)
+
+use Bool = Enum(true, false)
 
 assert type-of(id) == type-of(id)
 
@@ -47,12 +57,12 @@ assert type-of(true) == Bool
 #assert type-of((true as Any) as Bool) == Bool
 
 # test data values have correct types
-assert Unit == {}
-assert type-of(()) == {}
-assert type-of({}) == Type
-assert type-of((x=true)) == {x: Bool}
-assert type-of((x=true, y=false)) == {x y: Bool}
-assert type-of((x=true, y=42)) == {x: Bool, y: I64}
+assert Unit == Struct()
+assert type-of(()) == Struct()
+assert type-of(Struct()) == Type
+assert type-of((x=true)) == Struct(x: Bool)
+assert type-of((x=true, y=false)) == Struct(x, y: Bool)
+assert type-of((x=true, y=42)) == Struct(x: Bool, y: I64)
 assert Int   != I64
 assert Size  != U64
 assert Float != F64
@@ -68,22 +78,15 @@ assert id(42) == 42
 assert id(()) == ()
 
 # test data type fields are invariant to order
-assert {x: Bool, y: Bool} == {y: Bool, x: Bool}
+assert Struct(x: Bool, y: Bool) == Struct(y: Bool, x: Bool)
 
 # test data type field type propagates backward in a group
-assert {x y: Bool} == {x: Bool, y: Bool}
-
-Pointer = unique (A: Type) => Size
+assert Struct(x, y: Bool) == Struct(x: Bool, y: Bool)
 
 assert Pointer(Bool) == Pointer(Bool)
 assert Pointer(Bool) != Size
 assert Pointer(Size) != Size
 
-#None = [| none |]
-#use None
-
-#Bool = [| true, false |]
-#use Bool
 
 #Optional = (x: Type) => x | None
 
@@ -132,5 +135,3 @@ assert Pointer(Size) != Size
 
 # type-of(x: Data) = { 
 # Enum = { rows: [Row], rest: ?Enum-Type }
-#
-
