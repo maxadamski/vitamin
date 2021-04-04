@@ -88,7 +88,7 @@ proc scan*(text: string, file: Option[string] = none(string)): seq[Exp] =
             while s.top in numb_tail: buf.add(s.eat)
             atoms.add(atom(buf, aNum, s.get_range))
         of {'\'', '"', '`'}:
-            let tag = if curr == '`': aSym else: aStr
+            let tag = if curr == '`': aLit else: aStr
             buf = ""
             while not s.eof and s.top_unsafe != curr:
                 if s.top == '\\':

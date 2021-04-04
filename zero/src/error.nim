@@ -12,6 +12,12 @@ func verror*(code: int, node: Exp, msg: string): ref VitaminError =
     error.code = code
     error
 
+func error*(node: Exp, msg: string): ref VitaminError =
+    verror(0, node, msg)
+
+func error*(msg: string): ref VitaminError =
+    verror(0, term(), msg)
+
 proc print_error*(error: ref VitaminError, file: Option[string] = none(string)) =
     let prefix = "-- ERROR "
     var suffix = ""
@@ -31,6 +37,7 @@ proc text_lines(text: string, start: int, stop = start): string =
     text.split('\n')[start-1 ..< stop].join("\n")
 
 proc file_lines(file: string, start: int, stop = start): string =
+    if file == "": return ""
     let text = read_file(file)
     text_lines(text, start, stop)
 
@@ -69,6 +76,7 @@ proc in_source*(node: Exp, lookbehind = 0, color: int = 91, show_ws: bool = fals
     if pos_opt.is_none: return "<not found>"
     let pos = pos_opt.get
     let lines = node.in_source_lines()
+    if lines == "": return "<not found>"
     var source = line_colored(lines, color, 0, pos.stop_line - pos.start_line, pos.start_char - 1, pos.stop_char - 1)
     if lookbehind > 0:
         source = file_lines(pos.file[], pos.start_line - lookbehind, pos.start_line - 1) & "\n" & source

@@ -2,7 +2,7 @@ import os, strformat, strutils, sequtils
 import options, tables
 import noise
 
-import types, error, scan, parse
+import types, error, scan, parse, eval
 
 const version = "Vitamin₀ v0.1.0"
 
@@ -40,7 +40,8 @@ Optional arguments:
   -d, --debug scan|indent|parse|run|stat
                         show debug output for a compilation phase""".fmt
 
-var global_env = new Env
+var inputs, libs, command_args: seq[string]
+var debug: string
 
 proc panic(msg: string, code: int = 1) {.noreturn.} =
     echo msg
@@ -57,7 +58,7 @@ proc print_version =
     echo "More at: https://maxadamski.com/vitamin"
     quit(0)
 
-proc print_env(env: ref Env) =
+proc print_env(env: Env) =
     echo to_seq(env.vars.keys).join(" ")
 
 proc find_source(name: string, search: seq[string]): Option[string] =
@@ -68,22 +69,32 @@ proc find_source(name: string, search: seq[string]): Option[string] =
         if file_exists(full): return some(full)
     return none(string)
 
-proc eval_string(env: ref Env, str: string, file: Option[string] = none(string)) =
+proc eval_string(env: Env, str: string, file: Option[string] = none(string)) =
     try:
         let tokens = scan(str, file).indent()
+        if debug == "scan":
+            for x in tokens: echo x
+            quit(0)
         let exprs = to_seq(parse(global_parser, tokens))
+        if debug == "parse":
+            for x in exprs: echo x
+            quit(0)
+        for x in exprs:
+            let (val, typ) = eval(env, x)
+            if val != unit:
+                echo $val, " : ", $typ
         #echo tokens.filter_it(it.tag in {aSym, aNum, aStr}).map_it(it.value).join(" ")
         # let result = eval(env, exprs)
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error)
 
-proc eval_file(env: ref Env, path: string) =
+proc eval_file(env: Env, path: string) =
     let data = read_file(path)
     eval_string(env, data, some(path))
     echo fmt"DEBUG: run {path}"
 
-proc repl(env: ref Env, silent: bool = false) =
+proc repl(env: Env, silent: bool = false) =
     const prompt_ok   = "λ "
     const prompt_cont = "  "
     var noise = Noise.init()
@@ -105,6 +116,7 @@ proc repl(env: ref Env, silent: bool = false) =
             if ind or not exp.ends_with("\n"):
                 continue
 
+            stdout.write "\e[1A\e[K"
             eval_string(env, exp)
             noise.set_prompt(prompt_ok)
             lines = @[]
@@ -152,7 +164,6 @@ proc repl(env: ref Env, silent: bool = false) =
             eval_string(env, exp)
 
 proc main =
-    var inputs, libs, debug, command_args: seq[string]
     let vpath = get_env("VPATH")
     if vpath != "": libs = vpath.split(":")
     var prelude = none(string)
@@ -167,12 +178,12 @@ proc main =
         of "-h", "--help": print_help()
         of "-V", "--version": print_version()
         of "-L", "--library": i += 1; libs.add(param_str(i))
-        of "-d", "--debug": i += 1; debug.add(param_str(i))
         of "-p", "--prelude": i += 1; prelude = some(param_str(i))
         of "-P", "--no-prelude": no_prelude = true
         of "-S", "--no-greeting": no_greeting = true
         of "-i", "--interative": force_interactive = true
         of "-I", "--no-interactive": force_batch = true
+        of "-d", "--debug": i += 1; debug = param_str(i)
         of "-c", "--command":
             i += 1; command = some(param_str(i)); i += 1
             while i <= param_count():

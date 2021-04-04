@@ -1,10 +1,40 @@
 import options, tables, strutils, strformat, sequtils, sets
 
 type
+    FunParam* = object
+        name*: string
+        typ*: Exp
+        default*: Option[Exp]
+        inferred*: bool
+        explicit*: bool
+        typ_inferred_from_default*: bool
+        typ_inferred_from_position*: bool
+        typ_inferred_from_usage*: bool
+
     Fun* = object
-        args: seq[string]
-        body: Exp
-        env: ref Env
+        typ*: FunTyp
+        body*: Exp
+        env*: Env
+
+    FunTyp* = object
+        params*: seq[FunParam]
+        ret_typ*: Exp
+        unique*: bool
+        autocurry*: bool
+        is_macro*: bool
+        is_unique*: bool
+        ret_typ_inferred_from_usage*: bool
+
+    RecSlot* = object
+        name*: string
+        typ*: Val
+        default*: Option[Val]
+        typ_inferred_from_default*: bool
+        typ_inferred_from_position*: bool
+
+    RecField* = object
+        name*: string
+        val*: Val
 
     Mem* = object
         val: ptr Val
@@ -18,7 +48,7 @@ type
         file*: ref string
 
     AtomTag* = enum
-        aInd, aDed, aCnt, aPar, aSym, aNum, aStr, aWs, aNl, aCom, aEsc
+        aInd, aDed, aCnt, aPar, aSym, aLit, aNum, aStr, aWs, aNl, aCom, aEsc
 
     ExpTag* = enum
         expAtom, expTerm
@@ -33,21 +63,45 @@ type
             exprs*: seq[Exp]
 
     ValTag* = enum
-        vNum, vExp, vMem, vFun, vBuiltinFun
+        HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal, TypeVal, NumVal,
+        ExpVal, ExpTypeVal, MemVal, FunVal, FunTypeVal, BuiltinFunVal,
+        UniqueVal, UniqueFunVal
 
-    Val* = object
+    Val* = ref object
         case kind*: ValTag
-        of vNum: num*: int
-        of vExp: exp*: Exp
-        of vMem: mem*: Mem
-        of vFun: fun*: Fun
-        of vBuiltinFun: builtin_fun*: BuiltinFun
+        of RecVal:
+            fields*: seq[RecField]
+        of HoldVal:
+            name*: string
+        of NumVal:
+            num*: int
+        of MemVal:
+            mem*: Mem
+        of ExpVal:
+            exp*: Exp
+        of ExpTypeVal:
+            discard
+        of FunVal, UniqueFunVal:
+            fun*: Fun
+        of TypeVal:
+            level*: int
+        of UniqueVal:
+            inner_value*: Val
+        of UnionTypeVal, InterTypeVal:
+            types*: seq[Val]
+        of RecTypeVal:
+            slots*: seq[RecSlot]
+        of FunTypeVal:
+            fun_typ*: FunTyp
+        of BuiltinFunVal:
+            builtin_fun*: BuiltinFun
 
     Var* = object
         val*, typ*: Val
+        is_defined*: bool
 
-    Env* = object
-        parent*: ref Env
+    Env* = ref object
+        parent*: Env
         vars*: Table[string, Var]
 
     ExpStream* = object
@@ -63,6 +117,43 @@ type
         of OkResult:
             value*: R
 
+proc `$`*(v: Val): string =
+    case v.kind
+    of HoldVal: "Hold(" & v.name & ")"
+    of UniqueVal: "Unique(" & $v.inner_value & ")"
+    of NumVal: $v.num
+    of MemVal: "Memory()"
+    of ExpVal: "Expr(" & $v.exp & ")"
+    of ExpTypeVal: "Expr"
+    of BuiltinFunVal: "Builtin-Lambda()"
+    of TypeVal:
+        if v.level == 0: "Type" else: "Type" & $v.level
+    of UnionTypeVal, InterTypeVal:
+        let op = if v.kind == UnionTypeVal: "|" else: "&"
+        if v.types.len == 0: return "("&op&")"
+        v.types.map(`$`).join(op)
+    of FunVal: "Lambda()"
+    of FunTypeVal, UniqueFunVal:
+        let prefix = case v.kind
+        of UniqueFunVal: "unique "
+        else: ""
+        prefix & "(" & v.fun_typ.params.map_it($it.name).join(", ") & ") -> " & $v.fun_typ.ret_typ
+    of RecVal:
+        var res: seq[string]
+        for x in v.fields:
+            let prefix = if x.name == "": "" else: x.name & "="
+            res.add(prefix & $x.val)
+        "(" & res.join(", ") & ")"
+    of RecTypeVal:
+        var res: seq[string]
+        for x in v.slots:
+            var repr = ""
+            if x.name != "": repr &= x.name & ": "
+            repr &= $x.typ
+            if x.default.is_some: repr &= " = " & $x.default.get
+            res.add(repr)
+        "Record(" & res.join(", ") & ")"
+
 func is_error*[E, R](x: Result[E, R]): bool = x.kind == ErrorResult
 func is_ok*[E, R](x: Result[E, R]): bool = x.kind == OkResult
 func get_error*[E, R](x: Result[E, R]): E = x.error
@@ -75,7 +166,7 @@ func error*[E, R](x: E): Result[E, R] = Result[E, R](kind: ErrorResult, error: x
 func ok*[E, R](x: R): Result[E, R] = Result[E, R](kind: OkResult, value: x)
 
 func is_literal*(x: Exp): bool =
-    x.kind == expAtom and x.tag in {aNum, aStr}
+    x.kind == expAtom and x.tag in {aNum, aStr, aLit}
 
 func is_whitespace*(x: Exp): bool =
     x.kind == expAtom and x.tag in {aWs, aNl, aInd, aDed, aCnt, aCom}
@@ -180,11 +271,11 @@ func to_string(x: Exp): string =
         else:
             return x.value
     of expTerm:
-        if x.exprs.len >= 2 and x.exprs[0].is_token("call"):
-            return x.exprs[1].to_string & "(" & x.exprs[2 .. ^1].map(to_string).join(", ") & ")"
-        elif x.exprs.len >= 1 and x.exprs[0].is_token("group"):
-            return "(" & x.exprs[1 .. ^1].map(to_string).join(", ") & ")"
-        else:
+        #if x.exprs.len >= 2 and x.exprs[0].is_token("call"):
+        #    return x.exprs[1].to_string & "(" & x.exprs[2 .. ^1].map(to_string).join(", ") & ")"
+        #elif x.exprs.len >= 1 and x.exprs[0].is_token("group"):
+        #    return "(" & x.exprs[1 .. ^1].map(to_string).join(", ") & ")"
+        #else:
             return "{" & x.exprs.map(to_string).join(" ") & "}"
 
 func `$`*(x: Exp): string =
@@ -193,10 +284,14 @@ func `$`*(x: Exp): string =
 func pos*(y, x, yy, xx: int, file: ref string = nil): Position =
     Position(start_line: y, start_char: x, stop_line: yy, stop_char: xx, file: file)
 
-proc extend*(env: ref Env): ref Env =
-    var child = new Env
-    child.parent = env
-    child
+proc extend*(env: Env): Env =
+    Env(parent: env)
+
+func len*(x: Exp): int =
+    x.exprs.len
+
+func `[]`*(x: Exp, index: int): Exp =
+    x.exprs[index]
 
 func concat*(x: Exp, y: Exp): Exp =
     if x.kind == expTerm and y.kind == expTerm: return term(x.exprs & y.exprs)
