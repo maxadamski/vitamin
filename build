@@ -1,0 +1,28 @@
+#!/bin/sh
+
+MAIN=src/vitamin.nim
+BIN=bin/vita
+NIMFLAGS="--hints:off"
+
+case $1 in
+clean)
+	rm -r bin
+;;
+setup)
+	nimble install noise
+;;
+run)
+	shift
+	nim r $NIMFLAGS $MAIN $@
+;;
+release)
+	shift
+	mkdir -p bin
+	nim c -o:$BIN -d:release $NIMFLAGS --opt:speed $@ $MAIN
+;;
+*)
+	mkdir -p bin
+	nim c -o:$BIN -d:release $NIMFLAGS --opt:speed --passC:"-march=native" $@ $MAIN
+;;
+esac
+

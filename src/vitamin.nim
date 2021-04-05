@@ -164,7 +164,7 @@ proc repl(env: Env, silent: bool = false) =
             eval_string(env, exp)
 
 proc main =
-    let vpath = get_env("VPATH")
+    let vpath = get_env("VITAPATH")
     if vpath != "": libs = vpath.split(":")
     var prelude = none(string)
     var command = none(string)

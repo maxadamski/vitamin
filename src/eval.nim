@@ -1,7 +1,6 @@
 import types, error
 import sets, tables, options, sequtils, strutils, strformat
 
-
 func v_num(num: int): Val = Val(kind: NumVal, num: num)
 func v_hold(name: string): Val = Val(kind: HoldVal, name: name)
 func v_universe(level: int): Val = Val(kind: TypeVal, level: 0)

@@ -23,12 +23,13 @@ For a complete description see the [language reference manual](docs/manual.md).
 
 ```vitamin
 fizzbuzz = (i: Int) =>
-	if   i mod 15 == 0 'FizzBuzz'
-	elif i mod  3 == 0 'Fizz'
-	elif i mod  5 == 0 'Buzz'
-	else to-string(i)
+	case
+	of i mod 15 == 0 'FizzBuzz'
+	of i mod  3 == 0 'Fizz'
+	of i mod  5 == 0 'Buzz'
+	of _ to-string(i)
 
-for i in 1..100
+for i in irange(1, 100)
 	print(fizzbuzz(i))
 ```
 
@@ -37,36 +38,57 @@ for i in 1..100
 
 ```vitamin
 # Vectors of length `n` and element type `a` are pointers to mutable `a` 
-Vector = unique (n: Size, a: Type) -> Type => &mut a
+Vector = newtype (n: Size, a: Type) => &mut a
 
 # Parameters `n`, `m` and `a` will be computed and passed implicitly
-concat = (n m: Size = _, a: Type = _, x: Vector(n, a), y: Vector(m, a)) -> Vector(n+m, a) =>
-	items = new-mutable(a, count=n+m)
+concat = (x: Vector($n, $a), y: Vector($m, a)) -> Vector(n+m, a) =>
+	items = new(mut a, count=n+m)
 	copy(from=x.items, to=items, count=n)
 	copy(from=y.items, to=offset(items, n), count=m)
-	items
+	items as Vector(n+m, a)
 
 result = concat([1 1 2], [3 5])
 assert result is Vector(5, Int)
+assert result == [1 1 2 3 5]
 ```
+
+## How to compile
+
+### Linux, macOS and other Unix-like
+
+Requires Nim 1.4.2 and Nimble.
+
+```sh
+chmod +x build
+# install dependencies
+./build setup
+# compile for the current architecture
+./build
+```
+
+Vitamin binary `vita` will appear in the `bin` directory.
+
+### Windows
+
+TODO
+
 
 ## How to run
 
-
-Vitamin expects the `RXPATH` environmental variable to be set to the path containing the contents of `res/lib`.
-
-The `rx` tool requires Python 3.7 or later. 
+Vitamin expects the `VITAPATH` environmental variable to be set to the path containing the contents of `res/lib`.
 
 ```sh
-# assuming rx is in PATH
+# assuming `vita` is in PATH
 # run a program
-rx script.v
+vita script.v
 # run an interactive session
-rx
+vita
 ```
+
 
 ## Contributions
 
 Feel free to open issues to ask questions or make suggestions.
 
 Contributions are very welcome.
+
