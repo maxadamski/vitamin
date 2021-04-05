@@ -125,7 +125,8 @@ proc scan*(text: string, file: Option[string] = none(string)): seq[Exp] =
             atoms.add(atom(buf, aPar, s.get_range))
         of '\\':
             buf.add(s.eat)
-            atoms.add(atom(buf, aEsc, s.get_range))
+            discard
+            #atoms.add(atom(buf, aEsc, s.get_range))
         of {'\t', ' '}:
             while s.top in {'\t', ' '}: buf.add(s.eat)
             atoms.add(atom(buf, aWs, s.get_range))

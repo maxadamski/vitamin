@@ -300,7 +300,6 @@ proc parse_until_maybe(p: var Parser, tokens: var ExpStream, until = init_hash_s
         return parse_error(rule2, term(), nil, reason="end of stream while parsing expression")
     var expr = expr_opt.get
     # if a rule cannot occur here, treat the token as a literal
-    var context_literal = false
     if p.prefix_rules.has_key(expr.value) and not expr.is_literal:
         let subrule = p.prefix_rules[expr.value]
         if rule.is_some and subrule.group != "Any" and rule.get.group != some("Any"):
@@ -390,16 +389,19 @@ global_parser.add_groups("As Opaque Macro Command Use Member Logical-Not Logical
 global_parser.add_groups("If-Expr Case-Expr While-Expr For-Expr")
 
 global_parser.add_order("Apply > Round-Parentheses > Exponentiation-Base > Negation > Exponentiation-Power > Exponentiation > Multiplication > Addition > As > Assignment Definition")
-global_parser.add_order("Apply > Round-Parentheses > Logical-Not > Equality Ordering > Logical-And Logical-Or Logical-Xor > If-Expr > Lambda > Assignment Definition")
-global_parser.add_order("Typing > Definition")
-global_parser.add_order("Round-Parentheses Lambda-Type > Typing")
+global_parser.add_order("Apply > Round-Parentheses > Logical-Not > Equality Ordering > Logical-And Logical-Or Logical-Xor > Case-Expr While-Expr If-Expr > Lambda > Assignment Definition")
+global_parser.add_order("Addition Multiplication Negation > Equality Ordering")
+global_parser.add_order("Apply > Typing For-Expr")
+global_parser.add_order("Member Typing > Definition")
+global_parser.add_order("Round-Parentheses > Lambda-Type > Typing")
 global_parser.add_order("Logical-And > Logical-Or")
 global_parser.add_order("Definition Round-Parentheses Apply > Use")
 global_parser.add_order("Apply Round-Parentheses Equality Ordering Logical-And Logical-Or Logical-Not > Command")
 global_parser.add_order("Member > Apply Assignment Use")
 global_parser.add_order("Macro Opaque > Round-Parentheses Typing Definition Lambda")
+global_parser.add_order("Multiplication > Lambda")
 global_parser.add_order("Lambda > Macro Opaque")
-global_parser.add_order("If-Expr > Use")
+global_parser.add_order("Case-Expr If-Expr > Use")
 global_parser.add_order("Lambda-Type > Macro Opaque Lambda Definition")
 
 global_parser.add_infix_left("Member", "_ . _", ".")
@@ -410,7 +412,9 @@ global_parser.add_infix_left("Typing", ":", ":")
 global_parser.add_infix_left("Addition", "_ + _", "+")
 global_parser.add_infix_left("Addition", "_ - _", "-")
 global_parser.add_infix_left("Multiplication", "_ * _", "*")
-#global_parser.add_infix_left("Multiplication", "/", "/")
+global_parser.add_infix_left("Multiplication", "/", "/")
+global_parser.add_infix_left("Multiplication", "mod", "mod")
+global_parser.add_infix_left("Multiplication", "div", "div")
 global_parser.add_infix("As", "as", "as")
 global_parser.add_infix("Equality", "==", "==")
 global_parser.add_infix("Equality", "!=", "!=")
@@ -425,20 +429,22 @@ global_parser.add_prefix("Use", "use", "use")
 global_parser.add_prefix("Opaque", "opaque", "opaque")
 global_parser.add_prefix("Macro", "macro", "macro")
 global_parser.add_prefix("Command", "assert", "assert")
+global_parser.add_prefix("Command", "return", "return")
 global_parser.add_prefix("Logical-Not", "not", "not")
 global_parser.add_infix_left("Logical-And", "and", "and")
 global_parser.add_infix_left("Logical-Or", "or", "or")
-#global_parser.add_infix_left("Logical-Xor", "xor", "xor")
-#global_parser.infix_rules["^"] = ("Exponentiation-Base", "_ ^ _", false, seq_rule( expr_rule("Exponentiation-Base"), atom_rule("^"), bexpr_rule("Exponentiation") ))
-global_parser.prefix_rules["("] = ("Round-Parentheses", "( _ )", true, seq_rule( atom_rule("("), list0_rule(",", expr_rule("Any")), atom_rule(")") ))
-global_parser.infix_rules["("] = ("Apply", "apply", true, seq_rule( expr_rule("Apply"), atom_rule("("), list0_rule(",", expr_rule("Any")), atom_rule(")") ))
+global_parser.add_infix_left("Logical-Xor", "xor", "xor")
+global_parser.infix_rules["^"] = ("Exponentiation-Base", "_ ^ _", false, seq_rule( expr_rule("Exponentiation-Base"), atom_rule("^"), bexpr_rule("Exponentiation") ))
+global_parser.prefix_rules["("] = ("Round-Parentheses", "( _ )", true, seq_rule( atom_rule("("), alt_rule(block_rule(), list0_rule(",", expr_rule("Any"))), atom_rule(")") ))
+global_parser.infix_rules["("] = ("Apply", "apply", true, seq_rule( expr_rule("Apply"), atom_rule("("), alt_rule(block_rule(), list0_rule(",", expr_rule("Any"))), atom_rule(")") ))
+global_parser.infix_rules["["] = ("Apply", "index", true, seq_rule( expr_rule("Apply"), atom_rule("["), alt_rule(block_rule(), list0_rule(",", expr_rule("Any"))), atom_rule("]") ))
 global_parser.infix_rules["=>"] = ("Lambda", "=>", false, seq_rule( expr_rule("Lambda"), atom_rule("=>"), bexpr_rule("Lambda") ))
 global_parser.prefix_rules["while"] = ("While-Expr", "while", true, seq_rule( atom_rule("while"), expr_rule("While-Expr"), opt_atom("do"), bexpr_rule("While-Expr") ))
-#global_parser.prefix_rules["for"] = ("For-Expr", "for-in", true, seq_rule(atom_rule("for"), expr_rule("For-Expr"), atom_rule("in"), expr_rule("For-Expr"), opt_atom("do"), bexpr_rule("For-Loop") ))
+global_parser.prefix_rules["for"] = ("For-Expr", "for-in", true, seq_rule(atom_rule("for"), expr_rule("For-Expr"), atom_rule("in"), expr_rule("For-Expr"), opt_atom("do"), bexpr_rule("For-Loop") ))
 global_parser.prefix_rules["if"] = ("If-Expr", "if", true, seq_rule(
-    atom_rule("if"), expr_rule("If-Expr"), opt_atom("do"), bexpr_rule("If-Expr"),
-    some_rule(seq_rule( atom_rule("elif"), expr_rule("If-Expr"), opt_atom("do"), bexpr_rule("If-Expr") )),
-    opt_rule(seq_rule( atom_rule("else"), bexpr_rule("If-Expr") )),
+    atom_rule("if"), expr_rule("If-Expr"), opt_atom("do"), bexpr_rule("Any"),
+    some_rule(seq_rule( atom_rule("elif"), expr_rule("Any"), opt_atom("do"), bexpr_rule("Any") )),
+    opt_rule(seq_rule( atom_rule("else"), bexpr_rule("Any") )),
 ))
 global_parser.prefix_rules["case"] = ("Case-Expr", "case", true, seq_rule(
     atom_rule("case"), opt_rule(expr_rule("Case-Expr")),

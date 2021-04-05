@@ -55,7 +55,7 @@ return 2
 break
 continue
 
-g = (x: Int = 2, y: Float; z: Str = 'hello') -> Bool =>
+g = (x: Int = 2, y: Float, z: Str = 'hello') -> Bool =>
 	print('hello, world')
 	exit(0)
 	g = x =>
@@ -65,42 +65,42 @@ g = (x: Int = 2, y: Float; z: Str = 'hello') -> Bool =>
 h = (A: Type, class: Additive(A), x, y: A) -> A => 
 	class.add(x, y)
 
-x = [a, b, c]
+#x = [a, b, c]
 
-x = (a, b, c; d, e; f)
+#x = (a, b, c; d, e; f)
 
 return (8 + 16)
 
 print(hello, world, end='\n\n', hello='heoi', world='otin')
 
-when a
-case b
+case a
+of b
 	c
 	d
-case d
+of d
 	e
 	f
-case _
+of _
 	d
 
-when
-case i mod 2 == 0 print('even')
-case _ print('odd')
+case
+of (i mod 2 == 0) print('even')
+of _ print('odd')
 
 if a do (if b c else d) else e
 
 if true
-	when q
-	case x
+	case q
+	of x
 		a
-	case y
+	of y
 		b
 		c
 	return x
 
 return x
 
-when case a b case c d
+case of a b of c d
 
 if a do (if b do c else d)
 if a do (if b do c) else d
@@ -115,34 +115,31 @@ f(x)
 f(x,y,z)
 f(x,y,z,)
 
-when x
-case p(a) if even(a) pass
-case _ pass
+# TODO: implement trailing lambdas
+#trailing-lambda() with x => x*2
+#
+#router.get() with req => 'hello, world'
+#
+#request('GET', 'someurl') with
+#	on-success = res =>
+#		2 + 2
+#		print(res)
+#	on-error = () =>
+#		print('couldn\'t get someurl')
+#		exit(1)
+#
+#router.get('/me/items/{id}') with
+#	(id: Int, session = Depends(user_session)) =>
+#		db.get_item(id=id, user_id=session.user_id)
 
-trailing-lambda() with x => x*2
+f = (x, y : T) -> T
 
-router.get() with req => 'hello, world'
-
-request('GET', 'someurl') with
-	on-success = res =>
-		2 + 2
-		print(res)
-	on-error = () =>
-		print('couldn\'t get someurl')
-		exit(1)
-
-router.get('/me/items/{id}') with
-	(id: Int, session = Depends(user_session)) =>
-		db.get_item(id=id, user_id=session.user_id)
-
-f = (x y : T) -> T
-
-f = (u: U, v: V; x y: T; z: T = a) -> T
+f = (u: U, v: V, x, y: T, z: T = a) -> T
 
 f = T -> Int
 
 #t = {x: Int = 42, y z: Int, p = q}
-t = {A, B, C}
+t = Record(A, B, C)
 
 (a, b, c)
 
@@ -150,8 +147,8 @@ t = {A, B, C}
 
 (x, y) => x
 
-[1 2 3 4 5, 6 7 8 9; 10 11 12 13, 14 15 16 17]
-[1;2;3]
+#[1 2 3 4 5, 6 7 8 9; 10 11 12 13, 14 15 16 17]
+#[1;2;3]
 
 #a[,,,]
 #a[,2,]
@@ -159,19 +156,18 @@ t = {A, B, C}
 a[1,2,3,]
 #a[,2,3]
 
-p(,)
+p()
 p(1,2)
 p(1,2,)
 
 ()
-(,)
-(x=2; y=2)
+#(,)
+(x=2, y=2)
 
-[1 2 3 4]
+#[1, 2, 3, 4]
 
-foo : (x y: A) -> B
+foo : (x, y: A) -> B
 
 x =>
 	y
 	z
-

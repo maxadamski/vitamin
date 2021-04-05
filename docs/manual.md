@@ -597,6 +597,39 @@ Type of the `for` expression is `Unit`.
 
 # Macros
 
+## Dot Macro `.`
+
+Vitamin features the familiar dot `.` operator known mostly from object-oriented languages.
+
+There are three main uses of the dot operator.
+Firstly, you can access member values of data types. Secondly, you can mutate the value of a member value.
+Accessing the member value of a data type with the dot operator is equivalent to doing so with the builtin `member` macro.
+Also, pleaso note, that there is no separate macro for mutating the member value. This use emerges from the combination of the `member` macro and the `:=` mutatation operator.
+
+Lastly, you can use the dot operator to pass the left operand as the first argument to function application on the right hand side.
+The ability to pass arguments in this way is sometimes known as Uniform Function Call Syntax (UFCS).
+
+Here are examples of common `.` macro usage:
+
+Getting a member value
+
+	use Core
+	person : {name: String}
+	assert (person.name) is-the-same-as (member(person, 'name'))
+
+Setting a member value
+
+	person : {name: mut String}
+	new-name : String
+	assert (person.name := new-name) is-the-same-as (member(person, 'name') := new-name)
+
+Passing value as the first function argument (UFCS)
+
+	add : (x y: Int) -> Int
+	a, b : Int
+	assert a.add(b) is-the-same-as add(a, b)
+
+
 ## Macro Lambda
 
 A macro is a lambda which does not evaluate a parameter if its type is `Syntax.Expr`, and instead passes the parsed abstract syntax tree to the function.
@@ -630,7 +663,7 @@ For example, let's ensure a file handle is closed when exiting scope:
 	guard close(file)
 	# do other stuff
 
-## Use Macro
+## `use` macro
 
 Imports all names into current scope.
 
@@ -644,6 +677,41 @@ Useful in processing evidence and objects.
 	magnitude = (self: Point) => use self; sqrt(x*x + y*y)
 	# or shorter
 	magnitude = (use self: Point) => sqrt(x*x + y*y)
+
+Import some names into current scope:
+
+	point = (x=2, y=3, z=4)
+	use point.(x, y)
+
+	# assertions
+	assert is-defined(x)
+	assert is-defined(y)
+	assert not is-defined(z)
+
+## `import` macro
+
+Import module and bring all members into scope:
+
+	import tensor as t
+	# above is equivalent to:
+	tensor = Core.import('tensor')
+	use tensor
+
+Import module and bring some members into scope:
+
+	import tensor.(Tensor, `*`, `+`)
+
+	# above is equivalent to:
+	tensor = Core.import('tensor')
+	use tensor.(Tensor, `*`, `+`)
+
+Import module without changing scope:
+
+	import tensor.()
+
+	# above is equivalent to
+	tensor = Core.import('tensor')
+
 	
 
 ## With Macro

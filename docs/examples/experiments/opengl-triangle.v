@@ -37,12 +37,12 @@ on-key = (window: &Window, key code action mods: I32) =>
 main = () =>
 	error-callback(on-error)
 	if not glfw.init() return
-	guard glfw.terminate()
+	defer glfw.terminate()
 	window-hint(.version-major, 2)
 	window-hint(.version-minor, 0)
 	window = create-window(640, 480, title="OpenGL Example")
 	if not window return
-	guard destroy-widnow(window)
+	defer destroy-widnow(window)
 	key-callback(window, on-key)
 	current-context(window)
 	swap-interval(1)

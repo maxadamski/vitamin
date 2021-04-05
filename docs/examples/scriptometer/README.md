@@ -19,5 +19,4 @@
  163 | 143 | 262 | compile-outdated
  389 | 248 | 513 | simple-grep
 
-Note that, running a `.v` file uses the `scripting-prelude.v` instead of `prelude.v`,
-which contains a `use Os` expression.
+These benchmarks assume using the `scripting-prelude.v` instead of `prelude.v`.

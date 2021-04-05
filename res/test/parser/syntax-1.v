@@ -344,3 +344,15 @@ if x
 else
     a
     b
+
+(
+    a
+    b
+    c
+)
+
+f(
+    a
+    b
+    c
+)

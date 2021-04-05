@@ -53,9 +53,9 @@ syn keyword vConstant true false none
 syn keyword vKeyword enum module object
 syn keyword vKeyword is as in not and or xor div mod
 
-syn keyword vKeyword var use if elif else while for switch match case pass
+syn keyword vKeyword var use if elif else while for case of pass
 syn keyword vKeyword with where when do return continue break shift reset
-syn keyword vKeyword assert lazy pure guard
+syn keyword vKeyword assert lazy pure defer
 
 syn match vApply /[A-Za-z_][A-Za-z0-9_-]*\((\)\@=/
 syn keyword vApply opt imm mut ptr

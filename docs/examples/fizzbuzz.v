@@ -1,10 +1,10 @@
 fizzbuzz = (x: Int) =>
-	if   i mod 15 == 0 'FizzBuzz'
-	elif i mod  3 == 0 'Fizz'
-	elif i mod  5 == 0 'Buzz'
-	else to-string(i)
+	case
+	of i mod 15 == 0 'FizzBuzz'
+	of i mod  3 == 0 'Fizz'
+	of i mod  5 == 0 'Buzz'
+	of to-string(i)
 
-main = (args: [String]) =>
-	count = to-int(args[1])
-	for i in 1..count
-		print(fizzbuzz(i))
+count = to-int(args[1])
+for i in irange(1, count)
+	print(fizzbuzz(i))
