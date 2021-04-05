@@ -1,137 +1,95 @@
-U8  : Type
+# Core language definitions
+
+U8 : Type
+
 U64 : Type
+
 I64 : Type
+
 F64 : Type
 
-true  = Unique()
-false = Unique()
-none  = Unique()
-
-Bool = Union(true, false)
-Tril = Union(none, Bool)
-
 String-Literal : Type
+
 Number-Literal : Type
 
-Size  = Opaque(U64)
-Int   = Opaque(I64)
-Float = Opaque(F64)
+Size = newtype U64
 
-Any   = Union()
-Never = Intersection()
-Unit  = Struct()
+Int = newtype I64
 
-type-of = (x: B) => B
-id = (x: A) => x
+Float = newtype F64
 
-Pointer = (A: Type) => Size
+Bool = newtype U8
 
-use None = Enum(none)
+None = newtype U8
 
-use Bool = Enum(true, false)
+true = 1 as Bool
 
-assert type-of(id) == type-of(id)
+false = 0 as Bool
 
-# test known values have correct types
-assert type-of(42) == I64
-assert type-of(true) == Bool
-assert type-of(false) == Bool
-assert type-of(none) == None
+none = 0 as None
 
-# test type of known types is Universe(0)
-assert type-of(Any) == Type
-assert type-of(Never) == Type
-assert type-of(Unit) == Type
-assert type-of(Bool) == Type
-assert type-of(None) == Type
-assert type-of(Int) == Type
-assert type-of(Size) == Type
-assert type-of(Float) == Type
-assert type-of(U8) == Type
-assert type-of(I64) == Type
-assert type-of(U64) == Type
-assert type-of(F64) == Type
+Any = Union()
 
-assert type-of(true) == Bool
-#assert type-of(true as Any) == Any
-#assert type-of((true as Any) as Bool) == Bool
+Never = Inter()
 
-# test data values have correct types
-assert Unit == Struct()
-assert type-of(()) == Struct()
-assert type-of(Struct()) == Type
-assert type-of((x=true)) == Struct(x: Bool)
-assert type-of((x=true, y=false)) == Struct(x, y: Bool)
-assert type-of((x=true, y=42)) == Struct(x: Bool, y: I64)
-assert Int   != I64
-assert Size  != U64
-assert Float != F64
+Unit = Record()
 
-assert true == true
-assert false == false
-assert true != false
+Optional = (a: Type) => Union(a, None)
 
-assert id(true) == true
-assert id(false) == false
-assert id(none) == none
-assert id(42) == 42
-assert id(()) == ()
+`_ ?` = Optional
 
-# test data type fields are invariant to order
-assert Struct(x: Bool, y: Bool) == Struct(y: Bool, x: Bool)
+`??` = (x, y: Expr) => qq(if uq(x) == none uq(y) else uq(x))
 
-# test data type field type propagates backward in a group
-assert Struct(x, y: Bool) == Struct(x: Bool, y: Bool)
+Pointer = newtype (a: Type) => Size
 
-assert Pointer(Bool) == Pointer(Bool)
-assert Pointer(Bool) != Size
-assert Pointer(Size) != Size
+`& _` = Pointer
 
+`& mut _` = newtype Pointer
 
-#Optional = (x: Type) => x | None
+`mut _` = newtype Pointer
 
-#`not` = (x: Bool) -> Bool => if x do false else true
-#
-#`and` = (x y: Bool) -> Bool => if x do y else false
-#
-#`or`  = (x y: Bool) -> Bool => if x do true else y
-#
-#`xor` = (x y: Bool) -> Bool => x != y
-#
-#`?` = Optional
-#
-#`mut` = Mutable
-#
-#`imm` = Immutable
-#
-#`??` = (it: ?A, default: A) -> A =>
-#	if it is None do default else it
-#
-#use (
-#	value : (x: mut A) -> A
-#)
-#
-#use (
-#	value : (x: imm A) -> A
-#)
-#
-#`===` : (x y: A) -> Bool
-#
-#`!==` = (x y: A) -> Bool => not x === y
+`mut _` = Mutable
 
-#Variant = @enum(foo, bar(bool: Bool))
-#Struct  = @data(name: String-Literal, age: Number-Literal)
+Array = newtype (a: Type, n: Size) => Pointer(a)
 
-#@union = @extern (x: ..Type) -> Type
-#@inter = @extern (x: ..Type) -> Type
-#@tuple = @extern (x: ..Type) -> Type
+append : (x: mut List($A)) -> Unit
 
-# Func-Row  = { name: String, type: Type, value: ?type }
-# Data-Row  = { name: String, type: Type }
+concat : (x: List(List($A))) -> List(A)
 
-# Arg  = (A: Type) => { name: String, value: A }
-# Data = { head: Data-Row, tail: ?Data }
-# data = (arg: Arg(A)) -> Data(to-data-row(arg))
+len : (x: List($A)) -> unwrap(x).len
 
-# type-of(x: Data) = { 
-# Enum = { rows: [Row], rest: ?Enum-Type }
+`_ [ _ ]` : (x: List($A), index: Size) -> A
+
+`:=` : (x: mut $A) -> Unit
+
+List = newtype (a: Type) => Struct(buf: a, len: Size)
+
+Expr : Type
+
+is-atom : (expr: Expr) -> Bool
+
+is-term : (expr: Expr) -> Bool
+
+token : (atom: Expr) -> mut 
+
+exprs : (term: Expr) -> List(mut Expr)
+
+type-of = (x: $A) => A
+
+id = (x: $A) => x
+
+`==` : macro (x, y: Expr) -> Bool
+
+`!=` = macro (x, y: Expr) -> Bool => not x == y
+
+case-type : macro (x: Optional(Expr), y: List(Record(Exp, Exp))) -> Type
+
+`case` : macro (x: Optional(Expr), y: List(Record(Exp, Exp))) -> case-type(x, y)
+
+`if` : macro (a, b: Expr, c: List(Record(Exp, Exp)), d: Optional(Expr)) => `case`(none, concat([(a, b)] cons((a, b), c, (quote(_)))))
+
+`not` = (x: Bool) -> Bool => if x false else true
+
+`and` = (x: Bool, y: Bool) -> Bool => if x y else false
+
+`or` = (x: Bool, y: Bool) -> Bool => if x true else y

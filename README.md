@@ -19,6 +19,8 @@ Get to know Vitamin with some example programs.
 
 For a complete description see the [language reference manual](docs/manual.md).
 
+Documentation and more examples are also mirrored on the [Vitamin language website](maxadamski.com/vitamin). Code excerpts on the website are easier to read, because they have syntax highligting!
+
 **Simple Fizz Buzz**
 
 ```vitamin
@@ -48,7 +50,7 @@ concat = (x: Vector($n, $a), y: Vector($m, a)) -> Vector(n+m, a) =>
 	items as Vector(n+m, a)
 
 result = concat([1 1 2], [3 5])
-assert result is Vector(5, Int)
+assert type-of(result) == Vector(5, Int)
 assert result == [1 1 2 3 5]
 ```
 

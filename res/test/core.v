@@ -1,136 +1,137 @@
-U8  : Type
-U64 : Type
+## Tests of core functionality (run without prelude)
+
+### Helper definitions
+
+`assert` : (assertion: Expr) -> Unit
+
+
+### `Type` built-in and definitions
+
+# identity
+assert Type == Type
+
+Test-A = Type
+Test-B = Type
+Test-C = Type
+
+# variable identity
+assert Test-A == Test-A
+
+# variable commutativity
+assert Test-A == Test-B
+assert Test-B == Test-A
+
+# variable transitivity
+assert Test-A == Test-B
+assert Test-B == Test-C
+assert Test-A == Test-C
+
+
+### Assumptions
+
 I64 : Type
-F64 : Type
 
-Bool : Type
-None : Type
+# assumed equality
+assert I64 == I64
 
-String-Literal : Type
-Number-Literal : Type
+# assumed type
+assert type-of(I64) == Type
 
-Size  = unique U64
-Int   = unique I64
-Float = unique F64
+I64-Alias = I64
 
-Any   = inter-type()
-Never = union-type()
-Unit  = {}
+# assumed alias equality
+assert I64 == I64-Alias
 
-type-of = (x: B) => B
-id = (x: A) => x
+Size = opaque I64
+Int = opaque I64
 
-assert type-of(id) == type-of(id)
+# type-of(opaque x) is by definition type-of(x)
+assert type-of(Size) == Type
+assert type-of(Int) == Type
 
-# test known values have correct types
+# each opaque value is unique
+assert Size != Int
+
+# opaque equality
+assert Size != I64
+assert unwrap(Size) == I64
+assert unwrap(Int) == I64
+assert unwrap(Size) == unwrap(Int)
+
+
+### Integer literals
+
+forty-two = 42
+
+# type of literal
 assert type-of(42) == I64
+assert type-of(forty-two) == I64
+
+
+### opaque values
+
+Bool = opaque Int
+None = opaque Int
+
+true  = 1 as Bool
+false = 0 as Bool
+none  = 0 as None
+
+# cast identity
+assert true == true
+assert false == false
+assert none == none
+
+# cast type
 assert type-of(true) == Bool
 assert type-of(false) == Bool
 assert type-of(none) == None
+assert type-of(true) != Int
+assert type-of(false) != Int
+assert type-of(none) != Int
 
-# test type of known types is Universe(0)
+# opaque breaks transitivity
+assert true != 1
+assert false != 0
+assert none != 0
+
+
+### Sets
+
+Any = Union()
+Never = Inter()
+
+# type of set types
 assert type-of(Any) == Type
 assert type-of(Never) == Type
+
+
+### Records
+
+Unit = Record()
+unit = ()
+
+assert Unit == Record()
+assert unit == ()
 assert type-of(Unit) == Type
-assert type-of(Bool) == Type
-assert type-of(None) == Type
-assert type-of(Int) == Type
-assert type-of(Size) == Type
-assert type-of(Float) == Type
-assert type-of(U8) == Type
-assert type-of(I64) == Type
-assert type-of(U64) == Type
-assert type-of(F64) == Type
+assert type-of(unit) == Unit
+assert type-of((x=Unit)) == Record(x: Type)
 
-assert type-of(true) == Bool
-#assert type-of(true as Any) == Any
-#assert type-of((true as Any) as Bool) == Bool
+Single = Record(x: Type)
+assert type-of(Single) == Type
+assert Single == Record(x: Type)
+assert type-of((x=Unit)) == Single
 
-# test data values have correct types
-assert Unit == {}
-assert type-of(()) == {}
-assert type-of({}) == Type
-assert type-of((x=true)) == {x: Bool}
-assert type-of((x=true, y=false)) == {x y: Bool}
-assert type-of((x=true, y=42)) == {x: Bool, y: I64}
-assert Int   != I64
-assert Size  != U64
-assert Float != F64
+Double = Record(x: Type, y: I64)
+assert type-of(Double) == Type
+assert Double == Record(x: Type, y: I64)
+assert Double == Record(y: I64, x: Type)
+assert type-of((x=Unit, y=42)) == Double
+assert type-of((y=42, x=Unit)) == Double
 
-assert true == true
-assert false == false
-assert true != false
+### Casts
 
-assert id(true) == true
-assert id(false) == false
-assert id(none) == none
-assert id(42) == 42
-assert id(()) == ()
-
-# test data type fields are invariant to order
-assert {x: Bool, y: Bool} == {y: Bool, x: Bool}
-
-# test data type field type propagates backward in a group
-assert {x y: Bool} == {x: Bool, y: Bool}
-
-Pointer = unique (A: Type) => Size
-
-assert Pointer(Bool) == Pointer(Bool)
-assert Pointer(Bool) != Size
-assert Pointer(Size) != Size
-
-#None = [| none |]
-#use None
-
-#Bool = [| true, false |]
-#use Bool
-
-#Optional = (x: Type) => x | None
-
-#`not` = (x: Bool) -> Bool => if x do false else true
-#
-#`and` = (x y: Bool) -> Bool => if x do y else false
-#
-#`or`  = (x y: Bool) -> Bool => if x do true else y
-#
-#`xor` = (x y: Bool) -> Bool => x != y
-#
-#`?` = Optional
-#
-#`mut` = Mutable
-#
-#`imm` = Immutable
-#
-#`??` = (it: ?A, default: A) -> A =>
-#	if it is None do default else it
-#
-#use (
-#	value : (x: mut A) -> A
-#)
-#
-#use (
-#	value : (x: imm A) -> A
-#)
-#
-#`===` : (x y: A) -> Bool
-#
-#`!==` = (x y: A) -> Bool => not x === y
-
-#Variant = @enum(foo, bar(bool: Bool))
-#Struct  = @data(name: String-Literal, age: Number-Literal)
-
-#@union = @extern (x: ..Type) -> Type
-#@inter = @extern (x: ..Type) -> Type
-#@tuple = @extern (x: ..Type) -> Type
-
-# Func-Row  = { name: String, type: Type, value: ?type }
-# Data-Row  = { name: String, type: Type }
-
-# Arg  = (A: Type) => { name: String, value: A }
-# Data = { head: Data-Row, tail: ?Data }
-# data = (arg: Arg(A)) -> Data(to-data-row(arg))
-
-# type-of(x: Data) = { 
-# Enum = { rows: [Row], rest: ?Enum-Type }
-#
-
+assert type-of(Type as Any) == Any
+assert type-of(true as Any) == Any
+assert type-of((true as Any) as Any) == Any
+assert type-of((true as Any) as Bool) == Bool

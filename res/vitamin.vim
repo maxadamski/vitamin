@@ -28,7 +28,8 @@ syn region vString start=/[A-Za-z]*'/ skip=/\\[\\']/ end=/'/ contains=vEscaped
 syn match vEscaped /\\[tnr\"\'\\]/
 syn region vString start=/`/ end=/`/
 
-syn match vNumber /\<[-]\?\d\+[A-Za-z]*\>/
+syn match vNumber /\<[-]\?[0-9_]\+\(\.[0-9_]\+\)\?[A-Za-z]*\>/
+syn match vNumber /\<[-]\?0[box][0-9A-Za-z_]\+\>/
 
 syn match vName /[a-z_][A-Za-z0-9_-]*/
 

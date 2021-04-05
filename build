@@ -13,7 +13,7 @@ setup)
 ;;
 run)
 	shift
-	nim r $NIMFLAGS $MAIN $@
+	nim r $NIMFLAGS $MAIN -P $@
 ;;
 release)
 	shift

@@ -1,5 +1,5 @@
 import types
-import math, options, terminal, strutils, strformat
+import os, math, options, terminal, strutils, strformat
 
 type
     VitaminError* = object of CatchableError
@@ -18,6 +18,16 @@ func error*(node: Exp, msg: string): ref VitaminError =
 func error*(msg: string): ref VitaminError =
     verror(0, term(), msg)
 
+proc err_header*(node: Exp, name: string, endl = "\n"): string =
+    let prefix = "-- " & name.to_upper() & " "
+    var suffix = ""
+    let pos = node.calculate_position
+    if pos.is_some and pos.get.file != nil:
+        let path = pos.get.file[].replace(get_env("HOME"), "~")
+        suffix = " " & path
+    let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
+    prefix & padding & suffix & endl
+
 proc print_error*(error: ref VitaminError, file: Option[string] = none(string)) =
     let prefix = "-- ERROR "
     var suffix = ""
@@ -26,7 +36,8 @@ proc print_error*(error: ref VitaminError, file: Option[string] = none(string)) 
     else:
         let pos = error.node.calculate_position
         if pos.is_some and pos.get.file != nil:
-            suffix = " " & pos.get.file[]
+            let path = pos.get.file[].replace(get_env("HOME"), "~")
+            suffix = " " & path
     let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
     echo prefix, padding, suffix
     echo ""

@@ -80,7 +80,8 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string)) =
             for x in exprs: echo x
             quit(0)
         for x in exprs:
-            let (val, typ) = eval(env, x)
+            let val = eval(env, x)
+            let typ = v_type(env, val)
             if val != unit:
                 echo $val, " : ", $typ
         #echo tokens.filter_it(it.tag in {aSym, aNum, aStr}).map_it(it.value).join(" ")
@@ -91,11 +92,12 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string)) =
 
 proc eval_file(env: Env, path: string) =
     let data = read_file(path)
-    eval_string(env, data, some(path))
     echo fmt"DEBUG: run {path}"
+    eval_string(env, data, some(path))
 
 proc repl(env: Env, silent: bool = false) =
     const prompt_ok   = "λ "
+    const prompt_len  = prompt_ok.len
     const prompt_cont = "  "
     var noise = Noise.init()
     noise.set_prompt(prompt_ok)
@@ -116,7 +118,9 @@ proc repl(env: Env, silent: bool = false) =
             if ind or not exp.ends_with("\n"):
                 continue
 
+            # remove last empty line from terminal
             stdout.write "\e[1A\e[K"
+
             eval_string(env, exp)
             noise.set_prompt(prompt_ok)
             lines = @[]
@@ -156,10 +160,17 @@ proc repl(env: Env, silent: bool = false) =
             # TODO: check if expression is complete with parser
             var exp = line
             let exp_complete = false
-            if not (line.ends_with(";") or exp_complete):
+            if not (exp.ends_with(";") or exp_complete):
                 lines.add(line)
                 noise.set_prompt(prompt_cont)
                 continue
+            if exp.ends_with(";"):
+                # remove last semicolon from expression
+                exp = exp[0 .. ^2]
+                # remove last semicolon from terminal 
+                let last_col = exp.len + prompt_len - 1
+                # save pos, move up, move right to last_col, restore pos
+                stdout.write "\e[s\e[F\e[{last_col}C \e[u".fmt
 
             eval_string(env, exp)
 
@@ -178,7 +189,7 @@ proc main =
         of "-h", "--help": print_help()
         of "-V", "--version": print_version()
         of "-L", "--library": i += 1; libs.add(param_str(i))
-        of "-p", "--prelude": i += 1; prelude = some(param_str(i))
+        of "-p", "--prelude": i += 1; prelude = some(param_str(i)); no_prelude = false
         of "-P", "--no-prelude": no_prelude = true
         of "-S", "--no-greeting": no_greeting = true
         of "-i", "--interative": force_interactive = true

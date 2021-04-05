@@ -22,13 +22,13 @@ type
         unique*: bool
         autocurry*: bool
         is_macro*: bool
-        is_unique*: bool
+        is_opaque*: bool
         ret_typ_inferred_from_usage*: bool
 
     RecSlot* = object
         name*: string
         typ*: Val
-        default*: Option[Val]
+        default*: Option[Exp]
         typ_inferred_from_default*: bool
         typ_inferred_from_position*: bool
 
@@ -63,9 +63,9 @@ type
             exprs*: seq[Exp]
 
     ValTag* = enum
-        HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal, TypeVal, NumVal,
+        HoldVal, CastVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal, TypeVal, NumVal,
         ExpVal, ExpTypeVal, MemVal, FunVal, FunTypeVal, BuiltinFunVal,
-        UniqueVal, UniqueFunVal
+        OpaqueVal, OpaqueFunVal
 
     Val* = ref object
         case kind*: ValTag
@@ -81,12 +81,14 @@ type
             exp*: Exp
         of ExpTypeVal:
             discard
-        of FunVal, UniqueFunVal:
+        of FunVal, OpaqueFunVal:
             fun*: Fun
         of TypeVal:
             level*: int
-        of UniqueVal:
-            inner_value*: Val
+        of CastVal:
+            val*, typ*: Val
+        of OpaqueVal:
+            inner*: Val
         of UnionTypeVal, InterTypeVal:
             types*: seq[Val]
         of RecTypeVal:
@@ -119,8 +121,9 @@ type
 
 proc `$`*(v: Val): string =
     case v.kind
-    of HoldVal: "Hold(" & v.name & ")"
-    of UniqueVal: "Unique(" & $v.inner_value & ")"
+    of HoldVal: v.name
+    of OpaqueVal: "Opaque(" & $v.inner & ")"
+    of CastVal: $v.typ & "(" & $v.val & ")"
     of NumVal: $v.num
     of MemVal: "Memory()"
     of ExpVal: "Expr(" & $v.exp & ")"
@@ -130,12 +133,13 @@ proc `$`*(v: Val): string =
         if v.level == 0: "Type" else: "Type" & $v.level
     of UnionTypeVal, InterTypeVal:
         let op = if v.kind == UnionTypeVal: "|" else: "&"
-        if v.types.len == 0: return "("&op&")"
+        if v.types.len == 0:
+            return if v.kind == UnionTypeVal: "Any" else: "Never"
         v.types.map(`$`).join(op)
     of FunVal: "Lambda()"
-    of FunTypeVal, UniqueFunVal:
+    of FunTypeVal, OpaqueFunVal:
         let prefix = case v.kind
-        of UniqueFunVal: "unique "
+        of OpaqueFunVal: "unique "
         else: ""
         prefix & "(" & v.fun_typ.params.map_it($it.name).join(", ") & ") -> " & $v.fun_typ.ret_typ
     of RecVal:
@@ -271,11 +275,11 @@ func to_string(x: Exp): string =
         else:
             return x.value
     of expTerm:
-        #if x.exprs.len >= 2 and x.exprs[0].is_token("call"):
-        #    return x.exprs[1].to_string & "(" & x.exprs[2 .. ^1].map(to_string).join(", ") & ")"
-        #elif x.exprs.len >= 1 and x.exprs[0].is_token("group"):
-        #    return "(" & x.exprs[1 .. ^1].map(to_string).join(", ") & ")"
-        #else:
+        if x.exprs.len >= 2 and x.exprs[0].is_token("apply"):
+            return x.exprs[1].to_string & "(" & x.exprs[2 .. ^1].map(to_string).join(", ") & ")"
+        elif x.exprs.len >= 1 and x.exprs[0].is_token("( _ )"):
+            return "(" & x.exprs[1 .. ^1].map(to_string).join(", ") & ")"
+        else:
             return "{" & x.exprs.map(to_string).join(" ") & "}"
 
 func `$`*(x: Exp): string =
@@ -288,6 +292,7 @@ proc extend*(env: Env): Env =
     Env(parent: env)
 
 func len*(x: Exp): int =
+    if x.kind == expAtom: return -1
     x.exprs.len
 
 func `[]`*(x: Exp, index: int): Exp =

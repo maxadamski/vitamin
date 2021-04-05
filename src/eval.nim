@@ -1,8 +1,9 @@
 import types, error
-import sets, tables, options, sequtils, strutils, strformat
+import tables, options, sequtils, strutils, strformat, algorithm
 
 func v_num(num: int): Val = Val(kind: NumVal, num: num)
 func v_hold(name: string): Val = Val(kind: HoldVal, name: name)
+func v_opaque(inner: Val): Val = Val(kind: OpaqueVal, inner: inner)
 func v_universe(level: int): Val = Val(kind: TypeVal, level: 0)
 func v_union_type(types: varargs[Val]): Val = Val(kind: UnionTypeVal, types: @types)
 func v_inter_type(types: varargs[Val]): Val = Val(kind: InterTypeVal, types: @types)
@@ -19,6 +20,8 @@ let type1* = v_universe(2)
 let unit* = v_record()
 let v_true = v_num(1)
 let v_false = v_num(0)
+let v_any = v_union_type()
+let v_never = v_inter_type()
 proc v_bool(x: bool): Val = (if x: v_true else: v_false)
 let unit_type* = v_record_type()
 let exp_type* = Val(kind: ExpTypeVal)
@@ -56,18 +59,28 @@ proc get_opt*(env: Env, name: string): Option[Var] =
 proc max_or(x: seq[int], default=0): int =
     if x.len == 0: default else: max(x)
 
-proc v_equal(x, y: Val): Val =
-    if x.kind != y.kind: return v_false
-    let res = case x.kind
+proc equal(x, y: Val): bool =
+    if x.kind != y.kind: return false
+    case x.kind
     of TypeVal: x.level == y.level
-    of UniqueVal: x == y
+    of OpaqueVal: x == y
     of HoldVal: x.name == y.name
+    of RecTypeVal:
+        if x.slots.len != y.slots.len: return false
+        let n = x.slots.len
+        let sx = x.slots.sorted_by_it(it.name)
+        let sy = y.slots.sorted_by_it(it.name)
+        for i in 0..<n:
+            if sx[i].name != sy[i].name or not equal(sx[i].typ, sy[i].typ): return false
+        return true
     else: x == y
-    v_bool(res)
 
-proc v_not_equal(x, y: Val): Val =
-    let res = v_equal(x, y)
-    if res == v_true: v_false else: v_true
+proc is_subtype(x, y: Val): bool =
+    # is x a subtype of y
+    if equal(x, y): return true
+    if y.kind == UnionTypeVal and y.types.len == 0: return true
+    if y.kind == InterTypeVal and y.types.len == 0: return false
+    return false
 
 proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val
 
@@ -91,6 +104,8 @@ proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val =
     case val.kind
     of TypeVal, RecTypeVal, FunTypeVal, UnionTypeVal, InterTypeVal, ExpTypeVal:
         v_universe(universe(env, val))
+    of CastVal:
+        val.typ
     of RecVal:
         v_record_type(val.fields.map_it(RecSlot(name: it.name, typ: v_type(env, it.val))))
     of FunVal:
@@ -101,28 +116,25 @@ proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val =
         env.get_opt("I64").get.val
     of ExpVal:
         exp_type
-    of UniqueVal:
-        return v_type(env, val.inner_value)
+    of OpaqueVal:
+        return v_type(env, val.inner)
     of HoldVal:
         let res = env.get_opt(val.name)
         if res.is_none:
-            raise error("{val.name} is not declared.".fmt)
+            raise error("`{val.name}` is not assumed. This should not happen!".fmt)
         res.get.typ
     else:
         raise error("`type-of` not implemented for argument {val}.".fmt)
 
-proc eval*(env: Env, exp: Exp, as_type: Option[Val]): (Val, Val)
+proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val
 
-proc eval*(env: Env, exp: Exp, as_type: Val): (Val, Val) =
-    eval(env, exp, some(as_type))
+proc eval*(env: Env, exp: Exp, as_type: Val, unwrap = false): Val =
+    eval(env, exp, some(as_type), unwrap)
 
-proc eval*(env: Env, exp: Exp): (Val, Val) =
-    eval(env, exp, none(Val))
+proc eval*(env: Env, exp: Exp, unwrap = false): Val =
+    eval(env, exp, none(Val), unwrap)
 
-proc with_type*(env: Env, val: Val): (Val, Val) =
-    (val, v_type(env, val))
-
-proc eval*(env: Env, exp: Exp, as_type: Option[Val]): (Val, Val) =
+proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val =
     case exp.kind
     of expAtom:
         case exp.tag
@@ -133,12 +145,17 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val]): (Val, Val) =
                 raise error(exp, "{name} is not defined. {exp.src}".fmt)
             if not res.get.is_defined:
                 raise error(exp, "{name} is declared, but not defined. {exp.src}".fmt)
-            return (res.get.val, res.get.typ)
+            let val = res.get.val
+            if not unwrap and val.kind == OpaqueVal:
+                return v_hold(name)
+            return val
 
         of aNum:
             let val = Val(kind: NumVal, num: parse_int(exp.value))
-            let typ = if as_type.is_none: v_type(env, val) else: as_type.get
-            return (val, typ)
+            # TODO: check if can cast
+            if as_type.is_some:
+                return Val(kind: CastVal, val: val, typ: as_type.get)
+            return val
         
         else:
             raise error(exp, "I don't know how to evaluate term {exp}. {exp.src}".fmt)
@@ -151,99 +168,152 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val]): (Val, Val) =
                 assert exp[1].kind == expAtom
                 let name = exp[1].value
                 let val = v_hold(name)
-                let typ = eval(env, exp[2], as_type=type0)[0]
+                let typ = eval(env, exp[2], as_type=type0)
                 env.vars[name] = Var(val: val, typ: typ, is_defined: true)
-                return (unit, unit_type)
+                return unit
             
             of "=":
                 assert exp.len == 3
                 assert exp[1].kind == expAtom
                 let name = exp[1].value
-                let val = eval(env, exp[2], as_type=type0)[0]
-                let typ = v_type(env, val)
+                var val = eval(env, exp[2])
+                var typ: Val
+                if val.kind == CastVal:
+                    typ = val.typ
+                else:
+                    typ = v_type(env, val)
                 env.vars[name] = Var(val: val, typ: typ, is_defined: true)
-                return (unit, unit_type)
+                return unit
             
-            of "call":
+            of "apply":
                 return eval(env, term(exp.exprs[1 .. ^1]), as_type)
 
             of "Union", "Inter":
-                let args = exp.exprs[1 .. ^1].map_it(eval(env, it)[0])
+                let args = exp.exprs[1 .. ^1].map_it(eval(env, it))
                 if exp[0].value == "Union":
-                    return with_type(env, v_union_type(args))
+                    return v_union_type(args)
                 if exp[0].value == "Inter":
-                    return with_type(env, v_inter_type(args))
+                    return v_inter_type(args)
+
+            of "type-of":
+                assert exp.len == 2
+                if exp[1].kind == expAtom and exp[1].tag in {aSym, aLit}:
+                    let name = exp[1].value
+                    let res = env.get_opt(name)
+                    if res.is_none:
+                        raise error(exp, "I don't know the type of `{name}` since it isn't defined or assumed. {exp.src}".fmt)
+                    return res.get.typ
+                return v_type(env, eval(env, exp[1]))
+
+            of "assert":
+                if exp[1].len == 3 and exp[1][0].kind == expAtom:
+                    let op = exp[1][0].value
+                    let (lhs, rhs) = (exp[1][1], exp[1][2])
+                    let (actual, expected) = (eval(env, lhs), eval(env, rhs))
+                    if op == "==":
+                        if not equal(actual, expected):
+                            let header = exp.err_header("assert error")
+                            echo "{header}\nexpected `{lhs}`\nto equal `{rhs}`\n     but `{actual}` != `{expected}` {exp.src}\n".fmt
+                    elif op == "!=":
+                        if equal(actual, expected):
+                            let header = exp.err_header("assert error")
+                            echo "{header}\nexpected `{lhs}`\nto not equal `{rhs}`\n     but `{actual}` == `{expected}` {exp.src}\n".fmt
+                    else:
+                        echo "error: assert doesn't support binary operator {op} {exp.src}".fmt
+                else:
+                    echo "error: assert doesn't support expressions like {exp} {exp.src}".fmt
+
+                return unit
+
+            of "opaque":
+                assert exp.len == 2
+                let val = eval(env, exp[1])
+                if val.kind == FunTypeVal:
+                    val.fun_typ.is_opaque = true
+                    return val
+                elif val.kind == FunVal:
+                    val.fun.typ.is_opaque = true
+                    return val
+                else:
+                    return v_opaque(val)
+
+            of "unwrap":
+                assert exp.len == 2
+                var val = eval(env, exp[1])
+                if val.kind == HoldVal:
+                    val = env.get_opt(val.name).get.val
+                case val.kind:
+                of OpaqueVal:
+                    return val.inner
+                of OpaqueFunVal:
+                    val.fun.typ.is_opaque = false
+                    return val
+                else:
+                    raise error(exp, "{val} is not an opaque value. {exp.src}".fmt)
+
+            of "as":
+                assert exp.len == 3
+                let dst_typ = eval(env, exp[2])
+                # eval rhs and cast literal
+                let val = eval(env, exp[1], as_type=dst_typ)
+                let src_typ = v_type(env, val)
+
+                # try to unwrap previous casts
+                var dst_val = val
+                while dst_val.kind == CastVal:
+                    if equal(dst_val.typ, dst_typ):
+                        return dst_val
+                    dst_val = dst_val.val
+
+                # check if can cast to subtype
+                if src_typ.is_subtype(dst_typ):
+                    return Val(kind: CastVal, val: val, typ: dst_typ)
+
+                raise error(exp, "You can't cast `{val}` of `{src_typ}` to type `{dst_typ}`.\n\nCan't downcast, because type `{src_typ}` is not a subtype of `{dst_typ}`.\n\nCan't upcast, because there is no evidence, that `{val}` was downcast from type `{dst_typ}`. {exp.src}".fmt)
 
             of "Record":
                 # Record : (fields: [Expr]) -> Record-Universe(fields)
                 var slots: seq[RecSlot]
-                return with_type(env, v_record_type(slots))
+                for x in exp.exprs[1 .. ^1]:
+                    var slot: RecSlot
+                    var name_typ = x
+                    if x[0].is_token("="):
+                        name_typ = x[1]
+                        slot.default = some(x[2])
+                    if not name_typ[0].is_token(":"):
+                        raise error(exp, "Expected a pair `name : type`, but got {name_typ}. {name_typ.src}".fmt)
+                    if name_typ[1].kind != expAtom:
+                        raise error(exp, "Field name must be an atom, but got {name_typ[1]}. {name_typ[1].src}".fmt)
+                    slot.name = name_typ[1].value
+                    slot.typ = eval(env, name_typ[2])
+                    slots.add(slot)
+                return v_record_type(slots)
 
-            of "type-of":
-                assert exp.len == 2
-                let (val, typ) = eval(env, exp[1])
-                return (typ, v_type(env, typ))
-
-            of "assert":
-                let res = eval(env, exp[1])[0]
-                if res == v_false:
-                    if exp[1][0].is_token("=="):
-                        let actual = eval(env, exp[1][1])[0]
-                        let expected = eval(env, exp[1][2])[0]
-                        echo "fail: expected {exp[1][1]} to equal {exp[1][2]}, but {actual} != {expected}".fmt
-
-                return (unit, unit_type)
-
-            of "as":
-                echo exp
-
-            of "group":
+            of "( _ )":
                 if exp.len == 1:
-                    return (unit, unit_type)
+                    return unit
+                if exp.len == 2 and not (exp[1].kind == expTerm and exp[1].len == 3 and exp[1][0].is_token("=")):
+                    return eval(env, exp[1])
 
                 var fields: seq[RecField]
                 for x in exp.exprs[1 .. ^1]:
                     if x[0].is_token("="):
                         let name = x[1].value
-                        let (val, typ) = eval(env, x[2])
+                        let val = eval(env, x[2])
                         fields.add(RecField(name: name, val: val))
 
-                let val = v_record(fields)
-                return (val, v_type(env, val))
-
-            of "==":
-                let lhs = eval(env, exp[1])[0]
-                let rhs = eval(env, exp[2])[0]
-                return with_type(env, v_equal(lhs, rhs))
-
-            of "!=":
-                let lhs = eval(env, exp[1])[0]
-                let rhs = eval(env, exp[2])[0]
-                return with_type(env, v_not_equal(lhs, rhs))
-
-            of "newtype":
-                assert exp.len == 2
-                let (val, typ) = eval(env, exp[1])
-                if val.kind == FunTypeVal:
-                    val.fun_typ.is_unique = true
-                    return (val, typ)
-                elif val.kind == FunVal:
-                    val.fun.typ.is_unique = true
-                    return (val, typ)
-                else:
-                    return with_type(env, Val(kind: UniqueVal, inner_value: val))
+                return v_record(fields)
 
             of "macro":
-                var (val, typ) = eval(env, exp[1])
+                var val = eval(env, exp[1])
                 if val.kind == FunTypeVal:
                     val.fun_typ.is_macro = true
                 if val.kind == FunVal:
                     val.fun.typ.is_macro = true
-                return (val, typ)
+                return val
 
             of "->":
-                let res = v_lambda_type(expand_lambda_type(exp))
-                return (res, v_type(env, res))
+                return v_lambda_type(expand_lambda_type(exp))
 
             of "=>":
                 # `=>` : macro (params: [Expr], body: Exp) -> Fun-Type(params)
@@ -255,23 +325,23 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val]): (Val, Val) =
                     # TODO: infer ret
                     let ret = term()
                     let typ = lambda_type(params, ret)
-                    return (v_lambda(typ, body, local), v_lambda_type(typ))
+                    return v_lambda(typ, body, local)
 
                 elif head[0].is_token("->"):
                     let typ = expand_lambda_type(head)
-                    return (v_lambda(typ, body, local), v_lambda_type(typ))
+                    return v_lambda(typ, body, local)
 
                 else:
                     raise error(exp, "Bad lambda term {exp}. {exp.src}".fmt)
 
         if exp.len > 1:
-            let callee = eval(env, exp[0])[0]
-            let args = exp.exprs[1 .. ^1].map_it(eval(env, it)[0])
+            let callee = eval(env, exp[0])
+            let args = exp.exprs[1 .. ^1].map_it(eval(env, it))
             case callee.kind
             of BuiltinFunVal:
-                return with_type(env, callee.builtin_fun(args))
+                return callee.builtin_fun(args)
             of FunVal:
-                raise error(exp, "Call not implemented. {exp.src}".fmt)
+                raise error(exp, "Apply not implemented. {exp.src}".fmt)
             else:
                 raise error(exp, "{callee} is not callable. {exp.src}".fmt)
         
