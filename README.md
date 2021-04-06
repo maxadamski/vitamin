@@ -19,7 +19,7 @@ Get to know Vitamin with some example programs.
 
 For a complete description see the [language reference manual](docs/manual.md).
 
-Documentation and more examples are also mirrored on the [Vitamin language website](maxadamski.com/vitamin). Code excerpts on the website are easier to read, because they have syntax highligting!
+Documentation and more examples are also mirrored on the [Vitamin language website](https://maxadamski.com/vitamin). Code excerpts on the website are easier to read, because they have syntax highligting!
 
 **Simple Fizz Buzz**
 
