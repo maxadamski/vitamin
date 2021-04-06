@@ -1,6 +1,8 @@
 import types, error
 import tables, options, sequtils, strutils, strformat, algorithm
 
+var global_fun_id: uint32 = 1000
+
 func v_num(num: int): Val = Val(kind: NumVal, num: num)
 func v_hold(name: string): Val = Val(kind: HoldVal, name: name)
 func v_opaque(inner: Val): Val = Val(kind: OpaqueVal, inner: inner)
@@ -11,9 +13,14 @@ func v_record(fields: varargs[RecField]): Val = Val(kind: RecVal, fields: @field
 func v_record_type(slots: varargs[RecSlot]): Val = Val(kind: RecTypeVal, slots: @slots)
 
 func lambda_type(params: varargs[FunParam], ret: Exp): FunTyp = FunTyp(params: @params, ret_typ: ret)
-func v_lambda(typ: FunTyp, body: Exp, env: Env): Val = Val(kind: FunVal, fun: Fun(typ: typ, body: body, env: env))
+
 func v_lambda_type(typ: FunTyp): Val = Val(kind: FunTypeVal, fun_typ: typ)
+
 func v_lambda_type(params: varargs[FunParam], ret: Exp): Val = v_lambda_type(lambda_type(params, ret))
+
+proc v_lambda(typ: FunTyp, body: Exp, env: Env): Val =
+    global_fun_id += 1
+    Val(kind: FunVal, fun: Fun(id: global_fun_id, typ: typ, body: body, env: env))
 
 let type0* = v_universe(1)
 let type1* = v_universe(2)
@@ -28,7 +35,7 @@ let exp_type* = Val(kind: ExpTypeVal)
 
 proc expand_lambda_params(exp: Exp): seq[FunParam] =
     var params: seq[FunParam]
-    if exp[0].is_token("group"):
+    if exp[0].is_token("( _ )"):
         for x in exp.exprs[1 .. ^1]:
             var param = FunParam()
             var name_type = x
@@ -38,6 +45,7 @@ proc expand_lambda_params(exp: Exp): seq[FunParam] =
             param.name = x[1].value
             param.typ = x[2]
             params.add(param)
+    return params
 
 proc expand_lambda_type(exp: Exp): FunTyp =
     let params = expand_lambda_params(exp[1])
@@ -64,6 +72,8 @@ proc equal(x, y: Val): bool =
     case x.kind
     of TypeVal: x.level == y.level
     of OpaqueVal: x == y
+    of FunVal: x.fun.id == y.fun.id
+    of OpaqueFunVal: x.opaque_fun.id == y.opaque_fun.id and x.bindings == y.bindings
     of HoldVal: x.name == y.name
     of RecTypeVal:
         if x.slots.len != y.slots.len: return false
@@ -118,13 +128,15 @@ proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val =
         exp_type
     of OpaqueVal:
         return v_type(env, val.inner)
+    of OpaqueFunVal:
+        return v_type(env, val.result)
     of HoldVal:
         let res = env.get_opt(val.name)
         if res.is_none:
-            raise error("`{val.name}` is not assumed. This should not happen!".fmt)
+            raise error("`{val.name}` is not assumed. This shouldn't happen!".fmt)
         res.get.typ
     else:
-        raise error("`type-of` not implemented for argument {val}.".fmt)
+        raise error("`type-of` not implemented for argument {val.str}.".fmt)
 
 proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val
 
@@ -158,7 +170,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
             return val
         
         else:
-            raise error(exp, "I don't know how to evaluate term {exp}. {exp.src}".fmt)
+            raise error(exp, "I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
 
     of expTerm:
         if exp.len >= 1 and exp[0].kind == expAtom:
@@ -205,6 +217,10 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     return res.get.typ
                 return v_type(env, eval(env, exp[1]))
 
+            of "print":
+                echo exp.exprs[1 .. ^1].map_it(eval(env, it)).join(" ")
+                return unit
+
             of "assert":
                 if exp[1].len == 3 and exp[1][0].kind == expAtom:
                     let op = exp[1][0].value
@@ -213,15 +229,15 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     if op == "==":
                         if not equal(actual, expected):
                             let header = exp.err_header("assert error")
-                            echo "{header}\nexpected `{lhs}`\nto equal `{rhs}`\n     but `{actual}` != `{expected}` {exp.src}\n".fmt
+                            echo "{header}\nexpected `{lhs.str}`\nto equal `{rhs.str}`\n     but `{actual.str}` != `{expected.str}` {exp.src}\n".fmt
                     elif op == "!=":
                         if equal(actual, expected):
                             let header = exp.err_header("assert error")
-                            echo "{header}\nexpected `{lhs}`\nto not equal `{rhs}`\n     but `{actual}` == `{expected}` {exp.src}\n".fmt
+                            echo "{header}\n    expected `{lhs.str}`\nto not equal `{rhs.str}`\n         but `{actual.str}` == `{expected.str}` {exp.src}\n".fmt
                     else:
                         echo "error: assert doesn't support binary operator {op} {exp.src}".fmt
                 else:
-                    echo "error: assert doesn't support expressions like {exp} {exp.src}".fmt
+                    echo "error: assert doesn't support expressions like {exp.str} {exp.src}".fmt
 
                 return unit
 
@@ -246,10 +262,9 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 of OpaqueVal:
                     return val.inner
                 of OpaqueFunVal:
-                    val.fun.typ.is_opaque = false
-                    return val
+                    return val.result
                 else:
-                    raise error(exp, "{val} is not an opaque value. {exp.src}".fmt)
+                    raise error(exp, "{val.str} is not an opaque value. {exp.src}".fmt)
 
             of "as":
                 assert exp.len == 3
@@ -269,7 +284,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 if src_typ.is_subtype(dst_typ):
                     return Val(kind: CastVal, val: val, typ: dst_typ)
 
-                raise error(exp, "You can't cast `{val}` of `{src_typ}` to type `{dst_typ}`.\n\nCan't downcast, because type `{src_typ}` is not a subtype of `{dst_typ}`.\n\nCan't upcast, because there is no evidence, that `{val}` was downcast from type `{dst_typ}`. {exp.src}".fmt)
+                raise error(exp, "You can't cast `{val.str}` of `{src_typ.str}` to type `{dst_typ.str}`.\n\nCan't downcast, because type `{src_typ.str}` is not a subtype of `{dst_typ.str}`.\n\nCan't upcast, because there is no evidence, that `{val.str}` was downcast from type `{dst_typ.str}`. {exp.src}".fmt)
 
             of "Record":
                 # Record : (fields: [Expr]) -> Record-Universe(fields)
@@ -281,9 +296,9 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                         name_typ = x[1]
                         slot.default = some(x[2])
                     if not name_typ[0].is_token(":"):
-                        raise error(exp, "Expected a pair `name : type`, but got {name_typ}. {name_typ.src}".fmt)
+                        raise error(exp, "Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
                     if name_typ[1].kind != expAtom:
-                        raise error(exp, "Field name must be an atom, but got {name_typ[1]}. {name_typ[1].src}".fmt)
+                        raise error(exp, "Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
                     slot.name = name_typ[1].value
                     slot.typ = eval(env, name_typ[2])
                     slots.add(slot)
@@ -320,7 +335,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 let (head, body) = (exp[1], exp[2])
                 let is_closure = false
                 let local = if is_closure: env else: nil
-                if head[0].is_token("group"):
+                if head[0].is_token("( _ )"):
                     let params = expand_lambda_params(head)
                     # TODO: infer ret
                     let ret = term()
@@ -332,21 +347,38 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     return v_lambda(typ, body, local)
 
                 else:
-                    raise error(exp, "Bad lambda term {exp}. {exp.src}".fmt)
+                    raise error(exp, "Bad lambda term {exp.str}. {exp.src}".fmt)
 
         if exp.len > 1:
             let callee = eval(env, exp[0])
-            let args = exp.exprs[1 .. ^1].map_it(eval(env, it))
             case callee.kind
             of BuiltinFunVal:
+                let args = exp.exprs[1 .. ^1].map_it(eval(env, it))
                 return callee.builtin_fun(args)
             of FunVal:
-                raise error(exp, "Apply not implemented. {exp.src}".fmt)
+                let fun_typ = callee.fun.typ
+                var local = env.extend()
+                let args = exp.exprs[1 .. ^1]
+                var bindings: seq[(string, Val)]
+                for i in 0..<fun_typ.params.len:
+                    let par = fun_typ.params[i]
+                    let arg = args[i]
+                    let typ = eval(local, par.typ)
+                    let val = eval(local, arg, as_type=typ)
+                    local.vars[par.name] = Var(val: val, typ: typ, is_defined: true)
+                    bindings.add((par.name, val))
+                let ret_typ = eval(local, fun_typ.ret_typ)
+                var res = eval(local, callee.fun.body, as_type=ret_typ)
+                if fun_typ.is_opaque:
+                    var name = ""
+                    if exp[0].kind == expAtom:
+                        name = exp[0].value
+                    res = Val(kind: OpaqueFunVal, disp_name: name, result: res, bindings: bindings, opaque_fun: callee.fun)
+                return res
             else:
-                raise error(exp, "{callee} is not callable. {exp.src}".fmt)
+                raise error(exp, "{callee.str} is not callable. {exp.src}".fmt)
         
-    raise error(exp, "I don't know how to evaluate term {exp}. {exp.src}".fmt)
+    raise error(exp, "I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
 
 var global_env* = Env(parent: nil)
 global_env.vars["Type"] = Var(val: type0, typ: type1, is_defined: true)
-#global_env.vars["Unit"] = Var(val: unit, typ: type0, is_defined: true)

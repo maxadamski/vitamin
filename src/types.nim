@@ -12,6 +12,7 @@ type
         typ_inferred_from_usage*: bool
 
     Fun* = object
+        id*: uint32
         typ*: FunTyp
         body*: Exp
         env*: Env
@@ -19,7 +20,6 @@ type
     FunTyp* = object
         params*: seq[FunParam]
         ret_typ*: Exp
-        unique*: bool
         autocurry*: bool
         is_macro*: bool
         is_opaque*: bool
@@ -81,8 +81,13 @@ type
             exp*: Exp
         of ExpTypeVal:
             discard
-        of FunVal, OpaqueFunVal:
+        of FunVal:
             fun*: Fun
+        of OpaqueFunVal:
+            disp_name*: string
+            result*: Val
+            opaque_fun*: Fun
+            bindings*: seq[(string, Val)]
         of TypeVal:
             level*: int
         of CastVal:
@@ -119,45 +124,6 @@ type
         of OkResult:
             value*: R
 
-proc `$`*(v: Val): string =
-    case v.kind
-    of HoldVal: v.name
-    of OpaqueVal: "Opaque(" & $v.inner & ")"
-    of CastVal: $v.typ & "(" & $v.val & ")"
-    of NumVal: $v.num
-    of MemVal: "Memory()"
-    of ExpVal: "Expr(" & $v.exp & ")"
-    of ExpTypeVal: "Expr"
-    of BuiltinFunVal: "Builtin-Lambda()"
-    of TypeVal:
-        if v.level == 0: "Type" else: "Type" & $v.level
-    of UnionTypeVal, InterTypeVal:
-        let op = if v.kind == UnionTypeVal: "|" else: "&"
-        if v.types.len == 0:
-            return if v.kind == UnionTypeVal: "Any" else: "Never"
-        v.types.map(`$`).join(op)
-    of FunVal: "Lambda()"
-    of FunTypeVal, OpaqueFunVal:
-        let prefix = case v.kind
-        of OpaqueFunVal: "unique "
-        else: ""
-        prefix & "(" & v.fun_typ.params.map_it($it.name).join(", ") & ") -> " & $v.fun_typ.ret_typ
-    of RecVal:
-        var res: seq[string]
-        for x in v.fields:
-            let prefix = if x.name == "": "" else: x.name & "="
-            res.add(prefix & $x.val)
-        "(" & res.join(", ") & ")"
-    of RecTypeVal:
-        var res: seq[string]
-        for x in v.slots:
-            var repr = ""
-            if x.name != "": repr &= x.name & ": "
-            repr &= $x.typ
-            if x.default.is_some: repr &= " = " & $x.default.get
-            res.add(repr)
-        "Record(" & res.join(", ") & ")"
-
 func is_error*[E, R](x: Result[E, R]): bool = x.kind == ErrorResult
 func is_ok*[E, R](x: Result[E, R]): bool = x.kind == OkResult
 func get_error*[E, R](x: Result[E, R]): E = x.error
@@ -183,6 +149,7 @@ func is_term*(x: Exp): bool =
 
 func is_term*(x: Exp, len: int): bool =
     x.kind == expTerm and x.exprs.len == len
+
 
 proc mkstream*(items: seq[Exp]): ExpStream =
     ExpStream(items: items, index: 0)
@@ -262,29 +229,6 @@ func term*(x: seq[Exp]): Exp =
 func term*(x: varargs[Exp]): Exp =
     term(x.toSeq)
 
-func to_string(x: Exp): string =
-    case x.kind
-    of expAtom:
-        if x.tag == aInd: return "$IND"
-        if x.tag == aDed: return "$DED"
-        if x.tag == aCnt: return "$CNT"
-        if x.tag == aWs: return "$WS"
-        if x.tag == aNl: return "$NL"
-        if ' ' in x.value or x.value == "{" or x.value == "}":
-            return "`" & x.value & "`"
-        else:
-            return x.value
-    of expTerm:
-        if x.exprs.len >= 2 and x.exprs[0].is_token("apply"):
-            return x.exprs[1].to_string & "(" & x.exprs[2 .. ^1].map(to_string).join(", ") & ")"
-        elif x.exprs.len >= 1 and x.exprs[0].is_token("( _ )"):
-            return "(" & x.exprs[1 .. ^1].map(to_string).join(", ") & ")"
-        else:
-            return "{" & x.exprs.map(to_string).join(" ") & "}"
-
-func `$`*(x: Exp): string =
-    to_string(x)
-
 func pos*(y, x, yy, xx: int, file: ref string = nil): Position =
     Position(start_line: y, start_char: x, stop_line: yy, stop_char: xx, file: file)
 
@@ -335,3 +279,84 @@ func calculate_position*(node: Exp): Option[Position] =
         node.pos
     of expTerm:
         node.exprs.map_it(it.calculate_position).filter_it(it.is_some).map_it(it.get).merge_position
+
+proc str*(x: Exp): string =
+    case x.kind
+    of expAtom:
+        if x.tag == aInd: return "$IND"
+        if x.tag == aDed: return "$DED"
+        if x.tag == aCnt: return "$CNT"
+        if x.tag == aWs: return "$WS"
+        if x.tag == aNl: return "$NL"
+        if ' ' in x.value or x.value == "{" or x.value == "}":
+            return "`" & x.value & "`"
+        else:
+            return x.value
+    of expTerm:
+        if x.exprs.len >= 2 and x.exprs[0].is_token("apply"):
+            return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
+        elif x.exprs.len >= 1 and x.exprs[0].is_token("( _ )"):
+            return "(" & x.exprs[1 .. ^1].map(str).join(", ") & ")"
+        else:
+            return "{" & x.exprs.map(str).join(" ") & "}"
+
+proc str*(x: uint64): string =
+    var res = x.to_hex
+    if x < 0x100000000'u64:
+        res = res[8 .. ^1]
+    "0x" & res
+
+proc str*(v: Val): string =
+    case v.kind
+    of HoldVal: v.name
+    of OpaqueVal: "Opaque(" & v.inner.str & ")"
+    of CastVal: v.typ.str & "(" & v.val.str & ")"
+    of NumVal: $v.num
+    of MemVal: "Memory(" & cast[uint64](v.mem.val).str & ")"
+    of ExpVal: "Expr(" & v.exp.str & ")"
+    of ExpTypeVal: "Expr"
+    of BuiltinFunVal: "Builtin-Lambda()"
+    of TypeVal:
+        if v.level == 0: "Type" else: "Type" & $v.level
+    of UnionTypeVal, InterTypeVal:
+        let op = if v.kind == UnionTypeVal: "|" else: "&"
+        if v.types.len == 0:
+            return if v.kind == UnionTypeVal: "Any" else: "Never"
+        v.types.map(str).join(op)
+    of FunVal: "Lambda(" & v.fun.id.str & ")"
+    of OpaqueFunVal:
+        var name = if v.disp_name != "": v.disp_name else: "Lambda(" & v.opaque_fun.id.str & ")"
+        var args: seq[string]
+        for (key, val) in v.bindings:
+            args.add(val.str)
+        name & "(" & args.join(", ") & ")"
+    of FunTypeVal:
+        var prefix = ""
+        if v.fun_typ.is_opaque: prefix &= "opaque "
+        var params: seq[string]
+        for param in v.fun_typ.params:
+            var s = param.name & ": " & param.typ.str
+            if param.default.is_some: s &= " = " & param.default.get.str
+            params.add(s)
+        prefix & "(" & params.join(", ") & ") -> " & v.fun_typ.ret_typ.str
+    of RecVal:
+        var res: seq[string]
+        for x in v.fields:
+            let prefix = if x.name == "": "" else: x.name & "="
+            res.add(prefix & x.val.str)
+        "(" & res.join(", ") & ")"
+    of RecTypeVal:
+        var res: seq[string]
+        for x in v.slots:
+            var repr = ""
+            if x.name != "": repr &= x.name & ": "
+            repr &= x.typ.str
+            if x.default.is_some: repr &= " = " & x.default.get.str
+            res.add(repr)
+        "Record(" & res.join(", ") & ")"
+
+proc `$`*(x: Exp): string =
+    x.str
+
+proc `$`*(x: Val): string =
+    x.str

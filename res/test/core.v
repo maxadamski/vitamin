@@ -1,10 +1,5 @@
 ## Tests of core functionality (run without prelude)
 
-### Helper definitions
-
-`assert` : (assertion: Expr) -> Unit
-
-
 ### `Type` built-in and definitions
 
 # identity
@@ -68,7 +63,7 @@ assert type-of(42) == I64
 assert type-of(forty-two) == I64
 
 
-### opaque values
+### Opaque values
 
 Bool = opaque Int
 None = opaque Int
@@ -129,9 +124,26 @@ assert Double == Record(y: I64, x: Type)
 assert type-of((x=Unit, y=42)) == Double
 assert type-of((y=42, x=Unit)) == Double
 
+
 ### Casts
 
 assert type-of(Type as Any) == Any
 assert type-of(true as Any) == Any
 assert type-of((true as Any) as Any) == Any
 assert type-of((true as Any) as Bool) == Bool
+
+
+### Opaque functions
+
+x : Type
+y : Type
+
+Pointer = opaque (a: Type) -> Type => Size
+
+assert Pointer(x) != Size
+assert Pointer(x) != Pointer(y)
+assert Pointer(x) == Pointer(x)
+assert unwrap(Pointer(x)) == Size
+assert unwrap(Pointer(y)) == Size
+assert unwrap(Pointer(x)) == unwrap(Pointer(x))
+

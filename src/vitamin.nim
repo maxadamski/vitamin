@@ -4,7 +4,9 @@ import noise
 
 import types, error, scan, parse, eval
 
-const version = "Vitamin₀ v0.1.0"
+const short_date = CompileDate[2 .. 3] & CompileDate[5 .. 6] & CompileDate[8 .. 9]
+
+const version = "Vitamin₀ v0.1.0-{short_date}".fmt
 
 const repl_greeting = "{version} (Type :h ENTER for help)".fmt
 
@@ -53,7 +55,7 @@ proc print_help =
 
 proc print_version =
     echo version
-    echo fmt"Compiled on {CompileDate} {CompileTime} [Nim {NimVersion}]"
+    echo fmt"Compiled on {CompileDate} {CompileTime} UTC [Nim {NimVersion}] [{hostOS}] [{hostCPU}]"
     echo fmt"Copyright (c) 2018-{CompileDate[0..3]} Max Adamski"
     echo "More at: https://maxadamski.com/vitamin"
     quit(0)
@@ -69,30 +71,29 @@ proc find_source(name: string, search: seq[string]): Option[string] =
         if file_exists(full): return some(full)
     return none(string)
 
-proc eval_string(env: Env, str: string, file: Option[string] = none(string)) =
+proc eval_string(env: Env, str: string, file: Option[string] = none(string), print = false) =
     try:
         let tokens = scan(str, file).indent()
         if debug == "scan":
-            for x in tokens: echo x
+            for x in tokens: echo x.str
             quit(0)
         let exprs = to_seq(parse(global_parser, tokens))
         if debug == "parse":
-            for x in exprs: echo x
+            for x in exprs: echo x.str
             quit(0)
         for x in exprs:
             let val = eval(env, x)
-            let typ = v_type(env, val)
-            if val != unit:
-                echo $val, " : ", $typ
-        #echo tokens.filter_it(it.tag in {aSym, aNum, aStr}).map_it(it.value).join(" ")
-        # let result = eval(env, exprs)
+            if print:
+                let typ = v_type(env, val)
+                if val != unit:
+                    echo val.str, " : ", typ.str
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error)
 
 proc eval_file(env: Env, path: string) =
     let data = read_file(path)
-    echo fmt"DEBUG: run {path}"
+    #echo fmt"DEBUG: run {path}"
     eval_string(env, data, some(path))
 
 proc repl(env: Env, silent: bool = false) =
@@ -121,7 +122,7 @@ proc repl(env: Env, silent: bool = false) =
             # remove last empty line from terminal
             stdout.write "\e[1A\e[K"
 
-            eval_string(env, exp)
+            eval_string(env, exp, print=true)
             noise.set_prompt(prompt_ok)
             lines = @[]
 
@@ -172,7 +173,7 @@ proc repl(env: Env, silent: bool = false) =
                 # save pos, move up, move right to last_col, restore pos
                 stdout.write "\e[s\e[F\e[{last_col}C \e[u".fmt
 
-            eval_string(env, exp)
+            eval_string(env, exp, print=true)
 
 proc main =
     let vpath = get_env("VITAPATH")
@@ -202,8 +203,8 @@ proc main =
         else: inputs.add(param_str(i))
         i += 1
 
-    echo fmt"DEBUG: library paths = {libs}"
-    echo fmt"DEBUG: input paths   = {inputs}"
+    #echo fmt"DEBUG: library paths = {libs}"
+    #echo fmt"DEBUG: input paths   = {inputs}"
 
     if not no_prelude:
         var path: string

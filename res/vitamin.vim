@@ -14,9 +14,9 @@ hi def link vSpecial     Keyword
 hi def link vKeyword     Special
 hi def link vComment     Comment
 hi def link vString      Constant
-hi def link vNumber      Constant
-hi def link vConstant    Constant
-hi def link vEscaped     Special
+hi def link vNumber      Number
+hi def link vConstant    Number
+hi def link vEscaped     Identifier
 hi def link vPragma      Statement
 
 syn region vComment start=/#/ end=/$/
@@ -26,7 +26,7 @@ syn region vString start=/[A-Za-z]*"/ skip=/\\[\\"]/ end=/"/ contains=vEscaped
 syn region vString start=/[A-Za-z]*'/ skip=/\\[\\']/ end=/'/ contains=vEscaped
 
 syn match vEscaped /\\[tnr\"\'\\]/
-syn region vString start=/`/ end=/`/
+syn region vEscaped start=/`/ end=/`/
 
 syn match vNumber /\<[-]\?[0-9_]\+\(\.[0-9_]\+\)\?[A-Za-z]*\>/
 syn match vNumber /\<[-]\?0[box][0-9A-Za-z_]\+\>/
@@ -38,6 +38,7 @@ syn keyword vType Type
 
 syn match vPragma /[@][A-Za-z0-9_-]*/
 syn keyword vPragma pure lazy import extern unique opaque macro
+syn keyword vKeyword use use-syntax use-macro assert
 
 syn match vPolymorph /\<[A-Z]\>/
 "syn match vPolymorph /\<Type\(-[1-9][0-9]*\)\=\>/
@@ -46,16 +47,14 @@ syn match vPolymorph /\<[A-Z]\>/
 
 syn match vSpecial /\<_\>/
 syn match vSpecial /$[0-9]\>/
-"syn keyword vSpecial 
 
 syn keyword vConstant true false none
 
 syn keyword vKeyword enum module object
 syn keyword vKeyword is as in not and or xor div mod
 
-syn keyword vKeyword var use if elif else while for case of pass
-syn keyword vKeyword with where when do return continue break shift reset
-syn keyword vKeyword assert lazy pure defer
+syn keyword vKeyword var if elif else while for case of defer pass
+syn keyword vKeyword with where do return continue break shift reset
 
 syn match vApply /[A-Za-z_][A-Za-z0-9_-]*\((\)\@=/
 syn keyword vApply opt imm mut ptr
