@@ -112,7 +112,25 @@ proc scan*(text: string, file: Option[string] = none(string)): seq[Exp] =
             parens.add(a)
             atoms.add(a)
         of '#':
-            while s.top != '\n': buf.add(s.eat)
+            if s.top == '[':
+                # is multiline comment
+                buf.add(s.eat)
+                while not s.eof:
+                    if s.top == '\\':
+                        buf.add(s.eat)
+                        if not s.eof:
+                            buf.add(s.eat)
+                    elif s.top == ']':
+                        buf.add(s.eat)
+                        if not s.eof and s.top == '#':
+                            buf.add(s.eat)
+                            break
+                    else:
+                        buf.add(s.eat)
+            
+            else:
+                # is single line comment
+                while s.top != '\n': buf.add(s.eat)
             # TODO: do not discard comments
             #atoms.add(atom(buf, aCom, s.get_range))
         of '|':

@@ -20,7 +20,7 @@ hi def link vEscaped     Identifier
 hi def link vPragma      Statement
 
 syn region vComment start=/#/ end=/$/
-syn region vComment start=/#=/ end=/=#/
+syn region vComment start=/#\[/ end=/\]#/
 
 syn region vString start=/[A-Za-z]*"/ skip=/\\[\\"]/ end=/"/ contains=vEscaped
 syn region vString start=/[A-Za-z]*'/ skip=/\\[\\']/ end=/'/ contains=vEscaped
