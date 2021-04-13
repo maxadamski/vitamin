@@ -3,10 +3,14 @@ import options, tables
 import noise
 
 import types, error, scan, parse, eval
+from base_parser import parser
 
-const short_date = CompileDate[2 .. 3] & CompileDate[5 .. 6] & CompileDate[8 .. 9]
+const major_ver = 0
+const minor_ver = 1
+const patch_ver = 0
+const night_ver = CompileDate[2 .. 3] & CompileDate[5 .. 6] & CompileDate[8 .. 9]
 
-const version = "Vitamin₀ v0.1.0-{short_date}".fmt
+const version = "Vitamin₀ v{major_ver}.{minor_ver}.{patch_ver}+dev.{night_ver}".fmt
 
 const repl_greeting = "{version} (Type :h ENTER for help)".fmt
 
@@ -77,7 +81,7 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string), pri
         if debug == "scan":
             for x in tokens: echo x.str
             quit(0)
-        let exprs = to_seq(parse(global_parser, tokens))
+        let exprs = to_seq(parse(parser, tokens))
         if debug == "parse":
             for x in exprs: echo x.str
             quit(0)
@@ -229,7 +233,7 @@ proc main =
         # TODO: pass command_args
         for i, arg in command_args:
             echo fmt"args[{i}] = {arg}"
-        echo command.get
+        #echo command.get
         eval_string(global_env, command.get)
 
     if ((inputs.len == 0 and command.is_none) or force_interactive) and not force_batch:

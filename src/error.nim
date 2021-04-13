@@ -80,14 +80,14 @@ proc in_source_lines(node: Exp): string =
     if pos.is_some:
         file_lines(pos.get.file[], pos.get.start_line, pos.get.stop_line)
     else:
-        "<not found>"
+        ""
 
 proc in_source*(node: Exp, lookbehind = 0, color: int = 91, show_ws: bool = false): string =
     let pos_opt = node.calculate_position
-    if pos_opt.is_none: return "<not found>"
+    if pos_opt.is_none: return ""
     let pos = pos_opt.get
     let lines = node.in_source_lines()
-    if lines == "": return "<not found>"
+    if lines == "": return ""
     var source = line_colored(lines, color, 0, pos.stop_line - pos.start_line, pos.start_char - 1, pos.stop_char - 1)
     if lookbehind > 0:
         source = file_lines(pos.file[], pos.start_line - lookbehind, pos.start_line - 1) & "\n" & source
@@ -118,7 +118,7 @@ proc bad_indent_error*(levels: seq[Exp], next: Exp): auto =
     # TODO: more specific message
     let look = levels.len + 1
     let pos_opt = term(levels).calculate_position
-    var source = "<not found>"
+    var source = ""
     if pos_opt.is_some:
         let pos = pos_opt.get
         source = next.in_source(lookbehind=next.pos.get.stop_line - pos.start_line + 1, color=41, show_ws=true)

@@ -1,5 +1,15 @@
 # This file contains basic syntax tests
 
+x < y < z < q < v
+
+x > y < z < x
+
+x == y < z == z
+
+x == y != z
+
+x => y => z
+
 not x
 
 p and q or u and v
@@ -32,9 +42,43 @@ x := y := z
 
 x.y := z
 
-x.y() := z
+f()
 
-a.b().c().d := e.f()
+f(x)
+
+f(x,)
+
+f(x, y)
+
+f(x, y,)
+
+f(x, y, z)
+
+f(x, y, z,)
+
+f(x=a)
+
+f(x=a,)
+
+f(x=a, y=b)
+
+f(x=a, y=b,)
+
+f(x=a, y=b, z=c)
+
+f(x=a, y=b, z=c,)
+
+while x:
+    y
+
+while x:
+    y
+    z
+
+while x:
+    y
+    z
+
 
 ()
 
@@ -62,243 +106,148 @@ a.b().c().d := e.f()
 
 (x=a, y=b, z=c,)
 
-f()
 
-f(x)
+x.y() := z
 
-f(x,)
+a.b().c().d := e.f()
 
-f(x, y)
+while x: y
 
-f(x, y,)
-
-f(x, y, z)
-
-f(x, y, z,)
-
-f(x=a)
-
-f(x=a,)
-
-f(x=a, y=b)
-
-f(x=a, y=b,)
-
-f(x=a, y=b, z=c)
-
-f(x=a, y=b, z=c,)
-
-while x y
-
-while x do y
-
-while x
+while x:
     y
 
-while x do
-    y
-
-while x
+while x:
     y
     z
 
-while x do
-    y
-    z
+for x in y: a
 
-for x in y a
-
-for x in y do a
-
-for x in y
+for x in y:
     a
 
-for x in y do
-    a
-
-for x in y
+for x in y:
     a
     b
 
-for x in y do
-    a
-    b
-    
-case of c1 e1
+case of c1: e1
 
-case of c1 do e1
-
-case of c1 e1 of c2 e2
-
-case of c1 do e1 of c2 do e2
+case of c1: e1 of c2: e2
 
 case
-of c1 e1
+of c1: e1
 
 case
-of c1 do e1
+of c1: e1
+of c2: e2
 
 case
-of c1 e1
-of c2 e2
-
-case
-of c1 do e1
-of c2 do e2
-
-case
-of c1
+of c1:
     e1
     f1
 
 case
-of c1 do
+of c1:
     e1
     f1
-
-case
-of c1
-    e1
-    f1
-of c2
+of c2:
     e2
     f2
 
 case
-of c1 do
+of c1:
     e1
     f1
-of c2 do
+of c2:
     e2
     f2
 
     
-case x of c1 e1
+case x of c1: e1
 
-case x of c1 do e1
-
-case x of c1 e1 of c2 e2
+case x of c1: e1 of c2: e2
     
-case x of c1 e1
-
-case x of c1 do e1
-
-case x of c1 e1 of c2 e2
-
-case x of c1 do e1 of c2 do e2
+case x
+of c1: e1
 
 case x
-of c1 e1
+of c1: e1
+of c2: e2
 
 case x
-of c1 do e1
-
-case x
-of c1 e1
-of c2 e2
-
-case x
-of c1 do e1
-of c2 do e2
-
-case x
-of c1
+of c1:
     e1
     f1
 
 case x
-of c1 do
+of c1:
     e1
     f1
-
-case x
-of c1
-    e1
-    f1
-of c2
+of c2:
     e2
     f2
 
-case x
-of c1 do
-    e1
-    f1
-of c2 do
-    e2
-    f2
+if c1: e1
 
-if c1 e1
+if c1: e1 else: e2
 
-if c1 do e1
+if c1: e1 elif c2: e2
 
-if c1 e1 else e2
+if c1: e1 elif c2: e2 elif e3: e3
 
-if c1 do e1 else e2
+if c1: e1 elif c2: e2 elif c3: e3 else: e4
 
-if c1 e1 elif c2 e2
+if c1: if c2: e1 else: e2
 
-if c1 do e1 elif c2 do e2
-
-if c1 e1 elif c2 e2 elif e3 e3
-
-if c1 do e1 elif c2 do e2 elif e3 e3
-
-if c1 e1 elif c2 e2 elif c3 e3 else e4
-
-if c1 do e1 elif c2 do e2 elif c3 do e3 else e4
-
-if c1 if c2 e1 else e2
-
-if c1
+if c1:
     e1
     e2
 
-if c1
+if c1:
     e1
     e2
-else
+else:
     e3
     e4
 
-if c1
+if c1:
     e1
     e2
-elif c2
+elif c2:
     e3
     e4
 
-if c1
+if c1:
     e1
     e2
-elif c2
+elif c2:
     e3
     e4
-elif c3
+elif c3:
     e5
     e6
 
-if c1
+if c1:
     e1
     e2
-elif c2
+elif c2:
     e3
     e4
-elif c3
+elif c3:
     e5
     e6
-else
+else:
     e7
     e8
 
-if a
+if a:
     e1
-    if b
+    if b:
         e2
         e3
-    else
+    else:
         e4
         e5
-else
+else:
     e5
     e6
 
@@ -317,31 +266,31 @@ x =>
     y
     z
 
-x = (x: A, y: B = b) -> R => f
+x = (x: A, y: B) -> R => f
 
-(a,
-
-    b,
-    c,)
+#(a,
+#
+#    b,
+#    c,)
 
 hello = (x: String) =>
     print(x)
     exit(0)
-    if x
+    if x:
         e2
         e3
-    else
+    else:
         e4
         e5
 
 use (x=2, y=3)
 
-use if x y else z
+#use if x y else z
 
-if x
+if x:
     use z
     y
-else
+else:
     a
     b
 
@@ -352,7 +301,11 @@ else
 )
 
 f(
-    a
-    b
-    c
+    a,
+    b,
+    c1,
 )
+
+x -> y -> z
+
+x => y => z

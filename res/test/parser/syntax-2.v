@@ -7,37 +7,37 @@ x => y => z
 
 x + y + z
 
-if x
+if x:
 	a
 	b
-else
+else:
 	c
 	d
 
-if a
+if a:
 	b
-elif c
+elif c:
 	d
-	if x
+	if x:
 		u
-	elif y
+	elif y:
 		v
-	else
+	else:
 		w
-else
+else:
 	e
 
-if x == y and not y do foo else bar
+if x == y and not y: foo else: bar
 
-while x one-liner
+while x: one-liner
 
-while x do print(2 + 2)
+while x: print(2 + 2)
 
-while true
+while true:
 	hello
-	if a
+	if a:
 		world
-	else
+	else:
 		whatever
 
 a = 1 * 2 + 3
@@ -65,45 +65,45 @@ g = (x: Int = 2, y: Float, z: Str = 'hello') -> Bool =>
 h = (A: Type, class: Additive(A), x, y: A) -> A => 
 	class.add(x, y)
 
-#x = [a, b, c]
+x = [a, b, c]
 
-#x = (a, b, c; d, e; f)
+x = (a, b, c; d, e; f)
 
 return (8 + 16)
 
 print(hello, world, end='\n\n', hello='heoi', world='otin')
 
 case a
-of b
+of b:
 	c
 	d
-of d
+of d:
 	e
 	f
-of _
+of _:
 	d
 
 case
-of (i mod 2 == 0) print('even')
-of _ print('odd')
+of i mod 2 == 0: print('even')
+of _: print('odd')
 
-if a do (if b c else d) else e
+if a: (if b: c else: d) else: e
 
-if true
+if true:
 	case q
-	of x
+	of x:
 		a
-	of y
+	of y:
 		b
 		c
 	return x
 
 return x
 
-case of a b of c d
+case of a: b of c: d
 
-if a do (if b do c else d)
-if a do (if b do c) else d
+if a: (if b: c else: d)
+if a: (if b: c) else: d
 
 x[]
 x[1]
