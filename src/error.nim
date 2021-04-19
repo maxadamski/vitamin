@@ -6,6 +6,8 @@ type
         code*: int
         node*: Exp
 
+var stdin_history* = ""
+
 func verror*(code: int, node: Exp, msg: string): ref VitaminError =
     var error = new_exception(VitaminError, msg)
     error.node = node
@@ -36,8 +38,11 @@ proc print_error*(error: ref VitaminError, file: Option[string] = none(string)) 
     else:
         let pos = error.node.calculate_position
         if pos.is_some and pos.get.file != nil:
-            let path = pos.get.file[].replace(get_env("HOME"), "~")
-            suffix = " " & path
+            if pos.get.file[] == "":
+                suffix = " [input history]"
+            else:
+                let path = pos.get.file[].replace(get_env("HOME"), "~")
+                suffix = " " & path
     let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
     echo prefix, padding, suffix
     echo ""
@@ -48,7 +53,7 @@ proc text_lines(text: string, start: int, stop = start): string =
     text.split('\n')[start-1 ..< stop].join("\n")
 
 proc file_lines(file: string, start: int, stop = start): string =
-    if file == "": return ""
+    if file == "": return text_lines(stdin_history, start, stop)
     let text = read_file(file)
     text_lines(text, start, stop)
 

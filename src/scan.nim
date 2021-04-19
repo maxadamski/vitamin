@@ -21,8 +21,8 @@ type Scanner = object
     text: string
     file: ref string
 
-func new_scanner(str: string, file: ref string): Scanner =
-    Scanner(x_last: 1, y_last: 1, x: 1, y: 1, i: 0, tmp: "", text: str, file: file)
+func new_scanner(str: string, file: ref string, start_line: int = 1): Scanner =
+    Scanner(x_last: 1, y_last: 1, x: 1, y: start_line, i: 0, tmp: "", text: str, file: file)
 
 proc save(self: var Scanner) =
     self.x_last = self.x
@@ -55,12 +55,12 @@ func peek(self: Scanner, offset: int = 1): string =
 func get_range(self: Scanner): Position =
     pos(self.y_last, self.x_last, self.y, self.x, self.file)
 
-proc scan*(text: string, file: Option[string] = none(string)): seq[Exp] =
+proc scan*(text: string, file: Option[string] = none(string), start_line: int = 1): seq[Exp] =
     var atoms: seq[Exp]
     var file_ref = new string
     if file.is_some:
         file_ref[].add(file.get)
-    var s = new_scanner(text, file_ref)
+    var s = new_scanner(text, file_ref, start_line)
     var buf = "" 
     var parens: seq[Exp]
     proc check_close_paren(paren: string) =

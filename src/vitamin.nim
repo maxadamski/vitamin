@@ -5,9 +5,7 @@ import noise
 import types, error, scan, parse, eval
 from base_parser import parser
 
-const major_ver = 0
-const minor_ver = 1
-const patch_ver = 0
+const (major_ver, minor_ver, patch_ver) = (0, 1, 0)
 const night_ver = CompileDate[2 .. 3] & CompileDate[5 .. 6] & CompileDate[8 .. 9]
 const ver_meta = if defined(release): "" else: fmt"+dev.{night_ver}"
 
@@ -76,9 +74,9 @@ proc find_source(name: string, search: seq[string]): Option[string] =
         if file_exists(full): return some(full)
     return none(string)
 
-proc eval_string(env: Env, str: string, file: Option[string] = none(string), print = false) =
+proc eval_string(env: Env, str: string, file: Option[string] = none(string), start_line = 1, print = false) =
     try:
-        let tokens = scan(str, file).indent()
+        let tokens = scan(str, file, start_line=start_line).indent()
         if debug == "scan":
             for x in tokens: echo x.str
             quit(0)
@@ -127,7 +125,8 @@ proc repl(env: Env, silent: bool = false) =
             # remove last empty line from terminal
             stdout.write "\e[1A\e[K"
 
-            eval_string(env, exp, print=true)
+            stdin_history &= exp
+            eval_string(env, exp, print=true, start_line=stdin_history.count_lines-1)
             noise.set_prompt(prompt_ok)
             lines = @[]
 
@@ -135,6 +134,8 @@ proc repl(env: Env, silent: bool = false) =
             echo repl_help
         elif cmd == ":q" or cmd == ":quit" or cmd == ":exit":
             break
+        elif cmd == ":history":
+            echo stdin_history
         elif cmd == ":env":
             print_env(env)
         elif cmd == ":cls" or cmd == ":clear":
@@ -178,7 +179,8 @@ proc repl(env: Env, silent: bool = false) =
                 # save pos, move up, move right to last_col, restore pos
                 stdout.write "\e[s\e[F\e[{last_col}C \e[u".fmt
 
-            eval_string(env, exp, print=true)
+            stdin_history &= exp & "\n"
+            eval_string(env, exp, print=true, start_line=stdin_history.count_lines-1)
 
 proc main =
     let vpath = get_env("VITAPATH")
