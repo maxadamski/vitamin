@@ -145,5 +145,4 @@ assert Pointer(x) != Pointer(y)
 assert Pointer(x) == Pointer(x)
 assert unwrap(Pointer(x)) == Size
 assert unwrap(Pointer(y)) == Size
-assert unwrap(Pointer(x)) == unwrap(Pointer(x))
-
+assert unwrap(Pointer(x)) == unwrap(Pointer(y))

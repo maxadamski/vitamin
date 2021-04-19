@@ -129,13 +129,7 @@ func loose_list(rule: SyntaxRule, sep: string): SyntaxRule =
     rule.list(tok_rule(sep) & ("$CNT".tr | "$IND".tr | "$DED".tr).star)
 
 # group = ((Any+)^',' ','?)^';' ';'?
-let group0 = ((("Any".E & "$CNT".tr.star).plus.loose_list(",") & ",".opt).loose_list(";") & ";".opt).splice.named("Group(';' | ',' | $WS)")
-
-let group1 = (("Any".E.loose_list(",") & ",".opt).loose_list(";") & ";".opt).splice.named("Group(';' | ',')")
-
-let params = (("Any".E.loose_list(",") & ",".opt).loose_list(";") & ";".opt).splice.named("Parameters")
-
-let args = "Any".E.list(",") & ",".opt
+let group0 = ((("Any".E & "$CNT".tr.star).plus.loose_list(",") & ",".opt).loose_list(";") & ";".opt).named("Group(';' | ',' | $WS)")
 
 let statement* = ("$CNT".tr | ";".tr).star & "Any".E & ("$EOS".tr | ("$CNT".tr | ";".tr).plus)
 
@@ -145,9 +139,9 @@ parser.add_prefix_mix "Group", "(", "(_)", "(".t & group0.deepCopy.opt & ")".t
 
 parser.add_prefix_mix "Group", "[", "[_]", "[".t & group0.deepCopy.opt & "]".t
 
-parser.add_infix_mix "Apply", "[", "[]", splice("[".t & group0.deepCopy.opt & "]".t)
+parser.add_infix_mix "Apply", "[", "[]", "[".t & group0.deepCopy.opt & "]".t
 
-parser.add_infix_mix "Apply", "(", "()", splice("(".t & group0.deepCopy.opt & ")".t)
+parser.add_infix_mix "Apply", "(", "()", "(".t & group0.deepCopy.opt & ")".t
 
 parser.add_infix_mix "Pow-Base", "^", "^".t & "Pow".e
 

@@ -153,10 +153,10 @@ code .fc { color: blue }
     <h2>Feature Showcase</h2>
     <h3>Dependent Types</h3>
     <pre><code><span class="c"># Vectors of length `n` and element type `a` are pointers to mutable values of type `a`</span>
-Vector <span class="k">=</span> <span class="k">opaque</span> (n: <span class="kt">Size</span>, a: <span class="kt">Type</span>) <span class="k">=></span> {items: <span class="kt">&mut</span> a}
+Vector <span class="k">=</span> <span class="k">opaque</span> (n: <span class="kt">Size</span>, a: <span class="kt">Type</span>) <span class="k">=></span> <span class="kt">Record</span>(items: <span class="kt">&mut</span> a)
 
 <span class="c"># Parameters `n`, `m` and `a` will be computed and passed implicitly</span>
-concat <span class="k">=</span> (?n, ?m, ?a, x: <span class="kt">Vector</span>(n, a), y: <span class="kt">Vector</span>(m, a)) <span class="k">=></span>
+concat <span class="k">=</span> (x: <span class="kt">Vector</span>(n, a), y: <span class="kt">Vector</span>(m, a)) <span class="k">=></span>
   items <span class="k">=</span> <span class="fc">new</span>(a, count<span class="k">=</span>n <span class="k">+</span> m)
   <span class="fc">copy</span>(from<span class="k">=</span>x.items, to<span class="k">=</span>items, count<span class="k">=</span>n)
   <span class="fc">copy</span>(from<span class="k">=</span>y.items, to<span class="k">=</span><span class="fc">offset</span>(items, n), count<span class="k">=</span>m)
@@ -172,20 +172,21 @@ result <span class="k">=</span> <span class="fc">concat</span>([<span class="mi"
     <pre><code>my-assert = macro (expr: Term) =>
   gensym op, x, y
   quote
-    when $expr
-    case Term($op, $x, $y)
+    case $expr
+    of Term($op, $x, $y)
       if not eval($expr)
-        when $op
-        case '==' print('Assertion failed: expected \($x) to equal \(eval($y)), but it was equal to \(eval($x))')
-        case 'is  print('Assertion failed: expected \($x) to have type \(eval($y)), but it had type \(type-of(eval($x)))')
-        case _    print('Unsupported assertion relation \($op)')
-    case _
+        case $op
+        of '==' print('Assertion failed: expected \($x) to equal \(eval($y)), but it was equal to \(eval($x))')
+        of 'is  print('Assertion failed: expected \($x) to have type \(eval($y)), but it had type \(type-of(eval($x)))')
+        of _    print('Unsupported assertion relation \($op)')
+    of _
       print('Error: unsupported assertion \($expr)')
     
 <span class="c"># Use macros just like regular functions</span>
 my-assert(2 == 2)</code></pre>
 
     <h3>Custom Syntax</h3>
+
     <pre><code>three-way-compare = (class: Comparable(a) = _, x y: a) -> Int =>
   if x &lt; y return +1
   if x > y return -1

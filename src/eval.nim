@@ -22,6 +22,7 @@ proc v_lambda(typ: FunTyp, body: Exp, env: Env): Val =
     global_fun_id += 1
     Val(kind: FunVal, fun: Fun(id: global_fun_id, typ: typ, body: body, env: env))
 
+
 let type0* = v_universe(1)
 let type1* = v_universe(2)
 let unit* = v_record()
@@ -33,18 +34,24 @@ proc v_bool(x: bool): Val = (if x: v_true else: v_false)
 let unit_type* = v_record_type()
 let exp_type* = Val(kind: ExpTypeVal)
 
+proc flatten_group(exp: Exp): seq[Exp] =
+    if exp.exprs.len == 0: return @[]
+    exp.exprs.map_it(it.exprs).foldl(a & b).map_it(it.exprs).foldl(a & b)
+
 proc expand_lambda_params(exp: Exp): seq[FunParam] =
     var params: seq[FunParam]
-    if exp[0].is_token("()"):
-        for x in exp.exprs[1 .. ^1]:
-            var param = FunParam()
-            var name_type = x
-            if x[0].is_token("="):
-                name_type = x[1]
-                param.default = some(x[2])
-            param.name = x[1].value
-            param.typ = x[2]
-            params.add(param)
+    if exp[0].is_token("(_)"):
+        for param_list in exp[1].exprs:
+            for param_group in param_list.exprs:
+                for param_expr in param_group.exprs:
+                    var param = FunParam()
+                    var name_type = param_expr
+                    if param_expr[0].is_token("="):
+                        name_type = param_expr[1]
+                        param.default = some(param_expr[2])
+                    param.name = name_type[1].value
+                    param.typ = name_type[2]
+                    params.add(param)
     return params
 
 proc expand_lambda_type(exp: Exp): FunTyp =
@@ -91,6 +98,11 @@ proc is_subtype(x, y: Val): bool =
     if y.kind == UnionTypeVal and y.types.len == 0: return true
     if y.kind == InterTypeVal and y.types.len == 0: return false
     return false
+
+proc v_compare(args: seq[Exp]): Exp =
+    # TODO: handle more cases
+    if args.len != 3: raise error(term(args), "only two-argument comparisons are supported right now")
+    term(args[1], args[0], args[2])
 
 proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val
 
@@ -225,9 +237,12 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 return unit
 
             of "assert":
-                if exp[1].len == 3 and exp[1][0].kind == expAtom:
-                    let op = exp[1][0].value
-                    let (lhs, rhs) = (exp[1][1], exp[1][2])
+                var cond = exp
+                if exp[1].is_term and exp[1][0].is_token("compare"): cond = v_compare(exp[1].exprs[1 .. ^1])
+
+                if cond.len == 3 and cond[0].kind == expAtom:
+                    let op = cond[0].value
+                    let (lhs, rhs) = (cond[1], cond[2])
                     let (actual, expected) = (eval(env, lhs), eval(env, rhs))
                     if op == "==":
                         if not equal(actual, expected):
@@ -307,14 +322,36 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     slots.add(slot)
                 return v_record_type(slots)
 
+            of "compare":
+                raise error(exp, "`compare` macro not implemented")
+
             of "()":
-                if exp.len == 1:
+                # function call macro 
+                let res = append(exp[1], flatten_group(exp[2]))
+                return eval(env, res)
+
+            of "(_)":
+                # group macro 
+                let exp = exp.exprs[1]
+                if exp.len == 0:
                     return unit
-                if exp.len == 2 and not (exp[1].kind == expTerm and exp[1].len == 3 and exp[1][0].is_token("=")):
-                    return eval(env, exp[1])
+                if exp.len > 1:
+                    raise error(exp, "Semicolons cannot appear in a tuple constructor")
+
+                let args = exp[0].exprs
+                if args.len == 1 and args[0].len == 1:
+                    # if is plain parentheses, just eval what's inside
+                    # FIXME: detect single element tuple with a trailing comma
+                    let inner = args[0][0]
+                    let is_tuple = inner.is_term(3) and inner[0].is_token("=")
+                    if not is_tuple:
+                        return eval(env, inner)
 
                 var fields: seq[RecField]
-                for x in exp.exprs[1 .. ^1]:
+                for x in args:
+                    if x.len != 1:
+                        raise error(exp, "Tuple elements must be spearated by a comma")
+                    let x = x[0]
                     if x[0].is_token("="):
                         let name = x[1].value
                         let val = eval(env, x[2])
@@ -346,7 +383,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 let (head, body) = (exp[1], exp[2])
                 let is_closure = false
                 let local = if is_closure: env else: nil
-                if head[0].is_token("( _ )"):
+                if head[0].is_token("(_)"):
                     let params = expand_lambda_params(head)
                     # TODO: assume parameters
                     # TODO: infer type of body

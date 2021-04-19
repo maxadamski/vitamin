@@ -13,16 +13,16 @@ setup)
 ;;
 run)
 	shift
-	nim r $NIMFLAGS $MAIN -P $@
+	nim r $NIMFLAGS $MAIN $@
 ;;
 release)
 	shift
 	mkdir -p bin
-	nim c -o:$BIN -d:release $NIMFLAGS --opt:speed $@ $MAIN
+	nim c -o:$BIN -d:release --opt:speed --passC:"-Ofast" $NIMFLAGS $MAIN
 ;;
 *)
 	mkdir -p bin
-	nim c -o:$BIN -d:release $NIMFLAGS --opt:speed --passC:"-march=native" $@ $MAIN
+	nim c -o:$BIN --opt:speed --passC:"-Ofast -march=native" $NIMFLAGS $MAIN
 ;;
 esac
 

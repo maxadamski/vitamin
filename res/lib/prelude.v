@@ -13,5 +13,5 @@ false = 0 as Bool
 None = opaque U8
 none = 0 as None
 
-`prefix &` = opaque (a: Type) -> Type => Size
+Pointer = opaque (a: Type) -> Type => Size
 

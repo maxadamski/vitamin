@@ -234,11 +234,16 @@ func str*(x: Exp): string =
             return x.value
     of expTerm:
         if x.exprs.len >= 2 and x.exprs[0].is_token("()"):
-            return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str_group1).join(", ") & ")"
+            return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
         elif x.exprs.len >= 1 and x.exprs[0].is_token("(_)"):
             return "(" & x.exprs[1].str_group2 & ")"
         else:
             return "{" & x.exprs.map(str).join(" ") & "}"
+
+func str_ugly*(x: Exp): string =
+    case x.kind
+    of expTerm: return "{" & x.exprs.map(str_ugly).join(" ")  & "}"
+    of expAtom: return x.str
 
 func str*(x: uint64): string =
     var res = x.to_hex
