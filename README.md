@@ -40,7 +40,7 @@ for i in irange(1, 100)
 
 ```vitamin
 # Vectors of length `n` and element type `a` are pointers to mutable `a` 
-Vector = newtype (n: Size, a: Type) => &mut a
+Vector = opaque (n: Size, a: Type) => &mut a
 
 # Parameters `n`, `m` and `a` will be computed and passed implicitly
 concat = (x: Vector($n, $a), y: Vector($m, a)) -> Vector(n+m, a) =>
