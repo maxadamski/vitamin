@@ -1,5 +1,5 @@
 import types
-import options, sets, strutils, sequtils
+import options, sets, strutils
 
 type
     ExpStream* = object
@@ -45,28 +45,31 @@ proc peek*(self: ExpStream, ind: bool = false): Exp =
 proc next*(self: var ExpStream, ind: bool = false): Exp =
     self.next_opt(ind=ind).get
 
-proc expect_raw*(self: ExpStream, token: string): bool =
-    if self.index >= self.items.len: return false
-    let e = self.items[self.index]
-    return e.kind == expAtom and e.value == token
+#proc expect_raw*(self: ExpStream, token: string): bool =
+#    if self.index >= self.items.len: return false
+#    let e = self.items[self.index]
+#    return e.kind == expAtom and e.value == token
 
 proc expect*(self: ExpStream, token: string, raw: bool = false): bool =
-    if self.index >= self.items.len: return false
+    if self.index >= self.items.len: return token == "$EOS"
     let e = if raw:
         self.items[self.index]
     else:
-        self.peek(ind=raw or token.starts_with("$"))
+        let x = self.peek_opt(ind=raw or token.starts_with("$"))
+        if x.is_none: return false
+        x.get
     return e.kind == expAtom and e.value == token
 
-proc expect_in*(self: ExpStream, tokens: HashSet[string], ind: bool = false): bool =
-    let e = self.peek_opt(ind=ind or tokens.any_it(it.starts_with("$")))
-    if e.is_none: return false
-    return e.get.kind == expAtom and e.get.value in tokens
+proc expect_in*(self: ExpStream, tokens: HashSet[string], raw: bool = false): bool =
+    for token in tokens:
+        if self.expect(token, raw=raw):
+            return true
+    return false
 
-proc expect_notin*(self: ExpStream, tokens: HashSet[string], ind: bool = false): bool =
-    if self.eos: return false
-    let e = self.peek(ind=ind or tokens.any_it(it.starts_with("$")))
-    return e.kind == expAtom and e.value notin tokens
+#proc expect_notin*(self: ExpStream, tokens: HashSet[string], ind: bool = false): bool =
+#    if self.eos: return false
+#    let e = self.peek(ind=ind or tokens.any_it(it.starts_with("$")))
+#    return e.kind == expAtom and e.value notin tokens
 
 proc eat_atom*(self: var ExpStream, token: string): Option[Exp] =
     let raw = token.starts_with("$")

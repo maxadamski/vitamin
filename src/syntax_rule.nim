@@ -1,6 +1,8 @@
 import types
 import options, sets, sequtils, strutils
 
+# TODO: add negative lookahead rule
+
 type
     SyntaxRuleKind* = enum
         NilRule = 0, TokRule, ExpRule, SeqRule, AltRule, RepRule
@@ -34,24 +36,79 @@ type
 func is_optional(self: SyntaxRule): bool =
     return self.kind == NilRule or self.kind == RepRule or (self.kind == AltRule and (self.is_opt or self.rules.any(is_optional)))
 
+func maybe_paren(x: string, y: bool, left = "(", right = ")"): string =
+    if y: left & x & right else: x
+
+func str*(self: SyntaxRule, group = true, toplevel = false): string =
+    if self.name != "": return self.name
+
+    case self.kind:
+    of NilRule:
+        "∅"
+    of SeqRule:
+        if self.is_plus:
+            self.rules[0].str & "+"
+        elif self.is_list:
+            let val = self.rules[0]
+            let sep = self.rules[1].rule.rules[0]
+            (val.str & "^" & sep.str).maybe_paren(group)
+        else:
+            self.rules.map_it(it.str(group=true)).join(" ").maybe_paren(not toplevel, "[", "]")
+    of AltRule:
+        if self.is_opt:
+            self.rules[0].str & "?"
+        else:
+            self.rules.map_it(it.str).join(" | ").maybe_paren(group)
+    of TokRule:
+        if self.value == "":
+            "Atom"
+        else:
+            "'" & self.value & "'"
+    of ExpRule:
+        if self.group.is_none:
+            return "Expr"
+        case self.relation
+        of StrongerEqual: $self.group.get
+        of StrongerThan: $self.group.get
+    of RepRule:
+        self.rule.str & "*"
+
+func `$`*(self: SyntaxRule): string =
+    self.str
+
 
 # -- Base constructors
+
+func add_follow_rec(rule: SyntaxRule): SyntaxRule =
+    case rule.kind
+    of SeqRule, AltRule:
+        for i, subrule in rule.rules:
+            subrule.follow = subrule.follow + rule.follow
+            rule.rules[i] = add_follow_rec(subrule)
+    of RepRule:
+        rule.rule.follow = rule.rule.follow + rule.follow
+        rule.rule = add_follow_rec(rule.rule)
+    else:
+        discard
+    return rule
 
 func seq_rule*(rules: seq[SyntaxRule], splice = false, is_plus = false, is_list = false, name = "", follow = init_hash_set[string]()): SyntaxRule =
     let slots = rules.map_it(int(it.slots > 0)).foldl(a + b)
     var first, follow: HashSet[string]
+    var rules = rules
     for i in 0 ..< rules.high:
         first = first + rules[i].first
         if not rules[i].is_optional:
             break
 
-    for i in 0 ..< rules.high:
+    for i in 0 .. rules.high - 1:
         for j in i + 1 .. rules.high:
             rules[i].follow = rules[i].follow + rules[j].first
+            rules[i] = add_follow_rec(rules[i])
             if not rules[j].is_optional:
                 break
 
-    SyntaxRule(kind: SeqRule, rules: @rules, should_splice: splice, slots: slots, first: first, follow: follow, 
+    SyntaxRule(kind: SeqRule, rules: rules, should_splice: splice, slots: slots, first: first, follow: follow, 
                 is_plus: is_plus, is_list: is_list, name: name)
 
 func alt_rule*(rules: seq[SyntaxRule], splice = false, is_opt = false, name = ""): SyntaxRule =
@@ -83,53 +140,13 @@ func named*(x: SyntaxRule, name: string): SyntaxRule =
     x.name = name
     x
 
-func maybe_paren(x: string, y: bool, left = "(", right = ")"): string =
-    if y: left & x & right else: x
-
-func str*(self: SyntaxRule, group = true, toplevel = false): string =
-    if self.name != "": return self.name
-
-    case self.kind:
-    of NilRule:
-        "∅"
-    of SeqRule:
-        if self.is_plus:
-            self.rules[0].str & "+"
-        elif self.is_list:
-            let val = self.rules[0]
-            let sep = self.rules[1].rule.rules[0]
-            (val.str & "^" & sep.str).maybe_paren(group)
-        else:
-            self.rules.map_it(it.str(group=false)).join(" ").maybe_paren(not toplevel, "[", "]")
-    of AltRule:
-        if self.is_opt:
-            (self.rules[0].str & "?").maybe_paren(group)
-        else:
-            self.rules.map_it(it.str).join(" | ").maybe_paren(group)
-    of TokRule:
-        if self.value == "":
-            "Atom"
-        else:
-            "'" & self.value & "'"
-    of ExpRule:
-        if self.group.is_none:
-            return "Expr"
-        case self.relation
-        of StrongerEqual: $self.group.get
-        of StrongerThan: $self.group.get
-    of RepRule:
-        (self.rule.str & "*").maybe_paren(group)
-
-func `$`*(self: SyntaxRule): string =
-    self.str
-
 # -- Convenience constructors
 
 func opt*(rule: SyntaxRule): SyntaxRule =
     alt_rule(@[rule, SyntaxRule(kind: NilRule)], is_opt=true)
 
 func opt*(value: string): SyntaxRule =
-    opt(tok_rule(value))
+    tok_rule(value).opt.splice
 
 func star*(r: SyntaxRule): SyntaxRule =
     rep_rule(r)
@@ -151,7 +168,7 @@ func `&`*(x: SyntaxRule, y: SyntaxRule): SyntaxRule =
     elif x.kind == SeqRule:
         seq_rule(x.rules & @[y])
     elif y.kind == SeqRule:
-        seq_rule(y.rules & @[x])
+        seq_rule(@[x] & y.rules)
     else:
         seq_rule(@[x, y])
 
@@ -161,6 +178,6 @@ func `|`*(x: SyntaxRule, y: SyntaxRule): SyntaxRule =
     elif x.kind == AltRule:
         alt_rule(x.rules & @[y])
     elif y.kind == AltRule:
-        alt_rule(y.rules & @[x])
+        alt_rule(@[x] & y.rules)
     else:
         alt_rule(@[x, y])

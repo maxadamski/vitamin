@@ -54,7 +54,7 @@ func add_order(self: var Parser, order: string) =
 # Convenience syntax rule constructors
 # 
 
-func tr(x: string): SyntaxRule = tok_rule(x, raw=true)
+func tr(x: string): SyntaxRule = tok_rule(x, raw=true, save=false)
 
 func ts(x: string): SyntaxRule = tok_rule(x, save=true)
 
@@ -96,7 +96,7 @@ parser.add_order "Apply Group Cmp And Or Not Mul > Statement"
 parser.add_order "Member > Apply Assignment"
 parser.add_order "Qualifier > Group Typing Definition Lambda"
 parser.add_order "Mul > Lambda"
-parser.add_order "Group > Definition Typing > Comma > Semicolon"
+parser.add_order "Group > Comma > Assignment Definition Typing > Semicolon"
 parser.add_order "Lambda > Qualifier"
 parser.add_order "Group > Lambda-Type > Typing Qualifier Lambda Definition"
 
@@ -125,44 +125,49 @@ parser.add_prefix_none "Statement", "use", "assert", "return"
 # associative prefix operators
 parser.add_prefix_left "Qualifier", "opaque", "macro", "pure"
 
-#parser.infix_rules[","] = ("Comma", ",", ((",".t & "Comma".E).plus & ",".opt).splice )
-#parser.infix_rules[";"] = ("Semicolon", ",", ((";".t & "Semicolon".e).plus & ";".opt).splice )
-#parser.prefix_rules["("] = ("Parentheses", "()", "(".t & "Any".b.star & ")".t)
-
+func loose_list(rule: SyntaxRule, sep: string): SyntaxRule =
+    rule.list(tok_rule(sep) & ("$CNT".tr | "$IND".tr | "$DED".tr).star)
 
 # group = ((Any+)^',' ','?)^';' ';'?
-let group0 = (("Any".E.plus.list(",") & ",".opt).list(";") & ";".opt).splice.named("Group(';' | ',' | $WS)")
+let group0 = ((("Any".E & "$CNT".tr.star).plus.loose_list(",") & ",".opt).loose_list(";") & ";".opt).splice.named("Group(';' | ',' | $WS)")
 
-let group1 = (("Any".E.list(",") & ",".opt.splice).list(";") & ";".opt).splice.named("Group(';' | ',')")
+let group1 = (("Any".E.loose_list(",") & ",".opt).loose_list(";") & ";".opt).splice.named("Group(';' | ',')")
 
-parser.add_infix_mix "Comma", ",", (",".t & "Comma".E).splice.star
+let params = (("Any".E.loose_list(",") & ",".opt).loose_list(";") & ";".opt).splice.named("Parameters")
 
-parser.add_prefix_mix "Group", "(", "(_)", "(".t & group0.opt & ")".t
+let args = "Any".E.list(",") & ",".opt
 
-parser.add_prefix_mix "Group", "[", "[_]", "[".t & group0.opt & "]".t
+let statement* = ("$CNT".tr | ";".tr).star & "Any".E & ("$EOS".tr | ("$CNT".tr | ";".tr).plus)
 
-parser.add_infix_mix "Apply", "[", "[]", "[".t & group1.opt & "]".t
+parser.add_infix_mix "Comma", ",", ((",".t & "Comma".E).splice.star.splice & ",".opt).splice
 
-parser.add_infix_mix "Apply", "(", "()", "(".t & group1.opt & ")".t
+parser.add_prefix_mix "Group", "(", "(_)", "(".t & group0.deepCopy.opt & ")".t
+
+parser.add_prefix_mix "Group", "[", "[_]", "[".t & group0.deepCopy.opt & "]".t
+
+parser.add_infix_mix "Apply", "[", "[]", splice("[".t & group0.deepCopy.opt & "]".t)
+
+parser.add_infix_mix "Apply", "(", "()", splice("(".t & group0.deepCopy.opt & ")".t)
 
 parser.add_infix_mix "Pow-Base", "^", "^".t & "Pow".e
 
 parser.add_infix_mix "Lambda", "=>", "=>".t & "Lambda".b
 
 parser.add_prefix_mix "Statement", "while",
-    ("while".t & "Statement".E & ":".tr & "Any".b).splice
+    ("while".t & "Statement".E & ":".opt & "Any".b).splice
 
 parser.add_prefix_mix "Statement", "for",
-    ("for".t & "Statement".E & "in".t & "Statement".E & ":".tr & "Any".b).splice
+    ("for".t & "Statement".E & "in".t & "Statement".E & ":".opt & "Any".b).splice
 
-parser.add_prefix_mix "Statement", "case", 
+parser.add_prefix_mix "Statement", "case", splice(
     "case".t & "Statement".E.opt &
-    ("$CNT".tr.opt & "of".t & "Statement".E & ":".tr & "Any".b).plus.splice
+    ("$CNT".tr.opt & "of".tr & "Statement".E & ":".opt & "Any".b).plus
+)
 
 parser.add_prefix_mix "Statement", "if", splice(
-    "if".t & "Statement".E & ":".tr & "Any".b &
-    ("$CNT".tr.opt & "elif".t & "Statement".E & ":".tr & "Any".b).star &
-    ("$CNT".tr.opt & "else".t & ":".tr & "Any".b).opt
+    "if".t & "Statement".E & ":".opt & "Any".b &
+    ("$CNT".tr.opt & "elif".tr & "Statement".E & ":".opt & "Any".b).star &
+    ("$CNT".tr.opt & "else".tr & ":".opt & "Any".b).opt
 )
 
 let cmp_operator = "==".ts | "!=".ts | "<".ts | "<=".ts | ">".ts | ">=".ts

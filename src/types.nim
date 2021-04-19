@@ -209,7 +209,17 @@ func calculate_position*(node: Exp): Option[Position] =
     of expTerm:
         node.exprs.map_it(it.calculate_position).filter_it(it.is_some).map_it(it.get).merge_position
 
-proc str*(x: Exp): string =
+func str*(x: Exp): string
+
+func join*(x: Exp, sep: string): string =
+    assert x.kind == expTerm
+    x.exprs.map(str).join(sep)
+
+func str_group0(x: Exp): string = x.join(" ")
+func str_group1(x: Exp): string = x.exprs.map(str_group0).join(", ")
+func str_group2(x: Exp): string = x.exprs.map(str_group1).join("; ")
+
+func str*(x: Exp): string =
     case x.kind
     of expAtom:
         if x.tag == aInd: return "$IND"
@@ -217,19 +227,20 @@ proc str*(x: Exp): string =
         if x.tag == aCnt: return "$CNT"
         if x.tag == aWs: return "$WS"
         if x.tag == aNl: return "$NL"
-        if ' ' in x.value or x.value == "{" or x.value == "}":
+        if x.tag == aStr: return "\"" & x.value & "\""
+        if ' ' in x.value or '{' in x.value or '}' in x.value:
             return "`" & x.value & "`"
         else:
             return x.value
     of expTerm:
-        #if x.exprs.len >= 2 and x.exprs[0].is_token("apply"):
-        #    return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
-        #elif x.exprs.len >= 1 and x.exprs[0].is_token("()"):
-        #    return "(" & x.exprs[1 .. ^1].map(str).join(", ") & ")"
-        #else:
+        if x.exprs.len >= 2 and x.exprs[0].is_token("()"):
+            return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str_group1).join(", ") & ")"
+        elif x.exprs.len >= 1 and x.exprs[0].is_token("(_)"):
+            return "(" & x.exprs[1].str_group2 & ")"
+        else:
             return "{" & x.exprs.map(str).join(" ") & "}"
 
-proc str*(x: uint64): string =
+func str*(x: uint64): string =
     var res = x.to_hex
     if x < 0x100000000'u64:
         res = res[8 .. ^1]

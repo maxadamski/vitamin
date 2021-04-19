@@ -35,7 +35,7 @@ let exp_type* = Val(kind: ExpTypeVal)
 
 proc expand_lambda_params(exp: Exp): seq[FunParam] =
     var params: seq[FunParam]
-    if exp[0].is_token("( _ )"):
+    if exp[0].is_token("()"):
         for x in exp.exprs[1 .. ^1]:
             var param = FunParam()
             var name_type = x
@@ -137,6 +137,9 @@ proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val =
         res.get.typ
     else:
         raise error("`type-of` not implemented for argument {val.str}.".fmt)
+
+proc infer*(env: Env, exp: Exp): Val =
+    unit
 
 proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val
 
@@ -304,7 +307,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     slots.add(slot)
                 return v_record_type(slots)
 
-            of "( _ )":
+            of "()":
                 if exp.len == 1:
                     return unit
                 if exp.len == 2 and not (exp[1].kind == expTerm and exp[1].len == 3 and exp[1][0].is_token("=")):
@@ -327,6 +330,14 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     val.fun.typ.is_macro = true
                 return val
 
+            of "pure":
+                var val = eval(env, exp[1])
+                if val.kind == FunTypeVal:
+                    val.fun_typ.is_pure = true
+                if val.kind == FunVal:
+                    val.fun.typ.is_pure = true
+                return val
+
             of "->":
                 return v_lambda_type(expand_lambda_type(exp))
 
@@ -337,7 +348,8 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 let local = if is_closure: env else: nil
                 if head[0].is_token("( _ )"):
                     let params = expand_lambda_params(head)
-                    # TODO: infer ret
+                    # TODO: assume parameters
+                    # TODO: infer type of body
                     let ret = term()
                     let typ = lambda_type(params, ret)
                     return v_lambda(typ, body, local)

@@ -26,6 +26,8 @@ p or q and u or v
 
 2 + 3 * 4
 
+(2 + 3) * 4
+
 2 * 3 + 4
 
 2 * 3 ^ 4
@@ -41,6 +43,18 @@ x ^ -y + z
 x := y := z
 
 x.y := z
+
+x
+
+x, y
+
+x, y, z
+
+x, y, z := a, b, c
+
+p, q = u, v
+
+(y)
 
 f()
 
@@ -67,18 +81,6 @@ f(x=a, y=b,)
 f(x=a, y=b, z=c)
 
 f(x=a, y=b, z=c,)
-
-while x:
-    y
-
-while x:
-    y
-    z
-
-while x:
-    y
-    z
-
 
 ()
 
@@ -268,10 +270,10 @@ x =>
 
 x = (x: A, y: B) -> R => f
 
-#(a,
-#
-#    b,
-#    c,)
+(a,
+
+    b,
+    c,)
 
 hello = (x: String) =>
     print(x)
@@ -288,6 +290,16 @@ use (x=2, y=3)
 #use if x y else z
 
 if x:
+	case q
+	of x:
+		a
+	of y:
+		b
+		c
+
+return x
+
+if x:
     use z
     y
 else:
@@ -301,11 +313,26 @@ else:
 )
 
 f(
-    a,
-    b,
-    c1,
+    p,
+    q,
+    u,
+    v,
 )
 
 x -> y -> z
 
 x => y => z
+
+if x y else z
+
+x, y, z = y, z, x
+
+x, y, z, = a, b, c
+
+x, y, z, = a, b, c
+
+x, = a, b, c
+
+x, y, z = f(a, b, c)
+
+s = xs.map(to-string).filter(it != "").reduce(`+`)

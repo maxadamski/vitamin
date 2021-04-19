@@ -71,7 +71,7 @@ x = (a, b, c; d, e; f)
 
 return (8 + 16)
 
-print(hello, world, end='\n\n', hello='heoi', world='otin')
+print("hello, world", end='\n\n', hello='heoi', world='otin')
 
 case a
 of b:
@@ -84,8 +84,9 @@ of _:
 	d
 
 case
-of i mod 2 == 0: print('even')
-of _: print('odd')
+of i mod 3 == 0: print('fizz')
+of i mod 5 == 0: print('buzz')
+of i mod 15 == 0: print('fizzbuzz')
 
 if a: (if b: c else: d) else: e
 
@@ -96,7 +97,11 @@ if true:
 	of y:
 		b
 		c
-	return x
+
+	if x:
+		y
+
+	return z
 
 return x
 
@@ -134,11 +139,11 @@ f(x,y,z,)
 
 f = (x, y : T) -> T
 
-f = (u: U, v: V, x, y: T, z: T = a) -> T
+f = (u: U, v: V, x y: T, z: T = a) -> T
 
 f = T -> Int
 
-#t = {x: Int = 42, y z: Int, p = q}
+t = Record(x: Int = 42, y z: Int, p = q)
 t = Record(A, B, C)
 
 (a, b, c)
@@ -147,13 +152,13 @@ t = Record(A, B, C)
 
 (x, y) => x
 
-#[1 2 3 4 5, 6 7 8 9; 10 11 12 13, 14 15 16 17]
-#[1;2;3]
+[1 2 3 4 5, 6 7 8 9; 10 11 12 13, 14 15 16 17]
+[1;2;3]
 
 #a[,,,]
 #a[,2,]
 #a[1,,3,]
-a[1,2,3,]
+[1,2,3,]
 #a[,2,3]
 
 p()
@@ -164,10 +169,13 @@ p(1,2,)
 #(,)
 (x=2, y=2)
 
-#[1, 2, 3, 4]
+[1, 2, 3, 4]
 
 foo : (x, y: A) -> B
 
 x =>
 	y
 	z
+
+
+f(x, A(y))

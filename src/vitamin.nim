@@ -9,8 +9,9 @@ const major_ver = 0
 const minor_ver = 1
 const patch_ver = 0
 const night_ver = CompileDate[2 .. 3] & CompileDate[5 .. 6] & CompileDate[8 .. 9]
+const ver_meta = if defined(release): "" else: fmt"+dev.{night_ver}"
 
-const version = "Vitamin₀ v{major_ver}.{minor_ver}.{patch_ver}+dev.{night_ver}".fmt
+const version = "Vitamin₀ v{major_ver}.{minor_ver}.{patch_ver}{ver_meta}".fmt
 
 const repl_greeting = "{version} (Type :h ENTER for help)".fmt
 
