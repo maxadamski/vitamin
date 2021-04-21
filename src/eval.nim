@@ -88,7 +88,7 @@ proc expand_record(env: Env, exp: Exp): Val =
                 slots.add(slot)
     return v_record_type(slots)
 
-proc expand_lambda_params(exp: Exp): seq[FunParam] =
+proc expand_lambda_params(env: Env, exp: Exp): seq[FunParam] =
     var params: seq[FunParam]
     if exp[0].is_token("(_)"):
         for param_list in exp[1].exprs:
@@ -100,20 +100,24 @@ proc expand_lambda_params(exp: Exp): seq[FunParam] =
                     var name_type = param_expr
                     if param_expr.kind == expAtom:
                         param.name = param_expr.value
-                        if has_type: param.typ = group_typ
+                        if has_type: param.typ = some(group_typ)
                     else:
                         if param_expr[0].is_token("="):
                             name_type = param_expr[1]
                             param.default = some(param_expr[2])
-                        param.name = name_type[1].value
-                        param.typ = name_type[2]
-                        group_typ = param.typ
-                        has_type = true
+                        if name_type.kind == expAtom:
+                            param.name = name_type.value
+                        else:
+                            assert name_type[0].is_token(":")
+                            param.name = name_type[1].value
+                            param.typ = some(name_type[2])
+                            group_typ = param.typ.get
+                            has_type = true
                     params.add(param)
     return params
 
-proc expand_lambda_type(exp: Exp): FunTyp =
-    let params = expand_lambda_params(exp[1])
+proc expand_lambda_type(env: Env, exp: Exp): FunTyp =
+    let params = expand_lambda_params(env, exp[1])
     let ret_type = exp[2]
     lambda_type(params, ret_type)
 
@@ -368,11 +372,12 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
             of "compare":
                 raise error(exp, "`compare` macro not implemented")
 
+            of "Record":
+                return expand_record(env, exp)
+
             of "()":
                 # function call macro 
-                if exp[1].is_token("Record"):
-                    return expand_record(env, term(exp[1], exp[2]))
-                return eval(env, append(exp[1], exp[2].flatten_group))
+                return eval(env, term(exp.tail))
 
             of "(_)":
                 # group macro 
@@ -420,7 +425,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 return val
 
             of "->":
-                return v_lambda_type(expand_lambda_type(exp))
+                return v_lambda_type(expand_lambda_type(env, exp))
 
             of "=>":
                 # `=>` : macro (params: [Expr], body: Exp) -> Fun-Type(params)
@@ -428,7 +433,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 let is_closure = false
                 let local = if is_closure: env else: nil
                 if head[0].is_token("(_)"):
-                    let params = expand_lambda_params(head)
+                    let params = expand_lambda_params(env, head)
                     # TODO: assume parameters
                     # TODO: infer type of body
                     let ret = term()
@@ -436,7 +441,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     return v_lambda(typ, body, local)
 
                 elif head[0].is_token("->"):
-                    let typ = expand_lambda_type(head)
+                    let typ = expand_lambda_type(env, head)
                     return v_lambda(typ, body, local)
 
                 else:
@@ -456,7 +461,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 for i in 0..<fun_typ.params.len:
                     let par = fun_typ.params[i]
                     let arg = args[i]
-                    let typ = eval(local, par.typ)
+                    let typ = eval(local, par.typ.get)
                     let val = eval(local, arg, as_type=typ)
                     local.vars[par.name] = Var(val: val, typ: typ, is_defined: true)
                     bindings.add((par.name, val))

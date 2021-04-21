@@ -3,7 +3,7 @@ import options, tables, strutils, sequtils, sets
 type
     FunParam* = object
         name*: string
-        typ*: Exp
+        typ*: Option[Exp]
         default*: Option[Exp]
         autopass*: bool
         autoquote*: bool
@@ -234,10 +234,16 @@ func str*(x: Exp): string =
         else:
             return x.value
     of expTerm:
-        if x.exprs.len >= 2 and x.exprs[0].is_token("()"):
-            return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
+        if x.exprs.len >= 3 and x.exprs[0].is_token("()"):
+            return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
+        elif x.exprs.len >= 2 and x.exprs[0].is_token("[]"):
+            return x.exprs[1].str & "[" & x.exprs[2 .. ^1].map(str).join(", ") & "]"
+        elif x.exprs.len >= 2 and x.exprs[0].is_token("Record"):
+            return x.exprs[0].str & "(" & x.exprs[1].str_group2 & ")"
         elif x.exprs.len >= 1 and x.exprs[0].is_token("(_)"):
             return "(" & x.exprs[1].str_group2 & ")"
+        elif x.exprs.len >= 1 and x.exprs[0].is_token("[_]"):
+            return "[" & x.exprs[1].str_group2 & "]"
         else:
             return "{" & x.exprs.map(str).join(" ") & "}"
 
@@ -283,7 +289,8 @@ proc str*(v: Val): string =
         #if v.fun_typ.is_macro: prefix &= "macro "
         var params: seq[string]
         for param in v.fun_typ.params:
-            var s = param.name & ": " & param.typ.str
+            var s = param.name
+            if param.typ.is_some: s &= ": " & param.typ.get.str
             if param.default.is_some: s &= " = " & param.default.get.str
             params.add(s)
         prefix & "(" & params.join(", ") & ") -> " & v.fun_typ.result.str

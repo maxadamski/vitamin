@@ -50,12 +50,12 @@ proc raise_parse_error(error: ParseError, token: Option[Exp]) =
     var follow: HashSet[string]
     while trace != nil:
         follow = trace.rule.follow
-        text &= "while parsing " & $trace.rule
+        text &= "while parsing " & trace.rule.str
         if trace.partial.is_some:
-            text &= "\n  found: " & $trace.partial.get
+            text &= "\n  found: " & trace.partial.get.str_ugly
             node = concat(node, trace.partial.get)
         if trace.reason != "":
-            text &= "\n  error: " & $trace.reason
+            text &= "\n  error: " & trace.reason
         trace = trace.parent
         if trace != nil:
             text &= "\n"

@@ -83,27 +83,27 @@ var parser* = Parser()
 
 # operator group definitions
 parser.add_groups "Comma Semicolon Statement Group Lambda-Type Apply Pow Pow-Base Mul Add Inverse"
-parser.add_groups "Use As Qualifier Member Not And Or Xor Cmp Lambda Definition Assignment Typing Set-Type"
+parser.add_groups "Use As Qualifier Member Not And Or Xor Cmp Lambda Definition Assignment Typing Set-Type Prefix-Type"
 
 # oprerator group order definitions
 parser.add_order "Apply > Group > Pow-Base > Inverse > Pow > Mul > Add > As > Assignment Definition"
 parser.add_order "Apply > Group > Cmp > Not > And Or Xor > Statement > Lambda > Assignment Definition"
-parser.add_order "Add Mul Inverse > Cmp"
-parser.add_order "Set-Type > Lambda-Type > Typing > Assignment Definition"
+parser.add_order "Add Mul Inverse > Cmp > Lambda"
+parser.add_order "Group > Prefix-Type > Set-Type > Lambda-Type > Comma > Typing > Assignment Definition"
 parser.add_order "Apply > Typing"
-parser.add_order "Member Typing > Definition"
+parser.add_order "Member Typing > Statement Definition"
 parser.add_order "And > Or"
 parser.add_order "Apply Group Cmp And Or Not Mul > Statement"
-parser.add_order "Member > Apply Assignment"
+parser.add_order "Member > Not Add Mul And Or Xor Cmp Lambda Apply Assignment"
 parser.add_order "Qualifier > Group Typing Definition Lambda"
 parser.add_order "Mul > Lambda"
 parser.add_order "Group > Comma > Assignment Definition Typing > Semicolon"
 parser.add_order "Lambda Apply > Qualifier"
-parser.add_order "Group > Lambda-Type > Typing Qualifier Lambda Definition"
+parser.add_order "Group Apply > Lambda-Type > Typing Qualifier Lambda Definition"
 parser.add_order "Definition Typing Group Apply > Use"
 
 # non-assocative infix operators
-parser.add_infix_none "As", "as"
+parser.add_infix_none "As", "as", "??"
 
 # left-associative infix operators
 parser.add_infix_left "Member", "."
@@ -117,7 +117,7 @@ parser.add_infix_left "Xor", "xor"
 parser.add_infix_left "Set-Type", "|", "&"
 
 # right-associative infix operators
-parser.add_infix_right "Assignment", ":="
+parser.add_infix_right "Assignment", ":=", "+=", "-=", "*=", "/="
 parser.add_infix_right "Lambda-Type", "->"
 
 # non-associative prefix operators
@@ -128,14 +128,16 @@ parser.add_prefix_none "Use", "use"
 parser.add_prefix "Inverse", "-", fun="inv"
 
 # associative prefix operators
-parser.add_prefix_left "Qualifier", "opaque", "macro", "pure"
+parser.add_prefix_left "Qualifier", "opaque", "macro", "pure", "lazy"
+parser.add_prefix_left "Prefix-Type", "&", "?", "..", "mut", "imm"
+parser.add_prefix_left "Member", ".", "*"
 
 func loose_list(rule, sep: SyntaxRule): SyntaxRule =
     rule.list(sep & "$CNT".tr.star)
 
-let group = (("Any".E.plus.list(",".tr | "$CNT".tr) & ",".opt).loose_list(";".tr) & ";".opt).named("Group(';' | ',' | $WS)")
+let group = (("Any".E.plus.list((",".t | "$CNT".tr) & "$CNT".tr.star) & ",".opt).loose_list(";".t) & ";".opt).named("Group(';' | ',' | $WS)")
 
-#let statement* = ("$CNT".tr | ";".tr).star & "Any".E & ("$EOS".tr | ("$CNT".tr | ";".tr).plus)
+let slice = (("Any".e.opt & ":".ts & "Any".e.opt) | "Any".e).named("slice")
 
 parser.add_infix_mix "Comma", ",", ((",".t & "Comma".E).splice.star.splice & ",".opt).splice
 
@@ -143,9 +145,11 @@ parser.add_prefix_mix "Group", "(", "(_)", "(".t & group.deepCopy.opt & ")".t
 
 parser.add_prefix_mix "Group", "[", "[_]", "[".t & group.deepCopy.opt & "]".t
 
-parser.add_infix_mix "Apply", "[", "[]", "[".t & group.deepCopy.opt & "]".t
+parser.add_infix_mix "Apply", "[", "[]", ("[".t & slice.list(",") & ",".opt & "]".t).splice
 
-parser.add_infix_mix "Apply", "(", "()", "(".t & group.deepCopy.opt & ")".t
+parser.add_infix_mix "Apply", "(", "()", ("(".t & "Any".E.list(",".t & "$CNT".tr.star).opt & ",".opt & ")".t).splice
+
+parser.add_prefix_mix "Apply", "Variant", "Variant".t & "(".t & group.deepCopy.opt  & ")".t
 
 parser.add_infix_mix "Pow-Base", "^", "^".t & "Pow".e
 
@@ -169,6 +173,9 @@ parser.add_prefix_mix "Statement", "if", splice(
     ("$CNT".tr.opt & "elif".tr & "Statement".E & ":".opt & "Any".b).star &
     ("$CNT".tr.opt & "else".tr & ":".opt & "Any".b).opt
 )
+
+for token in ["Record", "Variant"]:
+    parser.add_prefix_mix "Apply", token, token.t & "(".t & group.deepCopy.opt  & ")".t
 
 let cmp_operator = "==".ts | "!=".ts | "<".ts | "<=".ts | ">".ts | ">=".ts
 for token in ["==", "!=", ">", ">=", "<", "<="]:
