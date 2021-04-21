@@ -110,10 +110,18 @@ case of a: b of c: d
 if a: (if b: c else: d)
 if a: (if b: c) else: d
 
-x[]
+#x[]
 x[1]
 x[1,2,3]
 x[1,2,3,]
+x[:]
+x[:2]
+x[1:]
+x[1:2]
+x[:,:]
+x[:2,:2]
+x[1:,1:]
+x[1:2,1:2]
 
 f()
 f(x)
