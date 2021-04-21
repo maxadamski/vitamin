@@ -1,7 +1,27 @@
-import types, error
+import types, error, utils
 import tables, options, sequtils, strutils, strformat, algorithm
 
 var global_fun_id: uint32 = 1000
+
+proc src(exp: Exp): string =
+    let source = exp.in_source
+    if source == "<not found>": "" else: "\n\n" & source
+
+proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val
+
+proc eval*(env: Env, exp: Exp, as_type: Val, unwrap = false): Val =
+    eval(env, exp, some(as_type), unwrap)
+
+proc eval*(env: Env, exp: Exp, unwrap = false): Val =
+    eval(env, exp, none(Val), unwrap)
+
+proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val
+
+proc v_type*(env: Env, val: Val, as_type: Val): Val =
+    v_type(env, val, some(as_type))
+
+proc v_type*(env: Env, val: Val): Val =
+    v_type(env, val, none(Val))
 
 func v_num(num: int): Val = Val(kind: NumVal, num: num)
 func v_hold(name: string): Val = Val(kind: HoldVal, name: name)
@@ -12,7 +32,7 @@ func v_inter_type(types: varargs[Val]): Val = Val(kind: InterTypeVal, types: @ty
 func v_record(fields: varargs[RecField]): Val = Val(kind: RecVal, fields: @fields)
 func v_record_type(slots: varargs[RecSlot]): Val = Val(kind: RecTypeVal, slots: @slots)
 
-func lambda_type(params: varargs[FunParam], ret: Exp): FunTyp = FunTyp(params: @params, ret_typ: ret)
+func lambda_type(params: varargs[FunParam], ret: Exp): FunTyp = FunTyp(params: @params, result: ret)
 
 func v_lambda_type(typ: FunTyp): Val = Val(kind: FunTypeVal, fun_typ: typ)
 
@@ -38,19 +58,57 @@ proc flatten_group(exp: Exp): seq[Exp] =
     if exp.exprs.len == 0: return @[]
     exp.exprs.map_it(it.exprs).foldl(a & b).map_it(it.exprs).foldl(a & b)
 
+proc expand_record(env: Env, exp: Exp): Val =
+    var slots: seq[RecSlot]
+    if exp[1].len == 0:
+        return v_record_type()
+    for group in exp[1].exprs:
+        for list in group.exprs: 
+            var list_type: Val
+            var has_type = false
+            for x in list.exprs.reverse_iter:
+                var slot: RecSlot
+                var name_typ = x
+                case x.kind
+                of expAtom:
+                    slot.name = x.value
+                    if has_type: slot.typ = list_type
+                of expTerm:
+                    if x[0].is_token("="):
+                        name_typ = x[1]
+                        slot.default = some(x[2])
+                    if not name_typ[0].is_token(":"):
+                        raise error(exp, "Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
+                    if name_typ[1].kind != expAtom:
+                        raise error(exp, "Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
+                    slot.name = name_typ[1].value
+                    slot.typ = eval(env, name_typ[2])
+                    list_type = slot.typ
+                    has_type = true
+                slots.add(slot)
+    return v_record_type(slots)
+
 proc expand_lambda_params(exp: Exp): seq[FunParam] =
     var params: seq[FunParam]
     if exp[0].is_token("(_)"):
         for param_list in exp[1].exprs:
             for param_group in param_list.exprs:
-                for param_expr in param_group.exprs:
+                var group_typ: Exp
+                var has_type = false
+                for param_expr in param_group.exprs.reverse_iter:
                     var param = FunParam()
                     var name_type = param_expr
-                    if param_expr[0].is_token("="):
-                        name_type = param_expr[1]
-                        param.default = some(param_expr[2])
-                    param.name = name_type[1].value
-                    param.typ = name_type[2]
+                    if param_expr.kind == expAtom:
+                        param.name = param_expr.value
+                        if has_type: param.typ = group_typ
+                    else:
+                        if param_expr[0].is_token("="):
+                            name_type = param_expr[1]
+                            param.default = some(param_expr[2])
+                        param.name = name_type[1].value
+                        param.typ = name_type[2]
+                        group_typ = param.typ
+                        has_type = true
                     params.add(param)
     return params
 
@@ -58,10 +116,6 @@ proc expand_lambda_type(exp: Exp): FunTyp =
     let params = expand_lambda_params(exp[1])
     let ret_type = exp[2]
     lambda_type(params, ret_type)
-
-proc src(exp: Exp): string =
-    let source = exp.in_source
-    if source == "<not found>": "" else: "\n\n" & source
 
 proc get_opt*(env: Env, name: string): Option[Var] =
     if name in env.vars:
@@ -104,14 +158,6 @@ proc v_compare(args: seq[Exp]): Exp =
     if args.len != 3: raise error(term(args), "only two-argument comparisons are supported right now")
     term(args[1], args[0], args[2])
 
-proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val
-
-proc v_type*(env: Env, val: Val, as_type: Val): Val =
-    `v_type`(env, val, some(as_type))
-
-proc v_type*(env: Env, val: Val): Val =
-    `v_type`(env, val, none(Val))
-
 proc universe*(env: Env, val: Val): int =
     case val.kind
     of TypeVal: val.level + 1
@@ -153,13 +199,7 @@ proc v_type*(env: Env, val: Val, as_type: Option[Val]): Val =
 proc infer*(env: Env, exp: Exp): Val =
     unit
 
-proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val
-
-proc eval*(env: Env, exp: Exp, as_type: Val, unwrap = false): Val =
-    eval(env, exp, some(as_type), unwrap)
-
-proc eval*(env: Env, exp: Exp, unwrap = false): Val =
-    eval(env, exp, none(Val), unwrap)
+proc v_quasiquote*(env: Env, x: Exp): Val
 
 proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val =
     case exp.kind
@@ -192,11 +232,24 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
             case exp[0].value
             of ":":
                 assert exp.len == 3
-                assert exp[1].kind == expAtom
-                let name = exp[1].value
-                let val = v_hold(name)
-                let typ = eval(env, exp[2], as_type=type0)
-                env.vars[name] = Var(val: val, typ: typ, is_defined: true)
+                let lhs = exp[1]
+
+                var names: seq[string]
+                if lhs.kind == expAtom:
+                    names.add(lhs.value)
+                elif lhs.is_term_prefix(1) and lhs[0].is_token(","):
+                    for arg in lhs.tail:
+                        if arg.kind != expAtom:
+                            raise error(arg, fmt"The left side of assumption must be a list of names. {arg.src}")
+                        names.add(arg.value)
+                else:
+                    raise error(lhs, fmt"The left side of assumption must be a name or a list of names. {lhs.src}")
+
+                for name in names:
+                    let val = v_hold(name)
+                    let typ = eval(env, exp[2], as_type=type0)
+                    env.vars[name] = Var(val: val, typ: typ, is_defined: true)
+
                 return unit
             
             of "=":
@@ -212,28 +265,31 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                 env.vars[name] = Var(val: val, typ: typ, is_defined: true)
                 return unit
             
-            of "apply":
-                return eval(env, term(exp.exprs[1 .. ^1]), as_type)
+            of "Union":
+                return v_union_type(exp.tail.map_it(eval(env, it)))
 
-            of "Union", "Inter":
-                let args = exp.exprs[1 .. ^1].map_it(eval(env, it))
-                if exp[0].value == "Union":
-                    return v_union_type(args)
-                if exp[0].value == "Inter":
-                    return v_inter_type(args)
+            of "Inter":
+                return v_inter_type(exp.tail.map_it(eval(env, it)))
+
+            of "|":
+                return v_union_type(exp.tail.map_it(eval(env, it)))
+
+            of "&":
+                return v_inter_type(exp.tail.map_it(eval(env, it)))
 
             of "type-of":
-                assert exp.len == 2
-                if exp[1].kind == expAtom and exp[1].tag in {aSym, aLit}:
-                    let name = exp[1].value
+                let args = exp.tail
+                assert args.len == 1
+                if args[0].kind == expAtom and args[0].tag in {aSym, aLit}:
+                    let name = args[0].value
                     let res = env.get_opt(name)
                     if res.is_none:
                         raise error(exp, "I don't know the type of `{name}` since it isn't defined or assumed. {exp.src}".fmt)
                     return res.get.typ
-                return v_type(env, eval(env, exp[1]))
+                return v_type(env, eval(env, args[0]))
 
             of "print":
-                echo exp.exprs[1 .. ^1].map_it(eval(env, it)).join(" ")
+                echo exp.tail.map_it(eval(env, it)).join(" ")
                 return unit
 
             of "assert":
@@ -259,21 +315,26 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
 
                 return unit
 
+            of "quote":
+                assert exp.len == 2
+                return v_quasiquote(env, exp[1])
+
             of "opaque":
                 assert exp.len == 2
                 let val = eval(env, exp[1])
                 if val.kind == FunTypeVal:
-                    val.fun_typ.is_opaque = true
+                    val.fun_typ.opaque = true
                     return val
                 elif val.kind == FunVal:
-                    val.fun.typ.is_opaque = true
+                    val.fun.typ.opaque = true
                     return val
                 else:
                     return v_opaque(val)
 
             of "unwrap":
-                assert exp.len == 2
-                var val = eval(env, exp[1])
+                let args = exp.tail
+                assert args.len == 1
+                var val = eval(env, args[0])
                 if val.kind == HoldVal:
                     val = env.get_opt(val.name).get.val
                 case val.kind:
@@ -304,31 +365,14 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
 
                 raise error(exp, "You can't cast `{val.str}` of `{src_typ.str}` to type `{dst_typ.str}`.\n\nCan't downcast, because type `{src_typ.str}` is not a subtype of `{dst_typ.str}`.\n\nCan't upcast, because there is no evidence, that `{val.str}` was downcast from type `{dst_typ.str}`. {exp.src}".fmt)
 
-            of "Record":
-                # Record : (fields: [Expr]) -> Record-Universe(fields)
-                var slots: seq[RecSlot]
-                for x in exp.exprs[1 .. ^1]:
-                    var slot: RecSlot
-                    var name_typ = x
-                    if x[0].is_token("="):
-                        name_typ = x[1]
-                        slot.default = some(x[2])
-                    if not name_typ[0].is_token(":"):
-                        raise error(exp, "Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
-                    if name_typ[1].kind != expAtom:
-                        raise error(exp, "Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
-                    slot.name = name_typ[1].value
-                    slot.typ = eval(env, name_typ[2])
-                    slots.add(slot)
-                return v_record_type(slots)
-
             of "compare":
                 raise error(exp, "`compare` macro not implemented")
 
             of "()":
                 # function call macro 
-                let res = append(exp[1], flatten_group(exp[2]))
-                return eval(env, res)
+                if exp[1].is_token("Record"):
+                    return expand_record(env, term(exp[1], exp[2]))
+                return eval(env, append(exp[1], exp[2].flatten_group))
 
             of "(_)":
                 # group macro 
@@ -359,20 +403,20 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
 
                 return v_record(fields)
 
+            of "pure":
+                var val = eval(env, exp[1])
+                if val.kind == FunTypeVal:
+                    val.fun_typ.pure = true
+                if val.kind == FunVal:
+                    val.fun.typ.pure = true
+                return val
+
             of "macro":
                 var val = eval(env, exp[1])
                 if val.kind == FunTypeVal:
                     val.fun_typ.is_macro = true
                 if val.kind == FunVal:
                     val.fun.typ.is_macro = true
-                return val
-
-            of "pure":
-                var val = eval(env, exp[1])
-                if val.kind == FunTypeVal:
-                    val.fun_typ.is_pure = true
-                if val.kind == FunVal:
-                    val.fun.typ.is_pure = true
                 return val
 
             of "->":
@@ -402,12 +446,12 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
             let callee = eval(env, exp[0])
             case callee.kind
             of BuiltinFunVal:
-                let args = exp.exprs[1 .. ^1].map_it(eval(env, it))
+                let args = exp.tail.map_it(eval(env, it))
                 return callee.builtin_fun(args)
             of FunVal:
                 let fun_typ = callee.fun.typ
                 var local = env.extend()
-                let args = exp.exprs[1 .. ^1]
+                let args = exp.tail
                 var bindings: seq[(string, Val)]
                 for i in 0..<fun_typ.params.len:
                     let par = fun_typ.params[i]
@@ -416,9 +460,9 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
                     let val = eval(local, arg, as_type=typ)
                     local.vars[par.name] = Var(val: val, typ: typ, is_defined: true)
                     bindings.add((par.name, val))
-                let ret_typ = eval(local, fun_typ.ret_typ)
+                let ret_typ = eval(local, fun_typ.result)
                 var res = eval(local, callee.fun.body, as_type=ret_typ)
-                if fun_typ.is_opaque:
+                if fun_typ.opaque:
                     var name = ""
                     if exp[0].kind == expAtom:
                         name = exp[0].value
@@ -427,7 +471,45 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap: bool = false): Val 
             else:
                 raise error(exp, "{callee.str} is not callable. {exp.src}".fmt)
         
+        if exp.len == 0:
+            return v_record()
+
     raise error(exp, "I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
+
+proc v_quasiquote_rec(env: Env, x: Exp): Exp
+
+proc v_unquote(env: Env, x: Exp): Exp =
+    let res = eval(env, x[1])
+    if res.kind != ExpVal:
+        raise error(x, fmt"You can only unquote expressions, but you tried to unquote a value of type {v_type(env, res)}. {x.src}")
+    res.exp
+
+proc v_splice(env: Env, x: Exp): seq[Exp] =
+    let res = eval(env, x[1])
+    if res.kind != ExpVal:
+        raise error(x, fmt"You can only splice terms, but you tried to splice a value of type {v_type(env, res)}. {x.src}")
+    let exp = res.exp
+    if exp.kind != expTerm:
+        raise error(x, fmt"You can only splice terms, but you tried to splice an atom `{exp.value}`. {x.src}")
+    exp.exprs
+
+proc v_quasiquote_rec(env: Env, x: Exp): Exp =
+    if x.kind == expAtom: return x
+
+    if x.is_term_prefix(1) and x[0].is_token("$"):
+        return v_unquote(env, x)
+
+    var exprs: seq[Exp]
+    for sub in x.exprs:
+        if sub.is_term_prefix(1) and sub[0].is_token("$$"):
+            exprs &= v_splice(env, sub)
+        else:
+            exprs.add(v_quasiquote_rec(env, sub))
+    term(exprs)
+
+proc v_quasiquote*(env: Env, x: Exp): Val =
+    return Val(kind: ExpVal, exp: v_quasiquote_rec(env, x))
+
 
 var global_env* = Env(parent: nil)
 global_env.vars["Type"] = Var(val: type0, typ: type1, is_defined: true)

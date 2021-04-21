@@ -83,12 +83,13 @@ var parser* = Parser()
 
 # operator group definitions
 parser.add_groups "Comma Semicolon Statement Group Lambda-Type Apply Pow Pow-Base Mul Add Inverse"
-parser.add_groups "As Qualifier Member Not And Or Xor Cmp Lambda Definition Assignment Typing"
+parser.add_groups "Use As Qualifier Member Not And Or Xor Cmp Lambda Definition Assignment Typing Set-Type"
 
 # oprerator group order definitions
 parser.add_order "Apply > Group > Pow-Base > Inverse > Pow > Mul > Add > As > Assignment Definition"
-parser.add_order "Apply > Group > Not > Cmp > And Or Xor > Statement > Lambda > Assignment Definition"
+parser.add_order "Apply > Group > Cmp > Not > And Or Xor > Statement > Lambda > Assignment Definition"
 parser.add_order "Add Mul Inverse > Cmp"
+parser.add_order "Set-Type > Lambda-Type > Typing > Assignment Definition"
 parser.add_order "Apply > Typing"
 parser.add_order "Member Typing > Definition"
 parser.add_order "And > Or"
@@ -97,8 +98,9 @@ parser.add_order "Member > Apply Assignment"
 parser.add_order "Qualifier > Group Typing Definition Lambda"
 parser.add_order "Mul > Lambda"
 parser.add_order "Group > Comma > Assignment Definition Typing > Semicolon"
-parser.add_order "Lambda > Qualifier"
+parser.add_order "Lambda Apply > Qualifier"
 parser.add_order "Group > Lambda-Type > Typing Qualifier Lambda Definition"
+parser.add_order "Definition Typing Group Apply > Use"
 
 # non-assocative infix operators
 parser.add_infix_none "As", "as"
@@ -112,40 +114,44 @@ parser.add_infix_left "Mul", "*", "/", "mod", "div"
 parser.add_infix_left "And", "and"
 parser.add_infix_left "Or", "or"
 parser.add_infix_left "Xor", "xor"
+parser.add_infix_left "Set-Type", "|", "&"
 
 # right-associative infix operators
 parser.add_infix_right "Assignment", ":="
 parser.add_infix_right "Lambda-Type", "->"
 
 # non-associative prefix operators
+parser.add_prefix_none "Apply", "$", "$$"
 parser.add_prefix_none "Not", "not"
-parser.add_prefix_none "Inverse", "-", "-"
-parser.add_prefix_none "Statement", "use", "assert", "return"
+parser.add_prefix_none "Statement", "assert", "return"
+parser.add_prefix_none "Use", "use"
+parser.add_prefix "Inverse", "-", fun="inv"
 
 # associative prefix operators
 parser.add_prefix_left "Qualifier", "opaque", "macro", "pure"
 
-func loose_list(rule: SyntaxRule, sep: string): SyntaxRule =
-    rule.list(tok_rule(sep) & ("$CNT".tr | "$IND".tr | "$DED".tr).star)
+func loose_list(rule, sep: SyntaxRule): SyntaxRule =
+    rule.list(sep & "$CNT".tr.star)
 
-# group = ((Any+)^',' ','?)^';' ';'?
-let group0 = ((("Any".E & "$CNT".tr.star).plus.loose_list(",") & ",".opt).loose_list(";") & ";".opt).named("Group(';' | ',' | $WS)")
+let group = (("Any".E.plus.list(",".tr | "$CNT".tr) & ",".opt).loose_list(";".tr) & ";".opt).named("Group(';' | ',' | $WS)")
 
-let statement* = ("$CNT".tr | ";".tr).star & "Any".E & ("$EOS".tr | ("$CNT".tr | ";".tr).plus)
+#let statement* = ("$CNT".tr | ";".tr).star & "Any".E & ("$EOS".tr | ("$CNT".tr | ";".tr).plus)
 
 parser.add_infix_mix "Comma", ",", ((",".t & "Comma".E).splice.star.splice & ",".opt).splice
 
-parser.add_prefix_mix "Group", "(", "(_)", "(".t & group0.deepCopy.opt & ")".t
+parser.add_prefix_mix "Group", "(", "(_)", "(".t & group.deepCopy.opt & ")".t
 
-parser.add_prefix_mix "Group", "[", "[_]", "[".t & group0.deepCopy.opt & "]".t
+parser.add_prefix_mix "Group", "[", "[_]", "[".t & group.deepCopy.opt & "]".t
 
-parser.add_infix_mix "Apply", "[", "[]", "[".t & group0.deepCopy.opt & "]".t
+parser.add_infix_mix "Apply", "[", "[]", "[".t & group.deepCopy.opt & "]".t
 
-parser.add_infix_mix "Apply", "(", "()", "(".t & group0.deepCopy.opt & ")".t
+parser.add_infix_mix "Apply", "(", "()", "(".t & group.deepCopy.opt & ")".t
 
 parser.add_infix_mix "Pow-Base", "^", "^".t & "Pow".e
 
 parser.add_infix_mix "Lambda", "=>", "=>".t & "Lambda".b
+
+parser.add_prefix_mix "Statement", "quote", "quote".t & "Any".b
 
 parser.add_prefix_mix "Statement", "while",
     ("while".t & "Statement".E & ":".opt & "Any".b).splice

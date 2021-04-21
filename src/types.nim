@@ -5,26 +5,25 @@ type
         name*: string
         typ*: Exp
         default*: Option[Exp]
-        inferred*: bool
-        explicit*: bool
-        typ_inferred_from_default*: bool
-        typ_inferred_from_position*: bool
-        typ_inferred_from_usage*: bool
+        autopass*: bool
+        autoquote*: bool
+        keyword*: bool
+        variadic*: bool
+        lazy*: bool
+
+    FunTyp* = object
+        params*: seq[FunParam]
+        result*: Exp
+        autocurry*: bool
+        opaque*: bool
+        pure*: bool
+        is_macro*: bool
 
     Fun* = object
         id*: uint32
         typ*: FunTyp
         body*: Exp
         env*: Env
-
-    FunTyp* = object
-        params*: seq[FunParam]
-        ret_typ*: Exp
-        autocurry*: bool
-        is_macro*: bool
-        is_opaque*: bool
-        is_pure*: bool
-        ret_typ_inferred_from_usage*: bool
 
     RecSlot* = object
         name*: string
@@ -137,6 +136,8 @@ func is_whitespace*(x: Exp): bool = x.kind == expAtom and x.tag in {aWs, aNl, aI
 func is_token*(x: Exp, value: string): bool = x.kind == expAtom and x.value == value
 func is_term*(x: Exp): bool = x.kind == expTerm
 func is_term*(x: Exp, len: int): bool = x.kind == expTerm and x.exprs.len == len
+func is_term_prefix*(x: Exp, len: int): bool = x.kind == expTerm and x.exprs.len >= len
+func tail*(x: Exp): seq[Exp] = x.exprs[1 .. ^1]
 
 template mkval*(x: int): Val = Val(kind: vNum, num: x)
 template mkval*(x: Exp): Val = Val(kind: vExp, exp: x)
@@ -277,15 +278,15 @@ proc str*(v: Val): string =
         name & "(" & args.join(", ") & ")"
     of FunTypeVal:
         var prefix = ""
-        if v.fun_typ.is_pure: prefix &= "pure "
-        if v.fun_typ.is_opaque: prefix &= "opaque "
-        if v.fun_typ.is_macro: prefix &= "macro "
+        if v.fun_typ.pure: prefix &= "pure "
+        if v.fun_typ.opaque: prefix &= "opaque "
+        #if v.fun_typ.is_macro: prefix &= "macro "
         var params: seq[string]
         for param in v.fun_typ.params:
             var s = param.name & ": " & param.typ.str
             if param.default.is_some: s &= " = " & param.default.get.str
             params.add(s)
-        prefix & "(" & params.join(", ") & ") -> " & v.fun_typ.ret_typ.str
+        prefix & "(" & params.join(", ") & ") -> " & v.fun_typ.result.str
     of RecVal:
         var res: seq[string]
         for x in v.fields:
