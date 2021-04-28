@@ -1,5 +1,12 @@
 ## Tests of core functionality (run without prelude)
 
+Term : Type
+Atom : Type
+Expr = Term | Atom
+
+I64 : Type
+Str : Type
+
 ### `Type` built-in and definitions
 
 # identity
@@ -91,7 +98,18 @@ assert false != 0
 assert none != 0
 
 
-### Sets
+### Value Sets
+
+red = Symbol(red)
+grn = Symbol(grn)
+blu = Symbol(blu)
+
+assert type-of(red) == Set(red)
+assert type-of(red as Set(red, grn, blu)) == Set(red, grn, blu)
+assert type-of(red as Set(red, grn)) != Set(grn, blu)
+
+
+### Unions and Intersections
 
 Any = Union()
 Never = Inter()
@@ -99,6 +117,9 @@ Never = Inter()
 # type of set types
 assert type-of(Any) == Type
 assert type-of(Never) == Type
+
+#assert (Set(red, grn) | Set(red, blu)) == Set(red, grn, blu)
+#assert (Set(red, grn) & Set(red, blu)) == Set(red)
 
 
 ### Records
@@ -138,7 +159,7 @@ assert type-of((true as Any) as Bool) == Bool
 x : Type
 y : Type
 
-Pointer = opaque (a: Type) -> Type => Size
+Pointer = opaque (a: Type) => Size
 
 assert Pointer(x) != Size
 assert Pointer(x) != Pointer(y)
@@ -146,3 +167,15 @@ assert Pointer(x) == Pointer(x)
 assert unwrap(Pointer(x)) == Size
 assert unwrap(Pointer(y)) == Size
 assert unwrap(Pointer(x)) == unwrap(Pointer(y))
+
+
+### Strings
+
+Ptr = opaque (a: Type) => Size
+Mut = opaque (a: Type) => a
+Imm = opaque (a: Type) => a
+
+#s = "hello, world"
+#print(deref(s as Size, 0))
+#print(deref(s as Size, 1))
+#print(deref(s as Size, 2))

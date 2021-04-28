@@ -2,8 +2,9 @@ import os, strformat, strutils, sequtils
 import options, tables
 import noise
 
-import types, error, scan, parse, eval
-from base_parser import parser
+import scan, parse, eval
+import common/[vm, exp, error]
+from syntax import parser
 
 const (major_ver, minor_ver, patch_ver) = (0, 1, 0)
 const night_ver = CompileDate[2 .. 3] & CompileDate[5 .. 6] & CompileDate[8 .. 9]
@@ -87,7 +88,7 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string), sta
         for x in exprs:
             let val = eval(env, x)
             if print:
-                let typ = v_type(env, val)
+                let typ = v_typeof(env, val)
                 if val != unit:
                     echo val.str, " : ", typ.str
     except VitaminError:

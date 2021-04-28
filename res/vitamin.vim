@@ -34,8 +34,9 @@ syn match vNumber /\<[-]\?0[box][0-9A-Za-z_]\+\>/
 syn match vName /[a-z_][A-Za-z0-9_-]*/
 
 syn match vPragma /[@][A-Za-z0-9_-]*/
-syn keyword vPragma pure lazy import extern unique opaque
+syn keyword vPragma macro pure import extern unique opaque
 syn keyword vKeyword use use-syntax use-macro assert quote
+syn keyword vPragma Lazy Quoted Args undefined unreachable
 
 syn match vPolymorph /\<[A-Z]\>/
 "syn match vPolymorph /\<Type\(-[1-9][0-9]*\)\=\>/

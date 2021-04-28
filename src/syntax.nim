@@ -1,5 +1,5 @@
-import parse, syntax_rule
 import sets, tables, strutils, strformat
+import parse, common/syntaxrule
 
 #
 # Convenience parser functions
@@ -66,12 +66,12 @@ func E(x: string): SyntaxRule = exp_rule(x, StrongerThan)
 
 func I(): SyntaxRule =
     let stat_sep = (";".tr | "$CNT".tr).named("Stmt-Sep")
-    let rule = "$IND".tr & "Any".e.list(stat_sep.plus).splice.opt & stat_sep.star & "$DED".tr
+    let rule = "$IND".tr & "Any".e.list(stat_sep.plus).with_op("block").opt & stat_sep.star & "$DED".tr
     rule.named("Block")
 
 func b(group: string): SyntaxRule = (I() | group.e).named(fmt"Block({group})")
 
-func B(group: string): SyntaxRule = (I() | group.E).named(fmt"(Block({group}))")
+#func B(group: string): SyntaxRule = (I() | group.E).named(fmt"(Block({group}))")
 
 #
 # Parser definition
@@ -90,6 +90,7 @@ parser.add_order "Apply > Group > Pow-Base > Inverse > Pow > Mul > Add > As > As
 parser.add_order "Apply > Group > Cmp > Not > And Or Xor > Statement > Lambda > Assignment Definition"
 parser.add_order "Add Mul Inverse > Cmp > Lambda"
 parser.add_order "Group > Prefix-Type > Set-Type > Lambda-Type > Comma > Typing > Assignment Definition"
+parser.add_order "Lambda-Type Apply > Set-Type > Lambda"
 parser.add_order "Apply > Typing"
 parser.add_order "Member Typing > Statement Definition"
 parser.add_order "And > Or"
@@ -128,7 +129,7 @@ parser.add_prefix_none "Use", "use"
 parser.add_prefix "Inverse", "-", fun="inv"
 
 # associative prefix operators
-parser.add_prefix_left "Qualifier", "opaque", "macro", "pure", "lazy"
+parser.add_prefix_left "Qualifier", "opaque", "macro", "pure"
 parser.add_prefix_left "Prefix-Type", "&", "?", "..", "mut", "imm"
 parser.add_prefix_left "Member", ".", "*"
 
@@ -147,7 +148,7 @@ parser.add_prefix_mix "Group", "[", "[_]", "[".t & group.deepCopy.opt & "]".t
 
 parser.add_infix_mix "Apply", "[", "[]", ("[".t & slice.list(",") & ",".opt & "]".t).splice
 
-parser.add_infix_mix "Apply", "(", "()", ("(".t & "Any".E.list(",".t & "$CNT".tr.star).opt & ",".opt & ")".t).splice
+parser.add_infix_mix "Apply", "(", "()", "(".t & "Any".E.list(",".t & "$CNT".tr.star).opt & ",".opt & ")".t
 
 parser.add_prefix_mix "Apply", "Variant", "Variant".t & "(".t & group.deepCopy.opt  & ")".t
 

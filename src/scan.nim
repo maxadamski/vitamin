@@ -1,5 +1,5 @@
-import types, error
 import options, tables, strutils
+import common/[exp, error]
 
 const open_comp = {")": "(", "]": "[", "}": "{", "|)": "(|", "|]": "[|", "|}": "{|"}.to_table
 const name_head = {'a'..'z', 'A'..'Z', '_'}
@@ -130,7 +130,7 @@ proc scan*(text: string, file: Option[string] = none(string), start_line: int = 
             
             else:
                 # is single line comment
-                while s.top != '\n': buf.add(s.eat)
+                while not s.eof and s.top != '\n': buf.add(s.eat)
             # TODO: do not discard comments
             #atoms.add(atom(buf, aCom, s.get_range))
         of '|':

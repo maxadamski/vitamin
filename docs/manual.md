@@ -6,10 +6,11 @@ The Vitamin Programming Language Reference Manual
 Here is how a simple Vitamin program looks.
 
 	fizzbuzz = (x: Int) =>
-		if   i mod 15 == 0 'FizzBuzz'
-		elif i mod  3 == 0 'Fizz'
-		elif i mod  5 == 0 'Buzz'
-		else to-string(i)
+		case
+		of i mod 15 == 0 'FizzBuzz'
+		of i mod  3 == 0 'Fizz'
+		of i mod  5 == 0 'Buzz'
+		of _ to-string(i)
 
 	main = () =>
 		for i in 1..100
@@ -42,7 +43,7 @@ A symbol is an identifier composed of one or more non-alphanumeric characters.
 
 **Exception**
 
-If a dash `-` is preceded by symbol characters and is immediately followed by a digit, it is not added to the previous symbol, but created as a separate atom. As a consequence, you do not need to whitespace before dashes, which follow symbols, but precede number literals.
+If a dash `-` is preceded by symbol characters and is immediately followed by a digit, it is not added to the previous symbol, but created as a separate atom. As a consequence, you do not need to add whitespace before dashes which follow symbols, but precede number literals.
 
 	arr[5:-2]  # arr  [  5  :  -  2  ]
 
@@ -403,84 +404,83 @@ The structure type represents an unordered collection of *rows* - labels paired 
 
 The general form of the structure type, or rather an extensible dependent product type is:
 
-	{x1: A1, ..., xn: An, ..R}
+	Record(x1 : A1, ..., xn : An, ..R)
 
 Where $x_i$ is a row label and $A_i$ is the row type, which may be an expression using the value of any other row, provided the dependencies form a DAG. We say that a structure type is extensible if may contain other rows $..R$.
 
 The type of a structure type is:
 
-	Type(max(universe(A1), ..., universe(An), universe(R)))
+	Universe(max(level-of(A1), ..., level-of(An), level-of(R)))
 
 If a structure is extensible, but the extra rows are discarded, the extra rows don't need to be named.
 
-	discard-rows : {x y: F64, ..} -> {x y: F64}
+	discard-rows : Record(x y : F64, ..) -> record(x y : F64)
 
 Otherwise, extra rows may be used polymorphically.
 
-	preserve-rows : {x y: mut F64, ..R} -> {x y: F64, ..R}
+	preserve-rows : Record(x y : mut F64, ..R) -> Record(x y : F64, ..R)
 
 A default value may be provided for each field.
 
-	{x: A = a}
+	Record(x : A = a)
 
 In which case, the type may be inferred.
 
-	{x = a} == {x: type(a) = a}
+	assert Record(x = a) == Record(x : type-of(a) = a)
 
 If no default values are given, there is a shorthand for subsequent values of the same type.
 
-	{x: Float, y z: Int} == {x: Float, y: Int, z: Int}
+	assert Record(x : Float, y z : Int) == Record(x : Float, y : Int, z : Int)
 
 To construct a value of a structure type use round parentheses.
 
-	x = (name='John Smith', age=35)
-	x : {name: String, age: I64}
+	x = (name = 'John Smith', age = 35)
+	assert type-of(x) == Record(name : String, age : I64)
 
 To make use of default values, the structure must be constructed *as if* it was a function call (it's not!).
 
-	T = {length = 0, color = "blue"}
+	T = Record(length = 0, color = "blue")
 	x = T()
-	x == (length=0, color="blue")
+	assert x == (length = 0, color = "blue")
 
 ## Tuple Types
 
 The tuple type represents an ordered sequence of non-dependent types:
 
-	{A1, ..., An}
+	Record(A1, ..., An)
 
 The type of the tuple type is:
 
-	Type(max universe(A_i))
+	Universe(max(level-of(A1), ..., level-of(An)))
 
 **TODO** Should I make tuples extensible?
 
-## Enum Types
+## Variant Types
 
 The enum type represents a dependent generalized abstract data type (GADT). This is a type which allows you to specify all of its possible values.
 
 It's general form is:
 
-	[| x1 : A1, ..., xn: An |]
-
+	Variant(x1 : A1, ..., xn : An)
 
 Where $x_i$ is the constructor of the i-th alternative, and $A_i$ is the type of the value.
 
 The constructor may be a value or a function.
 
-	Bool = [| true: Bool, false: Bool }
+	Bool = Variant(true : Bool, false : Bool)
 
-	Maybe = (A: Type) => [|
-		some: (value: A) -> Maybe(A)
-		none: Maybe(A)
-	|] 
+	Maybe = (A : Type) => Variant(
+		some : (value: A) -> Maybe(A)
+		none : Maybe(A)
+	)
 
 If the type of the constructor is omitted, the type of it's value is the type itself.
 
-	Bool = [| true, false |]
-	type(Bool.true) == Bool
+	Bool = Variant(true, false)
+	assert type-of(Bool.true) == Bool
 
-	Maybe = (A: Type) => [| some : (value: A), none |]
-	type(Maybe.some(true)) == Maybe(Bool)
+	Maybe = (A : Type) => Variant(some : (value : A), none)
+	assert type-of(Maybe.some(true)) == Maybe(Bool)
 
 **TODO** should I make enums extensible?
 
@@ -492,7 +492,7 @@ The union represents a type whose values may be of any of the alternative non-de
 
 The type of the union type is:
 
-	Type(max universe(A_i))
+	Universe(max(level-of(A1), ..., level-of(An)))
 
 The intersection of no types is `&`, and is used to define `Any`. All types are subtypes of `Any`. Some languages call this a top type.
 
@@ -500,7 +500,7 @@ The union of no types is `|`, and is used to define `Never`, a type representing
 
 The following laws apply.
 
-	1. A|B     == A|B      # commutativity
+	1. A|B     == B|A      # commutativity
 	2. A|(B|C) == (A|B)|C  # associativity
 	3. A|B     == A        # simplification (if B is subtype of A)
 	4. A is subtype of A|B
@@ -512,13 +512,77 @@ The following reductions follow.
 	A|Never == A
 	A|A     == A
 
+
+# Set Types
+
+**TODO: document this** 
+
+
+# Symbols
+
+**TODO: document this** 
+
+
+# Functions
+
+	Function-Type = Record(
+		Paremeter = Record(
+			name : Str
+			type : Expr|Type|None
+			default : Expr|type|None
+			autopass = false
+			autoquote = false
+		)
+
+		params : List(Parameter)
+		result : Exp|Type|None
+		opaque : Bool
+	)
+
+	Baked-Function-Type = Record(
+		Parameter = Record(
+			name : Str
+			type : Type
+			value : type|None
+		)
+
+		context : Type
+		params : List(Parameter)
+		result : Type
+	)
+
+	Function = Record(
+		type : Function-Type
+		body : Expr
+	)
+
+	Baked-Function = Record(
+		type : Baked-Function-Type
+		address : Size
+	)
+
+
+# Overload Resolution
+
+
+# Implicit Conversions
+
+If an expression does not match the expected type at definition or function call,
+then *at most one* implicit conversion is applied.
+
+Implicit conversions are defined like this
+
+	@implicit I64-from-NumLiteral : NumLiteral -> I64 = ...
+
+
 # Expressions
 
-## Lambda
+
+## `=>`
 
 Same as function type.
 
-	(x1: X1, ..., xn: Xn; y1: Y1, ..., yn: Yn) -> Z => e
+	(x1 : X1, ..., xn : Xn; y1 : Y1, ..., yn : Yn) -> Z => e
 
 Result can always be inferred. Parameter types are not always inferred at the moment.
 
@@ -526,22 +590,8 @@ Result can always be inferred. Parameter types are not always inferred at the mo
 
 **TODO:** Infer parameter types from body, without context (hard).
 
-## If Expression
 
-`if` expressions branch to one of code blocks depending on a given condition, which evaluates to `Bool`.
-
-	# simple expression
-	if c1 e1 else e2
-
-	# multiple conditions
-	if c1 e1
-	elif c2 e2
-	...
-	else en
-
-The type of an `if` expression is `type(e1) | ... | type(en)`
-
-## When Expresion
+## `case`
 
 **TODO:** Document this
 
@@ -551,21 +601,34 @@ Syntax:
 
 Structural pattern matching:
 
-	when x
-	case p1 e1
-	case p2 e2
+	case <value>
+	of <pattern-1> <expression-1>
+	of <pattern-2> <expression-2>
 	...
-	case pn en 
+	of <pattern-n> <expression-n> 
 
 If-else alternative:
 
-	when
-	case c1 e1
-	case c2 e2
+	case
+	of <condition-1> <expression-1>
+	of <condition-2> <expression-2>
 	...
-	case cn en
+	of <condition-n> <expression-n>
 
-## While Loop
+
+## `if`
+
+`if` expressions branch to one of code blocks depending on a given condition, which evaluates to `Bool`.
+
+	if <condition-1> <expression-1>
+	elif <condition-2> <expression-2>
+	...
+	else <expression-n>
+
+The type of an `if` expression is `type(e1) | ... | type(en)`
+
+
+## `while`
 
 While loop opens a new scope and evaluates a block while a condition evaluates to `true`.
 
@@ -576,7 +639,8 @@ Type of a `while` expression is `Unit`. If the loop is infinite its type is `Nev
 		print(i)
 		i += 1
 
-## For Loop
+
+## `for`
 
 For loop iterates over a value of type `A` if there is evidence of `Iterable(A)`.
 
@@ -589,15 +653,13 @@ Type of the `for` expression is `Unit`.
 	
 	iter = iterate(range(0, 10))
 	while not empty(iter)
-		print(i)
 		i = next(iter)
+		print(i)
 
 **TODO:** Implement iterator protocol
 
 
-# Macros
-
-## Dot Macro `.`
+## `.` (member access)
 
 Vitamin features the familiar dot `.` operator known mostly from object-oriented languages.
 
@@ -630,40 +692,95 @@ Passing value as the first function argument (UFCS)
 	assert a.add(b) is-the-same-as add(a, b)
 
 
-## Macro Lambda
+## `macro`
 
-A macro is a lambda which does not evaluate a parameter if its type is `Syntax.Expr`, and instead passes the parsed abstract syntax tree to the function.
+Lambdas marked with the `macro` qualifier must return a value of type `Expr`. When calling a macro, the returned abstract syntax tree expression is evaluated.
 
-	`+` = @macro (x y: Expr) =>
-	    quote(add(unquote(x), unquote(y)))
+	`+` = macro (x y: Expr) =>
+		quote add($x, $y)
 	
-	`for-2` = @macro (name vals body: Expr) =>
+	`for-2` = macro (name vals body: Expr) =>
 	    var = gensym()
-	    quote(
-	        unquote(var) = iterate(unquote(vals))
-	        while not empty(unquote(var))
-		    unquote(body)
-		    unquote(var) = next(unquote(var)))
+		quote
+			$var = iterate($vals)
+			while not empty($var)
+				$body
+				$var = next($var)
 
-## Dollar Lambda
+
+## `$` (short lambda)
+
+**NOT IMPLEMENTED**
 
 If an expression uses variables starting with a dollar sign it's automatically wrapped in a lambda. This operation works top-down on the syntax tree and is not transitive.
 
 	foo($1 + $2) desugars to foo(($1, $2) => $1 + $2)
 
-**TODO:** implement this (low prio)
 
-## Guard Macro
+## `$` (function parameter)
 
-Guard allows you to evaluate an expression at the end of a scope.
+**NOT IMPLEMENTED**
 
-For example, let's ensure a file handle is closed when exiting scope:
+Add an entry to the function paramer list.
+
+Names prefixed with `$`, used in function parameter types will be added to the function parameter list as implicit parameters. Only the first occurence of a name *should* be prefixed wih `$`. The type of the dollar parameter will be inferred.
+
+	id : (x: $a) -> a
+
+Desugars to:
+
+	id : (a = _, x: a) -> a
+
+
+## `quote`
+
+Get the representation of the abstract syntax tree of a given expression.
+
+	x: Expr = quote 2 + 3 * 4
+
+
+## `$` (unquote)
+
+Insert the result of an expression into the syntax tree of the quoted expression.
+
+The argument of `$` must be of type `Expr` (either `Atom` or `Term`).
+
+*Example*
+
+	a = quote 2 + 2
+	b = quote assert $a == 4
+	eval(b)
+
+**Warning**
+
+Inside `quote`, other uses of the dollar `$` operator will be interpreted as unquote.
+
+
+## `$$` (unquote splicing)
+
+Insert *all subexpressions* of the result of an expression into the syntax tree of the quoted expression.
+
+The argument of `$$` must be a value of type `Term` .
+
+**Warning**
+
+Other uses of the double dollar `$$` operator will be interpreted as unquote splicing.
+
+
+## `defer`
+
+Defer postpones the evaluation of an expression to the end of a block.
+
+**Example**
+
+Ensure a file handle is closed when exiting scope.
 
 	file = open('foobar.txt')
-	guard close(file)
+	defer close(file)
 	# do other stuff
 
-## `use` macro
+
+## `use`
 
 Imports all names into current scope.
 
@@ -673,7 +790,7 @@ Imports all names into current scope.
 
 Useful in processing evidence and objects.
 
-	Point = {x y: F64}
+	Point = Record(x y: F64)
 	magnitude = (self: Point) => use self; sqrt(x*x + y*y)
 	# or shorter
 	magnitude = (use self: Point) => sqrt(x*x + y*y)
@@ -688,7 +805,10 @@ Import some names into current scope:
 	assert is-defined(y)
 	assert not is-defined(z)
 
-## `import` macro
+
+## `import`
+
+**NOT IMPLEMENTED**
 
 Import module and bring all members into scope:
 
@@ -713,8 +833,11 @@ Import module without changing scope:
 	tensor = Core.import('tensor')
 
 	
+## `with`
 
-## With Macro
+**NOT IMPLEMENTED**
+
+Alternative arguments passing style:
 
 	request('get', 'someurl') with
 	    on-success = res =>
@@ -725,32 +848,33 @@ Import module without changing scope:
 	        print("couldn't get someurl")
 	        exit(1)
 
-Desugars to
+Desugars to:
 
 	request('get', 'someurl',
 	    on-success = res => (2 + 2; print(res)),
 	    on-error = () => (print(...); exit(1)))
 
-## Custom Syntax
 
-	@syntax
+## `undefined`
 
-# Miscellaneous
+	undefined : Never
 
-## Modules
+Defining or assuming variable with the special value `undefined` will not actually define or assume that variable. For example, the following expressions will do absolutely nothing.
 
-Should structures act as modules?
+	x = undefined
+	y : undefined
 
-## Overload Resolution
+In conjunction with `if` and `case` expressions, `undefined` can be used for conditional definitions. For example, if you wanted to assume a 64-bit signed integer type, but only if the target architecture supports them, you could write the definition as follows.
 
-## Implicit Conversions
+	I64 : if (target-bit-width == 64) Type else undefined
 
-If an expression does not match the expected type at definition or function call,
-then *at most one* implicit conversion is applied.
 
-Implicit conversions are defined like this
+## `unreachable`
 
-	@implicit I64-from-NumLiteral : NumLiteral -> I64 = ...
+	unreachable : Never
+
+Evaluating the special value `unreachable` at compile-time will result in a compilation error. When `unreachable` is encountered at runtime the program will crash. 
+
 
 
 # Less is more
@@ -776,6 +900,7 @@ Helpful papers and websites:
 - post on intransitive operator precedence ([link][intransitive-precedence])
 - agda mixfix operator paper ([link][mixfix-operators])
 - row-polymorphic data types paper ([link][row-polymorphism])
+- post on implementing dependent type theory ([link][andrej-dependent])
 
 Major inspirations: 
 - C - speed and (relative) simplicity
@@ -783,9 +908,10 @@ Major inspirations:
 - Nim - incredible features, identifiers, lexer trick for indentation
 - D - UFCS, transitive mutability information
 - Elm - row-polymorphic records, helpful compiler
+- OCaml - polymorphic variants
 - Scala, Agda, Idris - type system, implicits
 - Ceylon - unions and intersections
-- Lisp - extensibility, kebab-case ;)
+- Lisp - macros, extensibility, kebab-case ;)
 - ATS, Rust - linear types
 
 Minor inspirations:
@@ -798,3 +924,4 @@ Minor inspirations:
 [intransitive-precedence]: https://blog.adamant-lang.org/2019/operator-precedence/
 [mixfix-operators]: http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.157.7899
 [row-polymorphism]: https://www.microsoft.com/en-us/research/publication/first-class-labels-for-extensible-rows
+[andrej-dependent]: http://math.andrej.com/2012/11/08/how-to-implement-dependent-type-theory-i/

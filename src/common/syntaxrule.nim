@@ -1,4 +1,4 @@
-import types
+import exp
 import options, sets, sequtils, strutils
 
 # TODO: add negative lookahead rule
@@ -16,6 +16,7 @@ type
         name*: string
         follow*: HashSet[string]
         first*: HashSet[string]
+        op*: string
         case kind*: SyntaxRuleKind
         of NilRule:
             discard
@@ -138,6 +139,10 @@ func splice*(x: SyntaxRule): SyntaxRule =
 
 func named*(x: SyntaxRule, name: string): SyntaxRule =
     x.name = name
+    x
+
+func with_op*(x: SyntaxRule, op: string): SyntaxRule =
+    x.op = op
     x
 
 # -- Convenience constructors

@@ -1,4 +1,4 @@
-import types
+import exp
 import options, sets, strutils
 
 type
@@ -9,7 +9,6 @@ type
 
 func checkpoint*(x: var ExpStream) =
     x.checkpoints.add(x.index)
-
 
 func backtrack*(x: var ExpStream) =
     x.index = x.checkpoints[^1]
@@ -45,11 +44,6 @@ proc peek*(self: ExpStream, ind: bool = false): Exp =
 proc next*(self: var ExpStream, ind: bool = false): Exp =
     self.next_opt(ind=ind).get
 
-#proc expect_raw*(self: ExpStream, token: string): bool =
-#    if self.index >= self.items.len: return false
-#    let e = self.items[self.index]
-#    return e.kind == expAtom and e.value == token
-
 proc expect*(self: ExpStream, token: string, raw: bool = false): bool =
     if self.index >= self.items.len: return token == "$EOS"
     let e = if raw:
@@ -65,11 +59,6 @@ proc expect_in*(self: ExpStream, tokens: HashSet[string], raw: bool = false): bo
         if self.expect(token, raw=raw):
             return true
     return false
-
-#proc expect_notin*(self: ExpStream, tokens: HashSet[string], ind: bool = false): bool =
-#    if self.eos: return false
-#    let e = self.peek(ind=ind or tokens.any_it(it.starts_with("$")))
-#    return e.kind == expAtom and e.value notin tokens
 
 proc eat_atom*(self: var ExpStream, token: string): Option[Exp] =
     let raw = token.starts_with("$")

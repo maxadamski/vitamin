@@ -1,24 +1,19 @@
-import types
+import exp
 import os, math, options, terminal, strutils, strformat
 
 type
     VitaminError* = object of CatchableError
-        code*: int
         node*: Exp
 
 var stdin_history* = ""
 
-func verror*(code: int, node: Exp, msg: string): ref VitaminError =
+func error*(node: Exp, msg: string): ref VitaminError =
     var error = new_exception(VitaminError, msg)
     error.node = node
-    error.code = code
     error
 
-func error*(node: Exp, msg: string): ref VitaminError =
-    verror(0, node, msg)
-
 func error*(msg: string): ref VitaminError =
-    verror(0, term(), msg)
+    error(term(), msg)
 
 proc err_header*(node: Exp, name: string, endl = "\n"): string =
     let prefix = "-- " & name.to_upper() & " "
@@ -101,17 +96,21 @@ proc in_source*(node: Exp, lookbehind = 0, color: int = 91, show_ws: bool = fals
     source = line_numbered(source, max(1, pos.start_line - lookbehind))
     source
 
+proc src*(exp: Exp, hi = true): string =
+    let source = exp.in_source(color=if hi: 91 else: 0)
+    if source == "": "" else: "\n\n" & source
+
 proc stray_closing_paren_error*(node: Exp): auto =
-    verror(1001, node, "Found closing paren `{node.value}`, but there was no opening paren.\n\n{node.in_source}".fmt)
+    error(node, "Found closing paren `{node.value}`, but there was no opening paren.\n\n{node.in_source}".fmt)
 
 proc mismatched_paren_error*(this_paren: Exp, last_paren: Exp): auto =
     let node = term(@[last_paren, this_paren])
-    verror(1001, node, "Opening paren `{last_paren.value}` does not match closing paren `{this_paren.value}`.\n\n{node.in_source}".fmt)
+    error(node, "Opening paren `{last_paren.value}` does not match closing paren `{this_paren.value}`.\n\n{node.in_source}".fmt)
 
 proc unclosed_error(node: Exp, msg: string): auto =
     let source = "\e[91m" & node.in_source_lines.split('\n')[0] & "\e[39m"
     let pretty = line_numbered(source, node.pos.get.start_line)
-    verror(1001, node, "{msg}\n\n{pretty}".fmt)
+    error(node, "{msg}\n\n{pretty}".fmt)
 
 proc unclosed_string_error*(node: Exp): auto =
     unclosed_error(node, "Unclosed string.")
@@ -121,13 +120,12 @@ proc unclosed_delimiter_error*(node: Exp): auto =
 
 proc bad_indent_error*(levels: seq[Exp], next: Exp): auto =
     # TODO: more specific message
-    let look = levels.len + 1
     let pos_opt = term(levels).calculate_position
     var source = ""
     if pos_opt.is_some:
         let pos = pos_opt.get
         source = next.in_source(lookbehind=next.pos.get.stop_line - pos.start_line + 1, color=41, show_ws=true)
-    verror(1004, next, "Indentation error.\n\n{source}".fmt)
+    error(next, "Indentation error.\n\n{source}".fmt)
 
 proc parser_eos_error*(node: Exp, end_token: string): auto =
-    verror(1005, node, "Unexpected end of file while looking for `{end_token}`\n\n{node.in_source}".fmt)
+    error(node, "Unexpected end of file while looking for `{end_token}`\n\n{node.in_source}".fmt)

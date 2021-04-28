@@ -1,5 +1,5 @@
-import types, error, syntax_rule, exp_stream
 import sets, tables, options, strformat
+import common/[exp, error, syntaxrule, expstream, utils]
 
 const debug_parser = 0
 
@@ -26,7 +26,7 @@ type
         reason*: string
 
 func parse_error(x: ParseError): Result[ParseError, Option[Exp]] =
-    error[ParseError, Option[Exp]](x)
+    err[ParseError, Option[Exp]](x)
 
 func parse_error(rule: SyntaxRule, partial: Option[Exp] = none(Exp), parent: ParseError = nil, reason: string = ""): auto =
     parse_error(ParseError(rule: rule, partial: partial, parent: parent, reason: reason))
@@ -62,7 +62,7 @@ proc raise_parse_error(error: ParseError, token: Option[Exp]) =
     let rule = error.rule
     let source = node.in_source
     let source_text = if source == "": "" else: "\n\n" & source
-    raise verror(1006, node, "Parser rule {rule.str} failed.{source_text}\n\n{text}".fmt)
+    raise error(node, "Parser rule {rule.str} failed.{source_text}\n\n{text}".fmt)
 
 proc parse_expr(p: var Parser, tokens: var ExpStream, follow: HashSet[string] = init_hash_set[string](), rule: Option[SyntaxRule] = none(SyntaxRule)): Result[ParseError, Option[Exp]]
 
@@ -76,7 +76,7 @@ proc parse_rule(p: var Parser, tokens: var ExpStream, rule: SyntaxRule, follow: 
     of ExpRule:
         let res = parse_expr(p, tokens, follow, some(rule))
         when debug_parser > 0:
-            if res.is_error: echo fmt"parse_rule: error {res.get_error.reason}"
+            if res.is_err: echo fmt"parse_rule: error {res.get_err.reason}"
         res
 
     of TokRule:
@@ -105,19 +105,21 @@ proc parse_rule(p: var Parser, tokens: var ExpStream, rule: SyntaxRule, follow: 
                     return parse_ok()
                 else:
                     return expr
-            last_trace = expr.get_error
+            last_trace = expr.get_err
             when debug_parser > 0: echo fmt"parse_rule: alternative did not match: backtrack token stream to {tokens.index} (head: {tokens.peek_opt})"
             tokens.backtrack()
         parse_error(rule, parent=last_trace, reason="could not match any rule from alternatives")
 
     of SeqRule:
         var exprs: seq[Exp]
+        if rule.op != "":
+            exprs.add(atom(rule.op))
         let subrules = rule.rules
         for subrule in subrules:
             let res = parse_rule(p, tokens, subrule, follow)
-            if res.is_error:
+            if res.is_err:
                 when debug_parser > 0: echo fmt"parse_rule: could not complete sequence; pop"
-                return parse_error(rule, term(exprs), res.get_error, reason="could not complete sequence")
+                return parse_error(rule, term(exprs), res.get_err, reason="could not complete sequence")
             let expr = res.get
             when debug_parser > 1: echo fmt"parse_rule: seq item {expr}"
             if expr.is_some:
@@ -141,7 +143,7 @@ proc parse_rule(p: var Parser, tokens: var ExpStream, rule: SyntaxRule, follow: 
         while not tokens.eos and not tokens.expect_in(follow - rule.first):
             tokens.checkpoint()
             let res = parse_rule(p, tokens, subrule, follow + subrule.first)
-            if res.is_error:
+            if res.is_err:
                 when debug_parser > 0: echo fmt"parse_rule: did not match repeat rule: backtrack & pop"
                 tokens.backtrack()
                 break
@@ -189,8 +191,8 @@ proc parse_expr(p: var Parser, tokens: var ExpStream, follow = init_hash_set[str
         when debug_parser > 0: echo fmt"parse_expr: found prefix operator `{expr}`, trying rule {subrule}"
         let res = parse_rule(p, tokens, subrule, follow)
         let head = atom(parselet.function)
-        if res.is_error: 
-            raise_parse_error( parse_error(subrule, head, res.get_error).get_error, tokens.peek_opt )
+        if res.is_err: 
+            raise_parse_error( parse_error(subrule, head, res.get_err).get_err, tokens.peek_opt )
         let right = res.get
         if right.is_some:
             if subrule.should_splice:
@@ -238,8 +240,8 @@ proc parse_expr(p: var Parser, tokens: var ExpStream, follow = init_hash_set[str
         let head = atom(parselet.function)
         let left = expr
         expr = term(head, left)
-        if res.is_error: 
-            raise_parse_error( parse_error(subrule, expr, res.get_error).get_error, tokens.peek_opt )
+        if res.is_err: 
+            raise_parse_error( parse_error(subrule, expr, res.get_err).get_err, tokens.peek_opt )
         let right = res.get
         if right.is_some:
             if subrule.should_splice:
@@ -261,12 +263,22 @@ iterator parse*(p: var Parser, tokens: seq[Exp]): Exp {.inline.} =
             discard stream.next(ind=true)
             continue
         let res = parse_expr(p, stream, follow=follow)
-        if res.is_error and not stream.eos:
-            raise_parse_error( res.get_error, stream.peek_opt )
+        if res.is_err and not stream.eos:
+            raise_parse_error( res.get_err, stream.peek_opt )
         elif res.get.is_some:
             let expr = res.get.get
             when debug_parser > 0: echo expr.str
             yield expr
+
+            if stream.peek_opt.is_some:
+                var found_sep = false
+                while stream.expect("$CNT", raw=true) or stream.expect(";", raw=true):
+                    found_sep = true
+                    discard stream.next(ind=true)
+                if not found_sep:
+                    let head = stream.peek_opt.get
+                    raise error(stream.peek_opt.get, "Expected a newline `$CNT` or semicolon `;` after expression, but found `{head}`.\n\n{head.in_source}".fmt)
+
 
 func operator_graph*(self: Parser): string =
     result = "digraph {\n"
