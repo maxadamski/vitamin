@@ -36,7 +36,7 @@ syn match vName /[a-z_][A-Za-z0-9_-]*/
 syn match vPragma /[@][A-Za-z0-9_-]*/
 syn keyword vPragma macro pure import extern unique opaque
 syn keyword vKeyword use use-syntax use-macro assert quote
-syn keyword vPragma Lazy Quoted Args undefined unreachable
+syn keyword vPragma Lazy Quoted Args Eval undefined unreachable
 
 syn match vPolymorph /\<[A-Z]\>/
 "syn match vPolymorph /\<Type\(-[1-9][0-9]*\)\=\>/
@@ -52,12 +52,11 @@ syn keyword vKeyword is as in not and or xor div mod
 syn keyword vKeyword var if elif else while for case of defer pass
 syn keyword vKeyword label jump with where do return continue break quote shift reset
 
-syn match vApply /[A-Za-z_][A-Za-z0-9_-]*\((\)\@=/
-syn keyword vApply opt imm mut ptr
-"syn keyword vKeyword opt imm mut ptr
-
-"syn match vType /[A-Z_][A-Za-z0-9_-]*/
+syn match vType /[A-Z_][A-Za-z0-9_-]*/
 syn keyword vType Type Union Inter Record Variant Enum Module Array List Set Map Ptr
 syn keyword vType I8 I16 I32 I64 U8 U16 U32 U64 F32 F64 Int Str Size Float 
 syn keyword vPolymorph Unit None Bool Any Never
 
+syn match vApply /[A-Za-z_][A-Za-z0-9_-]*\((\)\@=/
+syn keyword vApply ptr imm mut ro wo
+"syn keyword vKeyword opt imm mut ptr

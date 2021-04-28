@@ -40,15 +40,17 @@ None = Set(none)
 
 Tril = Set(true, false, none)
 
-Ptr = opaque (a: Type) -> Type => Size
-
 `assert` : (x: Quoted(Expr)) -> Unit
 
 `?` = (a: Type) -> Type => a | None
 
-`mut` = opaque (a: Type) => a
+imm = Symbol(imm)
+mut = Symbol(mut)
+ro = Symbol(ro)
+wo = Symbol(wo)
+Access = Set(imm, mut, ro, wo)
 
-`imm` = opaque (a: Type) => a
+Ptr = opaque (access: Access, a: Type) => Size
 
 Ops-U8 : Record(
 	`+` `-` `*` `div` `mod` : (x y: U8) -> U8
@@ -139,6 +141,7 @@ exit : (code: Int) -> Unit
 #
 # IO
 #
+
 
 File-Handle = opaque Size
 

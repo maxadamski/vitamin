@@ -850,9 +850,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 var local = env.extend()
                 let args = exp.tail
                 var bindings: seq[(string, Val)]
-                for i in 0..<fun_typ.params.len:
-                    let par = fun_typ.params[i]
-                    let arg = args[i]
+                for (par, arg) in zip(fun_typ.params, args):
                     let typ = eval(local, par.typ)
                     let val = eval(local, arg, as_type=typ)
                     local.vars[par.name] = Var(val: val, typ: typ, is_defined: true)

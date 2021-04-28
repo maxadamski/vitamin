@@ -130,7 +130,7 @@ parser.add_prefix "Inverse", "-", fun="inv"
 
 # associative prefix operators
 parser.add_prefix_left "Qualifier", "opaque", "macro", "pure"
-parser.add_prefix_left "Prefix-Type", "&", "?", "..", "mut", "imm"
+parser.add_prefix_left "Prefix-Type", "?", ".."
 parser.add_prefix_left "Member", ".", "*"
 
 func loose_list(rule, sep: SyntaxRule): SyntaxRule =
@@ -141,6 +141,7 @@ let group = (("Any".E.plus.list((",".t | "$CNT".tr) & "$CNT".tr.star) & ",".opt)
 let slice = (("Any".e.opt & ":".ts & "Any".e.opt) | "Any".e).named("slice")
 
 parser.add_infix_mix "Comma", ",", ((",".t & "Comma".E).splice.star.splice & ",".opt).splice
+parser.add_prefix_mix "Prefix-Type", "&", "Ptr", ("&".t & ("mut".ts | "imm".ts | "ro".ts | "wo".ts) & "Prefix-Type".e).splice
 
 parser.add_prefix_mix "Group", "(", "(_)", "(".t & group.deepCopy.opt & ")".t
 
