@@ -138,7 +138,7 @@ Here is how you define a variable `x` of type `A` with expression `e`.
 
 The type may be omitted.
 
-	x = ...
+	x = e
 
 Variables cannot be redefined.
 
@@ -152,7 +152,7 @@ When defining an assumed variable, the type must exactly match the type at assum
 
 *Example*
 
-Let's assume that there exists an external procedure `write`. To call it, we need to provide information about it's type. In the future this will be automatically inferred from `.h` files.
+Let's assume that there exists an external procedure `write`. To call it, we need to provide information about it's type. In the future this will be automatically synthesized from `.h` files.
 
 	write : (handle: I32, buffer: &U8, length: Size) -> Size
 
@@ -167,140 +167,123 @@ Names of variables may be reused in an inner scope. In this situation, the varia
 	assert x == 2
 
 
-# Memory
+## Pointers
 
-Although you can't redefine variables, you can define a variable as mutable memory, which can be written to with the assignment operator `:=`.
+Although you can't redefine variables, if a variable holds a writable pointer, you can change the value it points to with the assignment operator `:=`.
 
-	mut a := 42
-	a := 0
+	a : &mut Int
+	a := 42
 	assert a == 0
 
-Symmetrically, there is a way to place a value in immutable memory (protected memory location), which cannot be written to. The following is practically equivalent to a regular variable definition.
 
-	imm b := 42
-	assert-error b := 0
+### Capabilites
+
+Each pointer carries capabilities in its type. Pointer capabilites mark what can be done with the pointer and to the value a pointer points to. Using more constraining capabilities, makes code safer and enables additional optimizations.
+
+Pointers with all capability sets can be compared for identity. Additionally, the following rules apply.
+
+- Pointers with the `tag` capability set can only be compared for identity
+- Pointers with the `rdo` capability set can only be read from
+- Pointers with the `wro` capability set can only be written from
+- Pointers with the `mut` capability set can both be read from and written to.
+- Pointers with the `imm` capability set can only be read from. The pointee value is guaranteed to never (observably) change.
+
+For convenience, the capabilites are shown in the table below.
+
+| cap |  cmp  | read  | write | const |
+|:----|:-----:|:-----:|:-----:|:-----:|
+|`tag`|   x   |       |       |       |
+|`rdo`|   x   |   x   |       |       |
+|`wro`|   x   |       |   x   |       |
+|`mut`|   x   |   x   |   x   |       |
+|`imm`|   x   |   x   |       |   x   |
 
 
-**Internals**
+Pointers with the `cmp` capability can be compared for identity with the identity comparison `===` operator.
 
-| allocator | ref | get | set | new |     del     |
-|-----------|:---:|:---:|:---:|:---:|:-----------:|
-| heap      | all | all | mut | mut | mut         |
-| stack     | all | all | mut | mut | mut (dummy) |
-| temp      | all | all | mut | mut | mut (dummy) |
-| gc        | all | all | mut | mut | mut (dummy) |
-| rc        | all | all | mut | mut | mut (dummy) |
+Pointers with the `read` capability can be read from with the dereference `*` operator.
 
-	Mut = opaque (a: Type) -> Type => Size
-	Imm = opaque (a: Type) -> Type => Size
-	heap, stack, temp, gc, rc : Allocator
+Pointers with the `write` capability can written to with the assignment `:=` operator.
 
-	new : (allocator: Allocator = _, type: Type, value: ?type = none) -> Mut(type)
-	ref : (allocator: Allocator = _, value: A) -> Imm(A)
-	ref : (allocator: Allocator = _, value: A) -> Mut(A)
-	del : (allocator: Allocator = _, memory: Mut(A)) -> Unit
-	get : (memory: Mut(A) | Imm(A)) -> A
-	set : (memory: Mut(A), value: A) -> A
+In the stadard library, capability sets are symbols. All capability sets are enumerated in the set type `Cap`. There are additional types enumerating capability sets with common capabilities, such as `Cap-Readable` and `Cap-Writable`.
 
-- `var x : t` is the same as `x = mut(t)`
-- `var x := e` is the same as `x: Mut(type-of(e)) = ref(e)`
-- `let x := e` is the same as `x: Imm(type-of(e)) = ref(e)`
-- `x := e` is the same as `set(x, e)`
-- `x` is automatically dereferenced with `get(x)`, when used in an expression (implicit conversion)
 
-Using memory in an expression automatically dereferences it.
+### Covertions
 
-	a + 2    # 4 : I64
-	print(b) # prints 42
+The standard library defines implicit convertions between pointers to values of the same type, but of different capability sets.
 
-Of course, you can obtain a pointer to mutable and immutable memory (also see `Core.Memory.address`).
+A pointer to type `a` with capability set `cap1` can be converted to a pointer to type `a` with capability set `cap2` iff the capabilites of `cap2` are a subset of capabilites of `cap1`.
 
-	&a # ptr 0xDEADBEEF
+The following conversions follow:
 
-	
-## Allocating on the heap
+- `mut` -> `rdo` or `wro` or `tag`
+- `imm` -> `rdo` or `tag`
+- `wro` -> `tag`
+- `rdo` -> `tag`
 
-Allocating memory on the heap is done like this:
+Additionaly, a pointer of type `a` with capability `read` can be converted (automatically dereferenced) to value of of type `a`.
 
-	# allocate memory for 1024 bytes and fill it with 0 
-	x : mut A = allocate(U8, value=0, count=1024)
 
-Explicitly allocated memory needs to be freed.
+### Aliasing
 
-	free(x)
+1. Pointers to memory of different types do not alias.
 
-Double-free is undefined.
+**IF** `x: Ptr(_, a)` and `y: Ptr(_, b)` and `a != b` **THEN** writing to `x` will not affect the result of reading from `y`.
 
-## Allocating on the stack
-
-You can explicitly allocate memory on the stack.
-
-	x : mut A = allocate-stack(I64, value=0)
-
-Remember to free the memory before exiting the scope.
-
-	free(x)
-
-In fact defining a variable as memory `x : mut I64 = 42` is equivalent to:
-
-	x : mut I64 = allocate-stack(I64, value=42)
-	guard free(x)
-
-Double-free is undefined.
-
-## Pointer Aliasing
-
-1. Pointers to memory of different types may not alias.
-	`x != y if x : ptr mut A; y : ptr mut B`
 2. Pointers to mutable memory of the same type may alias.
-	`x may equal y if x y : ptr mut A or x y : ptr imm A`
 
-There is no speed penalty or alias analysis if pointers refer to immutable memory `x y : ptr imm A`.
+**IF** `x: Ptr(c1, a)` and `y: Ptr(c2, a)` and `c1 : Set(mut, wro)` and `c2 : Set(mut, rdo)` **THEN** writing to `x` may change the result of reading `y`.
 
-## Shorthand
+3. Pointers to immutable memory do not alias
 
-For readability and user experience, there are a few conveniences:
-
-1. `imm` and `mut` are transitive, until specified otherwise.
-2. `imm A` and `mut A` are shorthands for `Immutable(A)` and `Mutable(A)`
-
-For example:
-
-	a : I64 = 42         # x : I64 
-	b : I64 = read-int() # x : imm I64 = ... (the result is copied to `b`)
-	mut { I64, String, imm U64 } == mut { mut I64, mut String, imm U64 }
-
-	imm ptr ptr A == imm ptr imm ptr imm A
-	mut ptr ptr A == mut ptr mut ptr mut A
-	mut ptr imm ptr A = mut ptr imm ptr imm A
-	mut ptr ptr imm A = mut ptr mut ptr imm A
+**IF** `x: Ptr(imm, a)` **THEN** writing to any other pointer `y` will not change the value when reading from `x`.
 
 
-	
-	          | definition |  mutations
-	----------|------------|-----------
-	Immutable | x = e      |
-	Mutable   |
+### Compatibility with C
+
+When writing assuming a foreign C function type in Vitamin, use the table below for translating the parameter types.
+
+**Note**: The first `const` from the right is in square brackets, because it doesn't matter, as C parameters are passed by value.
+
+C parameter type      | Vitamin parameter type
+----------------------|-----------------------
+`A [const] x`         | `A`
+`A * [const] x`       | `Ptr(mut, A)`
+`A const * [const] x` | `Ptr(rdo, A)`
+
+
+### Allocation
+
+To obtain a pointer, you must first allocate memory. This is done with an allocator and the `new` and `ref` funcitons.
+
+Memory allocated with unmanaged allocators needs to be freed with `del`. Double-free is undefined.
+
+Supported managed allocators: `stack`, `temp`, `rc`.
+
+Supported unmanaged allocators: `heap`.
+
+	heap, stack, temp, rc : Allocator
+
+	new : (alloc: Allocator = _, cap: Cap = _, a: Type) -> Ptr(cap, a)
+	ref : (alloc: Allocator = _, cap: Cap = _, a: Type = _, x: a) -> Ptr(cap, a)
+	del : (alloc: Allocator = _, cap: Cap = _, a: Type = _, x: Ptr(cap, a)) -> Unit
+
+*Example: Explicitly allocating on the heap*
+
+	# allocate memory for one string
+	x : &mut A = new(heap, mut, Str)
+	defer del(x)
+
+*Example: Stack allocated integer*
+
+	i = ref(stack, mut, Int, 0)
+
+the same thing, but with syntactic sugar:
+
+	var i := 0
 
 
 
-## Compatibility with C
-
-Here is a table of Vitamin memory types and the equivalent in C (or D).
-
-This table doesn't use shorthand forms for clarity.
-
-	Vitamin C        | C and family      | Description
-	-----------------|-------------------|---------------------------------
-	x: A             | immutable(A) x    | constant  A
-	x: imm A         | A const x         | read-only A
-	x: mut A         | A x               | mutable   A
-	x: imm ptr A     | n/a               | constant  pointer to read-only A
-	x: ptr mut A     | n/a               | constant  pointer to mutable   A
-	x: imm ptr A     | A const * const x | read-only pointer to read-only A
-	x: imm ptr mut A | A * const x       | read-only pointer to mutable   A
-	x: mut ptr mut A | A * x             | mutable   pointer to mutable   A
-	x: mut ptr imm A | A const * x       | mutable   pointer to read-only A
 
 # Types
 
@@ -359,11 +342,11 @@ Function with an empty parameter list.
 
 An implicit parameter is a parameter with a default value `_`. If not passed, it will be derived or if it fails, the scope will be searched bottom-up for a value of a compatible type (must be marked by `@implicit` and be unambiguous).
 	
-	Repr = (A: Type) => { repr : (x: A) -> String }
-	# evidence that I64 can be transformed to String
-	@implicit repr-I64 : Repr(I64) = (repr=...)
-	# evidence that Foo can be transformed to String
-	@implicit repr-Foo : Repr(Foo) = (repr=...)
+	Repr = (A: Type) => Record(repr: (x: A) -> Str)
+	# evidence that I64 can be transformed to Str
+	repr-I64 : Repr(I64)(repr=...)
+	# evidence that Foo can be transformed to Str
+	repr-Foo : Repr(Foo) = (repr=...)
 	# generic function, which searches for evidence of Repr(A) for a given A
 	repr = (A: Type = _, ev: Repr(A) = _, x: A) => ev.repr(x) 
 	# shorter
@@ -381,7 +364,7 @@ Missing parameters, which are depended upon, are added automatically in order of
 
 The last parameter of the positional parameter list may be variadic.
 
-	print : (strings: ..String; sep = ' ', end = '\n')
+	print : (strings: ..Str; sep = ' ', end = '\n')
 	print('hello', 'world', sep=', ', end='!\n') # prints 'hello, world!'
 
 *Rules for the function parameter lists:*
@@ -398,62 +381,72 @@ The last parameter of the positional parameter list may be variadic.
 - the @search default value searches for compatible values in the implicit scope
 
 
-## Structure Types
+## Record Types
 
-The structure type represents an unordered collection of *rows* - labels paired with dependent types. It is extensible, because unspecified additional rows may be given as a parameter.
+The record type represents an unordered collection of *rows* - labels paired with dependent types. It is extensible, because unspecified additional rows may be given as a polymorphic parameter.
 
-The general form of the structure type, or rather an extensible dependent product type is:
+The general form of the record type, or rather an extensible dependent product type is:
 
-	Record(x1 : A1, ..., xn : An, ..R)
+	Record(x1: A1, ..., xn: An, R)
 
-Where $x_i$ is a row label and $A_i$ is the row type, which may be an expression using the value of any other row, provided the dependencies form a DAG. We say that a structure type is extensible if may contain other rows $..R$.
+Where $x_i$ is a row label and $A_i$ is the row type, which may be an expression using the value of any other row, provided the dependencies form a DAG. We say that a record type is extensible if may contain other rows $R$.
 
-The type of a structure type is:
+The type of a record type is:
 
 	Universe(max(level-of(A1), ..., level-of(An), level-of(R)))
 
-If a structure is extensible, but the extra rows are discarded, the extra rows don't need to be named.
+If a record is extensible, but the extra rows are discarded, the extra rows don't need to be named.
 
-	discard-rows : Record(x y : F64, ..) -> record(x y : F64)
+	discard-rows : Record(x y: F64, ...) -> record(x y : F64)
 
 Otherwise, extra rows may be used polymorphically.
 
-	preserve-rows : Record(x y : mut F64, ..R) -> Record(x y : F64, ..R)
+	preserve-rows : Record(x y: F64, R) -> Record(x y : F64; R)
 
 A default value may be provided for each field.
 
-	Record(x : A = a)
+	Record(x: A = a)
 
 In which case, the type may be inferred.
 
-	assert Record(x = a) == Record(x : type-of(a) = a)
+	assert Record(x = a) == Record(x: type-of(a) = a)
 
-If no default values are given, there is a shorthand for subsequent values of the same type.
+If no default values are given, there you can use a shorthand for subsequent values of the same type.
 
-	assert Record(x : Float, y z : Int) == Record(x : Float, y : Int, z : Int)
+	assert Record(x: Float, y z: Int) == Record(x: Float, y: Int, z: Int)
 
-To construct a value of a structure type use round parentheses.
+To construct a value of a record type use round parentheses.
 
-	x = (name = 'John Smith', age = 35)
-	assert type-of(x) == Record(name : String, age : I64)
+	x = (name='John Smith', age=35)
+	assert type-of(x) == Record(name: Str, age: I64)
 
-To make use of default values, the structure must be constructed *as if* it was a function call (it's not!).
+To make use of default values, the record must be constructed *as if* it was a function call.
 
-	T = Record(length = 0, color = "blue")
-	x = T()
-	assert x == (length = 0, color = "blue")
+	Default-Struct = Record(length = 0, color = 'blue')
+	x = Default-Struct()
+	assert x.length == 0
+	assert x.color == 'blue'
+
+If a record is a superset of another record, use the `use` operator to "inherit" all the fields.
+
+	Point-2D = Record(x: Float, y: Float)
+	Point-3D = Record(use Point-2D, z: Float)
+	assert Point-3D == Record(x: Float, y: Float, z: Float)
+
 
 ## Tuple Types
 
 The tuple type represents an ordered sequence of non-dependent types:
 
-	Record(A1, ..., An)
+	Tuple(A1, ..., An)
 
 The type of the tuple type is:
 
 	Universe(max(level-of(A1), ..., level-of(An)))
 
+
 **TODO** Should I make tuples extensible?
+
 
 ## Variant Types
 
@@ -461,7 +454,7 @@ The enum type represents a dependent generalized abstract data type (GADT). This
 
 It's general form is:
 
-	Variant(x1 : A1, ..., xn : An)
+	Variant(x1: A1, ..., xn: An)
 
 Where $x_i$ is the constructor of the i-th alternative, and $A_i$ is the type of the value.
 
@@ -676,13 +669,13 @@ Here are examples of common `.` macro usage:
 Getting a member value
 
 	use Core
-	person : {name: String}
+	person : {name: Str}
 	assert (person.name) is-the-same-as (member(person, 'name'))
 
 Setting a member value
 
-	person : {name: mut String}
-	new-name : String
+	person : {name: mut Str}
+	new-name : Str
 	assert (person.name := new-name) is-the-same-as (member(person, 'name') := new-name)
 
 Passing value as the first function argument (UFCS)

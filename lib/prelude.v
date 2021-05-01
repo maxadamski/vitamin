@@ -7,7 +7,7 @@ Atom, Term : Type
 
 Expr = Term | Atom
 
-Quoted, Lazy, Args, Eval : (a: Type) -> Type
+Quoted, Lazy, Args, Expand : (a: Type) -> Type
 
 Unit = Record()
 
@@ -46,11 +46,33 @@ Tril = Set(true, false, none)
 
 imm = Symbol(imm)
 mut = Symbol(mut)
-ro = Symbol(ro)
-wo = Symbol(wo)
-Access = Set(imm, mut, ro, wo)
+tag = Symbol(tag)
+rdo = Symbol(rdo)
+wro = Symbol(wro)
+Cap = Set(imm, mut, tag, rdo, wro)
+Cap-Readable = Set(mut, rdo, imm)
+Cap-Writable = Set(mut, wro)
 
-Ptr = opaque (access: Access, a: Type) => Size
+# generic pointer
+Ptr = opaque (cap: Cap, a: Type) => Size
+
+# pointer with any writable capability
+Writable = (cap: Cap-Writable, a: Type) => Ptr(cap, a)
+
+# pointer with any readable capability
+Readable = (cap: Cap-Readable, a: Type) => Ptr(cap, a)
+
+# remove immutability optimizations
+imm-to-rdo : (a: Type, p: Ptr(imm, a)) -> Ptr(rdo, a)
+
+# remove write capability
+mut-to-rdo : (a: Type, p: Ptr(mut, a)) -> Ptr(rdo, a)
+
+# remove read capability
+mut-to-wro : (a: Type, p: Ptr(mut, a)) -> Ptr(wro, a)
+
+# remove read and write capabilities
+any-to-tag : (cap: Cap, a: Type = _, p: Ptr(cap, a)) -> Ptr(tag, a)
 
 Ops-U8 : Record(
 	`+` `-` `*` `div` `mod` : (x y: U8) -> U8
@@ -102,19 +124,20 @@ Ops-F64 : Record(
 # Array
 #
 
-List = (A: Type) -> Type => Record(items: Ptr(A), len: Size = 0, cap: Size = 0)
+List = (cap: Cap, a: Type) -> Type =>
+	Record(items: Ptr(cap, a), len: Size = 0, cap: Size = 0)
 
 #
 # String
 #
 
-Str = opaque Ptr(U8)
+Str = opaque Ptr(imm, U8)
 
 concat : (left right: Str) -> Str
 
-join : (items: Args(List(Str)); start sep end: Str) -> Str
+join : (items: Args(List(rdo, Str)); start sep end: Str) -> Str
 
-split : (it: Str, separator: Str; count: ?Int = none) -> List(Str)
+split : (it: Str, separator: Str; count: ?Int = none) -> List(rdo, Str)
 
 has-prefix = (it prefix: Str) -> Bool =>
 	it.len >= prefix.len and it[:prefix.len] == prefix
@@ -157,7 +180,7 @@ read : (file = stdin, bytes: ?Size = none) -> Str
 
 write : (file = stdout, string: Str) -> Unit
 
-print = (file = stdout, values: Args(List(Str)); sep = ' ', end = '\n') -> Unit =>
+print = (file = stdout, values: Args(List(rdo, Any)); sep = ' ', end = '\n') -> Unit =>
 	if values.len > 0
 		write(file, values[0])
 		for x in values

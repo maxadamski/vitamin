@@ -2,6 +2,8 @@ import options, tables, sequtils, strformat, strutils
 import common/[vm, exp, error]
 from common/utils import reverse_iter, max_or
 
+const debug_interp = 0
+
 var global_fun_id: uint32 = 1000
 
 # boilerplate declarations
@@ -208,8 +210,8 @@ proc make_lambda_type(env: Env, params: seq[Exp], ret: Exp, body: Option[Exp]): 
     var did_infer_result = false
 
     if not ret_exp.is_nil:
-        ret_exp = v_norm(env, ret_exp)
-        if ret_exp.has_prefix("Eval"):
+        ret_exp = v_norm(local, ret_exp)
+        if ret_exp.has_prefix("Expand"):
             ret_exp = ret_exp[1]
             is_macro = true
         ret_typ = eval(local, ret_exp)
@@ -495,33 +497,6 @@ proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
     #else:
     #    raise error("`type-of` not implemented for term {val.str} of kind {val.kind}.".fmt)
 
-proc v_norm*(env: Env, exp: Exp): Exp =
-    v_reify(env, eval(env, exp))
-
-proc v_reify*(env: Env, val: Val): Exp =
-    case val.kind
-    of TypeVal:
-        atom("Type")
-    of ExpVal:
-        val.exp
-    of NumVal:
-        atom($val.num)
-    of HoldVal:
-        atom(val.name)
-    of UnionTypeVal, InterTypeVal, SetTypeVal:
-        let op = case val.kind
-        of UnionTypeVal: "|"
-        of InterTypeVal: "&"
-        of SetTypeVal: "Set"
-        else: raise
-        append(atom(op), val.values.map_it(v_reify(env, it)))
-    of SymbolVal:
-        term(atom("Symbol"), atom(val.name))
-    of RecTypeVal:
-        term(atom("Record"))
-    else:
-        raise error("Can't reify value {val.str} of kind {val.kind}.".fmt)
-
 proc v_type_macro*(env: Env, exp: Exp): Val =
     #if exp.kind == expAtom and exp.tag in {aSym, aLit}:
     #    let name = exp.value
@@ -588,6 +563,30 @@ proc apply_builtin(env: Env, fun: Val, exp: Exp, eval_macro_res = true): Val =
     else:
         return res
 
+proc apply_lambda(env: Env, fun: Val, exp: Exp, eval_macro_res = true): Val =
+    let fun_typ = fun.fun.typ
+    ensure_arg_count(exp, fun_typ.params.len)
+
+    var local = env.extend()
+    let args = exp.tail
+    var bindings: seq[(string, Val)]
+    for (par, arg) in zip(fun_typ.params, args):
+        let typ = eval(local, par.typ)
+        let val = eval(local, arg, as_type=typ)
+        local.vars[par.name] = Var(val: val, typ: typ, is_defined: true)
+        bindings.add((par.name, val))
+    let ret_typ = eval(local, fun_typ.result)
+    var res = eval(local, fun.fun.body, as_type=ret_typ)
+    if fun_typ.is_opaque:
+        var name = ""
+        if exp[0].kind == expAtom:
+            name = exp[0].value
+        res = Val(kind: OpaqueFunVal, disp_name: name, result: res, bindings: bindings, opaque_fun: fun.fun)
+    if fun_typ.is_macro and eval_macro_res:
+        assert res.kind == ExpVal
+        return eval(env, res.exp)
+    return res
+
 proc v_expand*(env: Env, exp: Exp): Exp =
     if exp.len >= 1:
         if exp[0].kind == expAtom and env.get_opt(exp[0].value).is_none:
@@ -599,13 +598,58 @@ proc v_expand*(env: Env, exp: Exp): Exp =
                 let res = apply_builtin(env, fun, exp, eval_macro_res=false)
                 assert res.kind == ExpVal
                 return v_expand(env, res.exp)
+        of FunVal:
+            if fun.fun.typ.is_macro:
+                let res = apply_lambda(env, fun, exp, eval_macro_res=false)
+                assert res.kind == ExpVal
+                return v_expand(env, res.exp)
+
         else:
             discard
     exp
 
+proc v_reify*(env: Env, val: Val): Exp =
+    when debug_interp > 0:
+        echo "reify " & val.str
+    case val.kind
+    of TypeVal:
+        atom("Type")
+    of ExpVal:
+        val.exp
+    of NumVal:
+        atom($val.num)
+    of HoldVal:
+        atom(val.name)
+    of UnionTypeVal, InterTypeVal, SetTypeVal:
+        let op = case val.kind
+        of UnionTypeVal: "|"
+        of InterTypeVal: "&"
+        of SetTypeVal: "Set"
+        else: raise
+        append(atom(op), val.values.map_it(v_reify(env, it)))
+    of SymbolVal:
+        term(atom("Symbol"), atom(val.name))
+    of OpaqueFunVal:
+        var args: seq[Exp]
+        var local = env.extend()
+        for (name, arg) in val.bindings:
+            args.add(term(atom("="), atom(name), v_reify(local, arg)))
+            local.assume(name, arg)
+        append(atom(val.disp_name), args)
+    of RecTypeVal:
+        term(atom("Record"))
+    of RecVal:
+        term(atom("record"))
+    else:
+        raise error("Can't reify value {val.str} of kind {val.kind}.".fmt)
+
+proc v_norm*(env: Env, exp: Exp): Exp =
+    v_reify(env, eval(env, exp))
+
 proc v_infer*(env: Env, exp: Exp): Val =
     # TODO: implement me correctly!!!
-    #echo "infer " & exp.str
+    when debug_interp > 0:
+        echo "infer " & exp.str
     let exp = v_expand(env, exp)
     case exp.kind:
     of expAtom:
@@ -663,7 +707,8 @@ proc v_infer*(env: Env, exp: Exp): Val =
     raise error(exp, "`infer` not implemented for expression {exp}. {exp.src}".fmt)
 
 proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
-    #echo "eval " & exp.str_ugly
+    when debug_interp > 0:
+        echo "eval " & exp.str_ugly
     case exp.kind
     of expAtom:
         case exp.tag
@@ -675,7 +720,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 raise error(exp, "{name} is not defined. {exp.src}".fmt)
             if not res.get.is_defined:
                 #return Hold(name)
-                raise error(exp, "{name} is declared, but not defined. {exp.src}".fmt)
+                raise error(exp, "{name} is assumed, but not defined. {exp.src}".fmt)
             let val = res.get.val
             if not unwrap and val.kind == OpaqueVal:
                 return Hold(name)
@@ -846,26 +891,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 return apply_builtin(env, fun, exp)
 
             of FunVal:
-                let fun_typ = fun.fun.typ
-                var local = env.extend()
-                let args = exp.tail
-                var bindings: seq[(string, Val)]
-                for (par, arg) in zip(fun_typ.params, args):
-                    let typ = eval(local, par.typ)
-                    let val = eval(local, arg, as_type=typ)
-                    local.vars[par.name] = Var(val: val, typ: typ, is_defined: true)
-                    bindings.add((par.name, val))
-                let ret_typ = eval(local, fun_typ.result)
-                var res = eval(local, fun.fun.body, as_type=ret_typ)
-                if fun_typ.is_opaque:
-                    var name = ""
-                    if exp[0].kind == expAtom:
-                        name = exp[0].value
-                    res = Val(kind: OpaqueFunVal, disp_name: name, result: res, bindings: bindings, opaque_fun: fun.fun)
-                if fun_typ.is_macro:
-                    assert res.kind == ExpVal
-                    return eval(env, res.exp)
-                return res
+                return apply_lambda(env, fun, exp)
             else:
                 let fun_typ = v_typeof(env, fun)
                 raise error(exp, "{fun} of {fun_typ} is not callable. {exp.src}".fmt)
