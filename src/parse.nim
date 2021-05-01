@@ -272,11 +272,13 @@ iterator parse*(p: var Parser, tokens: seq[Exp]): Exp {.inline.} =
 
             if stream.peek_opt.is_some:
                 var found_sep = false
+                while stream.expect("$DED", raw=true):
+                    discard stream.next(ind=true)
                 while stream.expect("$CNT", raw=true) or stream.expect(";", raw=true):
                     found_sep = true
                     discard stream.next(ind=true)
                 if not found_sep:
-                    let head = stream.peek_opt.get
+                    let head = stream.peek_opt(ind=true).get
                     raise error(stream.peek_opt.get, "Expected a newline `$CNT` or semicolon `;` after expression, but found `{head}`.\n\n{head.in_source}".fmt)
 
 

@@ -211,7 +211,7 @@ proc indent*(tokens: seq[Exp]): seq[Exp] =
             elif last_level.starts_with(next_level):
                 let level = find_level(next_level)
                 if level == -1: raise bad_indent_error(levels, t)
-                pop_levels(level + 1)
+                pop_levels(levels.len - level - 1)
             else:
                 raise bad_indent_error(levels, t)
 
