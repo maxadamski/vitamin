@@ -327,12 +327,11 @@ If no default values are given, there is a shorthand for subsequent values of th
 
 The type may also be inferred if another parameter depends on the value.
 
-	(A, x: A) -> ... == (A: Type, x: A) -> ...
+	(A: _, x: A) -> ... == (A: Type, x: A) -> ...
 
-A parameter may even be omitted if it's name is an uppercase letter.
+A parameter may even be omitted.
 	
-	# assuming A is defined or assumed
-	(x: A, y: B) -> ... == (A: Type, B: Type, x: A, y: B) -> ...
+	(x: $A, y: $B) -> ... == (A: Type, B: Type, x: A, y: B) -> ...
 
 Function with an empty parameter list.
 

@@ -5,6 +5,7 @@ type
     Var* = object
         val*, typ*: Val
         is_defined*: bool
+        is_placeholder*: bool
         definition*: Option[Exp]
 
     Env* = ref object
@@ -12,12 +13,14 @@ type
         vars*: Table[string, Var]
 
     ValTag* = enum
-        HoldVal, CastVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
+        HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, NumVal, ExpVal, MemVal, FunVal,
         FunTypeVal, BuiltinFunVal, OpaqueVal, OpaqueFunVal,
         SymbolVal, SymbolTypeVal, SetTypeVal
 
     Val* = ref object
+        typ*: Option[Val]
+
         case kind*: ValTag
         of TypeVal:
             level*: int
@@ -52,14 +55,15 @@ type
             num*: int
 
         of MemVal:
-            memory*: pointer
-            mutable*: bool
+            mem_ptr*: Val
+            mem_typ*: Val
+            wr*, rd*, imm*: bool
 
         of ExpVal:
             exp*: Exp
 
-        of CastVal:
-            val*, typ*: Val
+        #of CastVal:
+        #    val*, typ*: Val
 
         of OpaqueVal:
             inner*: Val
@@ -67,6 +71,7 @@ type
         of BuiltinFunVal:
             builtin_fun*: BuiltinFun
             builtin_typ*: FunTyp
+
 
     NeutralTag* = enum NVar, NApp
 
@@ -251,7 +256,7 @@ proc equal*(x, y: Val): bool =
         x == y
     of HoldVal, SymbolVal:
         x.name == y.name
-    of SetTypeVal:
+    of SetTypeVal, UnionTypeVal, InterTypeVal:
         sets_equal(x.values, y.values)
     of OpaqueFunVal:
         equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings
@@ -267,8 +272,8 @@ proc equal*(x, y: Val): bool =
         for i in 0..<n:
             if sx[i].name != sy[i].name or not equal(sx[i].typ, sy[i].typ): return false
         return true
-    of CastVal:
-        return equal(x.val, y.val)
+    #of CastVal:
+    #    return equal(x.val, y.val)
     of NumVal:
         return x.num == y.num
     else:
@@ -297,14 +302,14 @@ func str*(v: Val): string =
     of OpaqueVal:
         "Opaque(" & v.inner.str & ")"
 
-    of CastVal:
-        v.typ.str & "(" & v.val.str & ")"
+    #of CastVal:
+    #    v.typ.str & "(" & v.val.str & ")"
 
     of NumVal:
         $v.num
 
     of MemVal:
-        "Memory(" & cast[uint64](v.memory).hex_str & ")"
+        "Memory(...)"
 
     of ExpVal:
         "Expr(" & v.exp.str & ")"

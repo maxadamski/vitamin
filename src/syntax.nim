@@ -1,5 +1,6 @@
-import sets, tables, strutils, strformat
+import options, sets, tables, strutils, strformat
 import parse, common/syntaxrule
+import common/exp
 
 #
 # Convenience parser functions
@@ -175,6 +176,9 @@ parser.add_prefix_mix "Statement", "if", splice(
     ("$CNT".tr.opt & "elif".tr & "Statement".E & ":".opt & "Any".b).star &
     ("$CNT".tr.opt & "else".tr & ":".opt & "Any".b).opt
 )
+
+parser.add_prefix_mix "Statement", "test",
+    splice("test".t & tok_rule("", tag=some(aStr), save=true) & ":".opt & "Any".b)
 
 for token in ["Record", "Variant"]:
     parser.add_prefix_mix "Apply", token, token.t & "(".t & group.deepCopy.opt  & ")".t

@@ -3,6 +3,8 @@
 # Core
 #
 
+Has-Prelude : Type
+
 Atom, Term : Type
 
 Expr = Term | Atom
@@ -39,8 +41,6 @@ none = Symbol(none)
 None = Set(none)
 
 Tril = Set(true, false, none)
-
-`assert` : (x: Quoted(Expr)) -> Unit
 
 `?` = (a: Type) -> Type => a | None
 
@@ -120,6 +120,7 @@ Ops-F64 : Record(
 	of true false
 	of false true
 
+
 #
 # Array
 #
@@ -155,7 +156,7 @@ contains : (it substring: Str) -> Bool
 
 index : (it substring: Str) -> ?U64
 
-left-pad : (it: Str, width: U64, fill: Str = ' ') -> Str
+left-pad : (it: Str, width: U64, fill: Str) -> Str
 
 replace : (it old new: Str; count: ?Int = none) -> Str
 
@@ -172,7 +173,7 @@ stdin  = 0 as File-Handle
 stdout = 1 as File-Handle
 stderr = 2 as File-Handle
 
-open : (path: Str, mode = 'r') -> File-Handle
+open : (path: Str, mode: Str) -> File-Handle
 
 close : (file: File-Handle) -> Unit
 
@@ -180,7 +181,7 @@ read : (file = stdin, bytes: ?Size = none) -> Str
 
 write : (file = stdout, string: Str) -> Unit
 
-print = (file = stdout, values: Args(List(rdo, Any)); sep = ' ', end = '\n') -> Unit =>
+print = (file = stdout, values: Args(List(rdo, Any)); sep: Str, end: Str) -> Unit =>
 	if values.len > 0
 		write(file, values[0])
 		for x in values
@@ -308,4 +309,32 @@ for-each = (it: Bucket-Array(A), operation: A -> Unit) =>
 		for item in bucket.items
 			operation(item)
 
+]#
+
+
+#fix = (r: Type, f: (x: a) -> a) -> a => f(fix(f), x)
+
+#fix = (a: Type, f: (_: a) -> a) => (x: a) => f(fix(f))(x)
+
+`while` = (cond body: Quoted(Expr)) -> Expand(Expr) =>
+	loop = gensym()
+	quote
+		$loop = () =>
+			case $cond
+			of true 
+				$body
+				$loop()
+			of false
+				()
+		$loop()
+
+#[
+i = ref(mut, Int, 0)
+j = ref(mut, Int, 0)
+while *i < 10
+	j := 0
+	while *j < 10
+		print(*i, *j)
+		j := *j + 1
+	i := *i + 1
 ]#

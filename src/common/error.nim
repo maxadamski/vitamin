@@ -25,8 +25,8 @@ proc err_header*(node: Exp, name: string, endl = "\n"): string =
     let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
     prefix & padding & suffix & endl
 
-proc print_error*(error: ref VitaminError, file: Option[string] = none(string)) =
-    let prefix = "-- ERROR "
+proc print_error*(error: ref VitaminError, file: Option[string] = none(string), prefix = "ERROR") =
+    let prefix = "-- {prefix} ".fmt
     var suffix = ""
     if file.is_some:
         suffix = " " & file.get
