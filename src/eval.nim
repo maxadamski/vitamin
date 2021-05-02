@@ -35,10 +35,10 @@ proc infer_pure(env: Env, exp: Exp): bool =
 
 proc ensure_args_are_types(env: Env, args: seq[Exp]) =
     return
-    for arg in args:
-        let typ = v_infer(env, arg)
-        if not typ.is_univ:
-            raise error(arg, "Expected argument to be a type, but got a value of {typ}. {arg.src}".fmt)
+    #for arg in args:
+    #    let typ = v_infer(env, arg)
+    #    if not typ.is_univ:
+    #        raise error(arg, "Expected argument to be a type, but got a value of {typ}. {arg.src}".fmt)
 
 proc ensure_args_are_not_types(env: Env, args: seq[Exp]) =
     for arg in args:
@@ -375,10 +375,13 @@ proc v_cast(env: Env, val: Val, dst_typ: Val, exp: Exp = term()): Val =
     let src_typ = v_typeof(env, val)
     # check if can cast to subtype
     if is_subtype(src_typ, dst_typ):
-        val.typ = some(dst_typ)
-        return val
+        let res = val.deep_copy
+        res.typ = some(dst_typ)
+        return res
 
-    raise error(exp, "You can't cast `{val.str}` of `{src_typ.str}` to type `{dst_typ.str}`.\n\nCan't downcast, because type `{src_typ.str}` is not a subtype of `{dst_typ.str}`.\n\nCan't upcast, because there is no evidence, that `{val.str}` was downcast from type `{dst_typ.str}`. {exp.src}".fmt)
+    raise error(exp, "You can't cast `{val.str}` of `{src_typ.str}` to type `{dst_typ.str}`.\n\n".fmt &
+        "Can't upcast, because type `{src_typ.str}` is not a subtype of `{dst_typ.str}`.\n\n".fmt &
+        "Can't downcast, because there is no evidence, that `{val.str}` was upcast from type `{dst_typ.str}`. {exp.src}".fmt)
     
 proc eval_as(env: Env, exp: Exp): Val =
     ensure_arg_count(exp, 2)
@@ -552,61 +555,14 @@ proc v_value_set*(env: Env, args: seq[Val]): Val =
     return Val(kind: SetTypeVal, values: set)
 
 proc v_union*(env: Env, args: seq[Val]): Val =
-    var set = Val(kind: SetTypeVal)
-    var types: seq[Val]
-    for arg in args:
-        if arg.kind == UnionTypeVal and arg.values.len == 0:
-            # A | Any = Any
-            return arg
-        if arg.kind == InterTypeVal and arg.values.len == 0:
-            # A | Never = A
-            continue
-        case arg.kind
-        of SetTypeVal:
-            for val in arg.values:
-                if not set.values.any_it(equal(it, val)):
-                    set.values.add(val)
-        of UnionTypeVal:
-            for val in arg.values:
-                if not types.any_it(equal(it, val)):
-                    types.add(val)
-        else:
-            if not types.any_it(equal(it, arg)):
-                types.add(arg)
-    if set.values.len > 0:
-        types.add(set)
-    return UnionType(types)
+    if args.len == 0: return UnionType()
+    if args.len == 1: return args[0]
+    return norm_union(args[0], args[1])
 
 proc v_inter*(env: Env, args: seq[Val]): Val =
-    var set = Val(kind: SetTypeVal)
-    var types: seq[Val]
-    for arg in args:
-        if arg.kind == UnionTypeVal and arg.values.len == 0:
-            # A & Any = A
-            continue
-        if arg.kind == InterTypeVal and arg.values.len == 0:
-            # A & Never = Never
-            return arg
-        case arg.kind
-        of SetTypeVal:
-            if set.values.len == 0:
-                set.values = arg.values
-                continue
-            var new_set: seq[Val]
-            for val in arg.values:
-                if set.values.any_it(equal(it, val)):
-                    new_set.add(val)
-            set.values = new_set
-        of InterTypeVal:
-            for val in arg.values:
-                if not types.any_it(equal(it, val)):
-                    types.add(val)
-        else:
-            if not types.any_it(equal(it, arg)):
-                types.add(arg)
-    if set.values.len > 0:
-        types.add(set)
-    return InterType(types)
+    if args.len == 0: return InterType()
+    if args.len == 1: return args[0]
+    return norm_inter(args[0], args[1])
 
 proc apply_builtin(env: Env, fun: Val, exp: Exp, expand = true): Val =
     let typ = fun.builtin_typ
@@ -693,8 +649,8 @@ proc v_reify*(env: Env, val: Val): Exp =
         atom(val.name)
     of UnionTypeVal, InterTypeVal, SetTypeVal:
         let op = case val.kind
-        of UnionTypeVal: "|"
-        of InterTypeVal: "&"
+        of UnionTypeVal: "Union"
+        of InterTypeVal: "Inter"
         of SetTypeVal: "Set"
         else: raise
         append(atom(op), val.values.map_it(v_reify(env, it)))
@@ -787,7 +743,7 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 for stat in exp.tail:
                     typ = v_infer(env, stat)
                 return typ
-            of "|", "&", "Union", "Inter", "Set", "Record", "Lambda":
+            of "Union", "Inter", "Set", "Record", "Lambda":
                 return type0
             of "compare":
                 return eval(env, atom("Bool"))
@@ -1004,12 +960,6 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 ensure_args_are_types(env, exp.tail)
                 return v_union(env, exp.tail.map_it(eval(env, it)))
             of "Inter":
-                ensure_args_are_types(env, exp.tail)
-                return InterType(exp.tail.map_it(eval(env, it)))
-            of "|":
-                ensure_args_are_types(env, exp.tail)
-                return v_union(env, exp.tail.map_it(eval(env, it)))
-            of "&":
                 ensure_args_are_types(env, exp.tail)
                 return v_inter(env, exp.tail.map_it(eval(env, it)))
             of "type-of":

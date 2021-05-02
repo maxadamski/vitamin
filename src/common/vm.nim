@@ -131,6 +131,8 @@ func `$`*(x: Val): string = x.str
 
 proc equal*(x, y: Val): bool
 
+proc is_subtype*(x, y: Val): bool
+
 # Nim, why so much boilerplate :(
 
 func Number*(num: int): Val =
@@ -155,6 +157,9 @@ func UnionType*(values: varargs[Val]): Val =
 func InterType*(values: varargs[Val]): Val =
     if values.len == 1: return values[0]
     Val(kind: InterTypeVal, values: @values)
+
+func SetType*(values: varargs[Val]): Val =
+    Val(kind: SetTypeVal, values: @values)
 
 func Record*(fields: varargs[RecField]): Val =
     Val(kind: RecVal, fields: @fields)
@@ -192,20 +197,23 @@ func get_opt*(env: Env, name: string): Option[Var] =
 
 proc sets_inter*(xs, ys: seq[Val]): seq[Val] =
     for x in xs:
-        block inner:
-            for y in ys:
-                if equal(x, y):
-                    result.add(x)
-                    break inner
+        if ys.any_it(equal(x, it)):
+            result.add(x)
 
-proc is_subtype*(x, y: Val): bool =
-    # is x a subtype of y
-    if equal(x, y): return true
-    if y.kind == UnionTypeVal and y.values.len == 0: return true
-    if y.kind == UnionTypeVal: return y.values.any_it(equal(x, it))
-    if y.kind == InterTypeVal and y.values.len == 0: return false
-    if y.kind == SetTypeVal: return sets_inter(x.values, y.values).len > 0
-    return false
+proc value_union*(xs, ys: seq[Val]): seq[Val] =
+    result = xs
+    for y in ys:
+        if result.all_it(not equal(it, y)):
+            result.add(y)
+
+proc value_inter*(xs, ys: seq[Val]): seq[Val] =
+    sets_inter(xs, ys)
+
+proc value_set*(xs: seq[Val]): seq[Val] =
+    for x in xs:
+        if result.any_it(equal(x, it)):
+            continue
+        result.add(x)
 
 proc sets_equal*(xs, ys: seq[Val]): bool =
     if xs.len != ys.len: return false
@@ -216,6 +224,121 @@ proc sets_equal*(xs, ys: seq[Val]): bool =
                     break inner
             return false
     true
+
+proc is_subtype*(x, y: Val): bool =
+    # is x a subtype of y
+    #if y.kind == UnionTypeVal and y.values.len == 0: return true
+    #if y.kind == InterTypeVal and y.values.len == 0: return false
+    if equal(x, y): return true
+    if x.kind == y.kind:
+        case x.kind
+        of SetTypeVal:
+            return equal(x, SetType(sets_inter(x.values, y.values)))
+        of UnionTypeVal:
+            return sets_inter(x.values, y.values).len > 0
+        of InterTypeVal:
+            return value_set(x.values & y.values).len > x.values.len
+        else:
+            discard
+    else:
+        if y.kind == UnionTypeVal:
+            if y.values.len == 0: return true
+            return y.values.any_it(is_subtype(x, it))
+        if y.kind == InterTypeVal:
+            if y.values.len == 0: return false
+            return y.values.all_it(is_subtype(x, it))
+        if x.kind == InterTypeVal:
+            return not is_subtype(y, x)
+        if x.kind == UnionTypeVal:
+            return not is_subtype(y, x)
+    return false
+    #raise error(term(), "Unknown if {x} is subtype of {y}".fmt)
+
+proc norm_union*(args: varargs[Val]): Val =
+    var sets: seq[Val]
+    var types: seq[Val]
+    for outer in args:
+        var outer = outer
+        # recursively normalize unions
+        if outer.kind == UnionTypeVal:
+            outer = norm_union(outer.values)
+        case outer.kind
+        of UnionTypeVal:
+            # X|Any = Any
+            if outer.values.len == 0:
+                return UnionType()
+            # flatten union
+            for inner in outer.values:
+                case inner.kind
+                of SetTypeVal:
+                    sets.add(inner)
+                else:
+                    types.add(inner)
+        of InterTypeVal:
+            # X|Never = X
+            if outer.values.len == 0:
+                continue
+            types.add(outer)
+        of SetTypeVal:
+            sets.add(outer)
+        else:
+            types.add(outer)
+
+    # compute the union of value set types
+    types = types.value_set
+    if sets.len > 0:
+        let values = sets.map_it(it.values).foldl(value_union(a, b))
+        types.add(SetType(values.value_set))
+
+    UnionType(types)
+
+proc norm_inter*(args: varargs[Val]): Val =
+    var sets: seq[Val]
+    var types: seq[Val]
+    var unions: seq[Val]
+    for outer in args:
+        var outer = outer
+        # recursively normalize intersections
+        if outer.kind == InterTypeVal:
+            outer = norm_inter(outer.values)
+        case outer.kind
+        of InterTypeVal:
+            # X&Never = Never
+            if outer.values.len == 0:
+                return InterType()
+            # flatten intersections
+            for inner in outer.values:
+                case inner.kind
+                of SetTypeVal:
+                    sets.add(inner)
+                else:
+                    types.add(inner)
+        of UnionTypeVal:
+            # X&Any = X
+            if outer.values.len == 0:
+                continue
+            unions.add(outer)
+        of SetTypeVal:
+            sets.add(outer)
+        else:
+            types.add(outer)
+
+    types = types.value_set
+
+    # compute the intersection of value set types
+    if sets.len > 0:
+        let values = sets.map_it(it.values).foldl(value_inter(a, b))
+        types.add(SetType(values))
+    result = InterType(types)
+
+    # intersections are distributive over unions
+    if unions.len > 0:
+        var inters: seq[Val]
+        for union in unions:
+            for union_val in union.values:
+                inters.add(norm_inter(union_val, result))
+        return norm_union(inters)
+    return result
 
 proc args_equal(xs, ys: seq[Arg]): bool =
     if xs.len != ys.len: return false
@@ -324,7 +447,7 @@ func str*(v: Val): string =
         let op = if v.kind == UnionTypeVal: " | " else: " & "
         if v.values.len == 0:
             return if v.kind == UnionTypeVal: "Any" else: "Never"
-        v.values.map(str).join(op)
+        "(" & v.values.map(str).join(op) & ")"
 
     of FunVal:
         "Lambda(...)"

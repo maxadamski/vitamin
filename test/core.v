@@ -13,8 +13,8 @@ Str : Type
 Size = U64
 Int = I64
 
-Any = `|`()
-Never = `&`()
+Any = Union()
+Never = Inter()
 Unit = Record()
 unit = ()
 
@@ -114,40 +114,49 @@ test "Value set types"
     assert type-of(red) == Set(red)
     assert Set(red, red) == Set(red)
     assert Set(red, grn, red) == Set(red, grn)
+    assert Set(red, grn, blu) == Set(blu, grn, red)
     assert type-of(red as Set(red, grn, blu)) == Set(red, grn, blu)
     assert type-of(red as Set(red, grn)) != Set(grn, blu)
 
 test "Type union laws"
     A, B, C : Type
     assert type-of(Any) == Type
-    assert `|`(A) == A
+    assert Union(A) == A
     assert (A | Any) == Any
     assert (A | Never) == A
-    assert (A | A) == A
-    assert (A | B) == (B | A)
-    assert (A | (B | C)) == ((A | B) | C)
+    assert (A | A) == A # simplification
+    assert (A | B) == (B | A) # commutativity
+    assert (A | (B | C)) == ((A | B) | C) # associativity
+    assert (A | (B | C)) == ((A | B) | (A | C)) # distributivity
 
 test "Type intersection laws"
-    A, B, C : Type
+    A, B, C, D : Type
     assert type-of(Never) == Type
-    assert `&`(A) == A
+    assert Inter(A) == A
     assert (A & Any) == A
     assert (A & Never) == Never
-    assert (A & A) == A
-    assert (A & B) == (B & A)
-    assert (A & (B & C)) == ((A & B) & C)
+    assert (A & A) == A # simplification
+    assert (A & B) == (B & A) # commutativity
+    assert (A & (B & C)) == ((A & B) & C) # associativity
+    assert (A & (B & C)) == ((A & B) & (A & C)) # distributivity
+    assert (A & (B | C)) == ((A & B) | (A & C)) # distributivity over union
+    assert (A & B & (C | D)) == ((A & B & C) | (A & B & D)) # distributivity over union
 
 test "Union of value set types"
     red = Symbol(red)
     grn = Symbol(grn)
     blu = Symbol(blu)
+    A : Type
     assert (Set(red, grn) | Set(red, blu)) == Set(red, grn, blu)
+    assert (Set(red, grn) | (A | Set(red, blu))) == (Set(red, grn, blu) | A)
 
 test "Intersection of value set types"
     red = Symbol(red)
     grn = Symbol(grn)
     blu = Symbol(blu)
+    A : Type
     assert (Set(red, grn) & Set(red, blu)) == Set(red)
+    assert (Set(red, grn) & (A & Set(red, blu))) == (Set(red) & A)
 
 test "Unit records"
     assert Unit == Record()

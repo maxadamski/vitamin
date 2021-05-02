@@ -1,5 +1,10 @@
-import options, tables, strutils, strformat, algorithm
-export options, tables, strutils, strformat, algorithm
+import options, tables, sequtils, strutils, strformat, algorithm
+export options, tables, sequtils, strutils, strformat, algorithm
+
+# Flatten seq of seqs into seq
+
+func flatten*[A](x: seq[seq[A]]) =
+    x.foldl(a & b)
 
 # Iterate a seq backwards
 

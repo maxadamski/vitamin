@@ -116,7 +116,8 @@ parser.add_infix_left "Mul", "*", "/", "mod", "div"
 parser.add_infix_left "And", "and"
 parser.add_infix_left "Or", "or"
 parser.add_infix_left "Xor", "xor"
-parser.add_infix_left "Set-Type", "|", "&"
+parser.add_infix "Set-Type", "|", fun="Union", left_assoc=StrongerThan
+parser.add_infix "Set-Type", "&", fun="Inter", left_assoc=StrongerThan
 
 # right-associative infix operators
 parser.add_infix_right "Assignment", ":=", "+=", "-=", "*=", "/="
@@ -142,7 +143,6 @@ let group = (("Any".E.plus.list((",".t | "$CNT".tr) & "$CNT".tr.star) & ",".opt)
 let slice = (("Any".e.opt & ":".ts & "Any".e.opt) | "Any".e).named("slice")
 
 parser.add_infix_mix "Comma", ",", ((",".t & "Comma".E).splice.star.splice & ",".opt).splice
-parser.add_prefix_mix "Prefix-Type", "&", "Ptr", ("&".t & ("mut".ts | "imm".ts | "ro".ts | "wo".ts) & "Prefix-Type".e).splice
 
 parser.add_prefix_mix "Group", "(", "(_)", "(".t & group.deepCopy.opt & ")".t
 

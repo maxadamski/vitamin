@@ -15,6 +15,12 @@ run)
 	shift
 	nim r $NIMFLAGS $MAIN $@
 ;;
+test)
+	shift
+	for f in test/*.v; do
+		nim r $NIMFLAGS $MAIN -P $f
+	done
+;;
 release)
 	shift
 	mkdir -p bin
@@ -22,7 +28,7 @@ release)
 ;;
 *)
 	mkdir -p bin
-	nim c -o:$BIN --opt:speed --passC:"-Ofast -march=native" $NIMFLAGS $MAIN
+	nim c -o:$BIN -d:release --opt:speed --passC:"-Ofast -march=native" $NIMFLAGS $MAIN
 ;;
 esac
 
