@@ -13,8 +13,8 @@ Str : Type
 Size = U64
 Int = I64
 
-Any = Union()
-Never = Inter()
+Any = `|`()
+Never = `&`()
 Unit = Record()
 unit = ()
 
@@ -50,20 +50,33 @@ test "Assumed variables"
     # assumed alias equality
     assert I64 == I64-Alias
 
-test "Opaque types"
-    Size = opaque I64
-    Int = opaque I64
+test "Multiple assumption shorthand syntax"
+    A, B, C : Type
+    assert type-of(A) == Type
+    assert type-of(B) == Type
+    assert type-of(C) == Type
+
+test "Opaque values have different identities"
+    A : Type
+    P = opaque A
+    Q = opaque A
 
     # type-of(opaque x) is by definition type-of(x)
-    assert type-of(Size) == Type
-    assert type-of(Int) == Type
+    assert type-of(A) == Type
+    assert type-of(P) == Type
+    assert type-of(Q) == Type
 
     # each opaque value is unique
-    assert Size != Int
-    assert Size != I64
-    assert unwrap(Size) == I64
-    assert unwrap(Int) == I64
-    assert unwrap(Size) == unwrap(Int)
+    assert P != A
+    assert Q != A
+
+test "Opaque value unwrapping"
+    A : Type
+    P = opaque A
+    Q = opaque A
+    assert unwrap(P) == A
+    assert unwrap(Q) == A
+    assert unwrap(P) == unwrap(Q)
 
 test "Integer literals"
     forty-two = 42
@@ -93,29 +106,44 @@ test "Opaque values"
     assert type-of(false) != Int
     assert type-of(none) != Int
 
-test "Set types"
+test "Value set types"
     red = Symbol(red)
     grn = Symbol(grn)
     blu = Symbol(blu)
 
     assert type-of(red) == Set(red)
+    assert Set(red, red) == Set(red)
+    assert Set(red, grn, red) == Set(red, grn)
     assert type-of(red as Set(red, grn, blu)) == Set(red, grn, blu)
     assert type-of(red as Set(red, grn)) != Set(grn, blu)
 
-test "Empty union"
-    # type of set types
+test "Type union laws"
+    A, B, C : Type
     assert type-of(Any) == Type
+    assert `|`(A) == A
+    assert (A | Any) == Any
+    assert (A | Never) == A
+    assert (A | A) == A
+    assert (A | B) == (B | A)
+    assert (A | (B | C)) == ((A | B) | C)
 
-test "Empty intersection"
+test "Type intersection laws"
+    A, B, C : Type
     assert type-of(Never) == Type
+    assert `&`(A) == A
+    assert (A & Any) == A
+    assert (A & Never) == Never
+    assert (A & A) == A
+    assert (A & B) == (B & A)
+    assert (A & (B & C)) == ((A & B) & C)
 
-test "Union of set types"
+test "Union of value set types"
     red = Symbol(red)
     grn = Symbol(grn)
     blu = Symbol(blu)
     assert (Set(red, grn) | Set(red, blu)) == Set(red, grn, blu)
 
-test "Intersection of set types"
+test "Intersection of value set types"
     red = Symbol(red)
     grn = Symbol(grn)
     blu = Symbol(blu)
@@ -128,13 +156,19 @@ test "Unit records"
     assert type-of(unit) == Unit
     assert type-of((x=Unit)) == Record(x: Type)
 
-test "Records"
+test "Single row records"
     Single = Record(x: Type)
     assert type-of(Single) == Type
     assert Single == Record(x: Type)
     assert type-of((x=Unit)) == Single
 
-test "Records invariant to row order"
+test "Record row shorthand syntax"
+    A, B, C : Type
+    R1 = Record(a: A, b: B, c: B, d: C)
+    R2 = Record(a: A, b c: B, d: C)
+    assert R1 == R2
+
+test "Row order doesn't affect record type equality"
     Double = Record(x: Type, y: I64)
     assert type-of(Double) == Type
     assert Double == Record(x: Type, y: I64)
@@ -150,11 +184,8 @@ test "Upcast to Any"
     #assert type-of((true as Any) as Bool) == Bool
 
 test "Opaque functions"
-    x : Type
-    y : Type
-
+    x, y : Type
     Raw-Pointer = opaque (a: Type) => Size
-
     assert Raw-Pointer(x) != Size
     assert Raw-Pointer(x) != Raw-Pointer(y)
     assert Raw-Pointer(x) == Raw-Pointer(x)

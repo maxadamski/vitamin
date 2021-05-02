@@ -542,10 +542,25 @@ proc v_match*(env: Env, lhs, rhs: Exp): bool =
     #echo "match " & lhs.str & " " & rhs.str
     return equal(lhs, rhs)
 
+proc v_value_set*(env: Env, args: seq[Val]): Val =
+    var set: seq[Val]
+    for arg in args:
+        if set.any_it(equal(it, arg)):
+            continue
+        else:
+            set.add(arg)
+    return Val(kind: SetTypeVal, values: set)
+
 proc v_union*(env: Env, args: seq[Val]): Val =
     var set = Val(kind: SetTypeVal)
     var types: seq[Val]
     for arg in args:
+        if arg.kind == UnionTypeVal and arg.values.len == 0:
+            # A | Any = Any
+            return arg
+        if arg.kind == InterTypeVal and arg.values.len == 0:
+            # A | Never = A
+            continue
         case arg.kind
         of SetTypeVal:
             for val in arg.values:
@@ -561,6 +576,37 @@ proc v_union*(env: Env, args: seq[Val]): Val =
     if set.values.len > 0:
         types.add(set)
     return UnionType(types)
+
+proc v_inter*(env: Env, args: seq[Val]): Val =
+    var set = Val(kind: SetTypeVal)
+    var types: seq[Val]
+    for arg in args:
+        if arg.kind == UnionTypeVal and arg.values.len == 0:
+            # A & Any = A
+            continue
+        if arg.kind == InterTypeVal and arg.values.len == 0:
+            # A & Never = Never
+            return arg
+        case arg.kind
+        of SetTypeVal:
+            if set.values.len == 0:
+                set.values = arg.values
+                continue
+            var new_set: seq[Val]
+            for val in arg.values:
+                if set.values.any_it(equal(it, val)):
+                    new_set.add(val)
+            set.values = new_set
+        of InterTypeVal:
+            for val in arg.values:
+                if not types.any_it(equal(it, val)):
+                    types.add(val)
+        else:
+            if not types.any_it(equal(it, arg)):
+                types.add(arg)
+    if set.values.len > 0:
+        types.add(set)
+    return InterType(types)
 
 proc apply_builtin(env: Env, fun: Val, exp: Exp, expand = true): Val =
     let typ = fun.builtin_typ
@@ -946,7 +992,6 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                     res = eval(env, stat)
                 return res
 
-
             of "Symbol":
                 ensure_arg_count(exp, 1)
                 if exp[1].kind != expAtom:
@@ -954,7 +999,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 return Val(kind: SymbolVal, name: exp[1].value)
             of "Set":
                 ensure_args_are_not_types(env, exp.tail)
-                return Val(kind: SetTypeVal, values: exp.tail.map_it(eval(env, it)))
+                return v_value_set(env, exp.tail.map_it(eval(env, it)))
             of "Union":
                 ensure_args_are_types(env, exp.tail)
                 return v_union(env, exp.tail.map_it(eval(env, it)))
@@ -966,7 +1011,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 return v_union(env, exp.tail.map_it(eval(env, it)))
             of "&":
                 ensure_args_are_types(env, exp.tail)
-                return InterType(exp.tail.map_it(eval(env, it)))
+                return v_inter(env, exp.tail.map_it(eval(env, it)))
             of "type-of":
                 ensure_arg_count(exp, 1)
                 return v_type_macro(env, exp[1])
