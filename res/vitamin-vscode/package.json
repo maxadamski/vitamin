@@ -1,0 +1,35 @@
+{
+    "name": "vitamin",
+    "displayName": "Vitamin",
+    "description": "Vitamin programming language support",
+    "version": "0.0.1",
+    "publisher": "maxadamski",
+    "icon": "icon.png",
+    "engines": {
+        "vscode": "^1.25.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "vitamin",
+            "aliases": ["Vitamin", "vitamin"],
+            "extensions": [".v", ".vita"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "vitamin",
+            "scopeName": "source.v",
+            "path": "./syntaxes/vitamin.tmLanguage"
+        }]
+    },
+    "bugs": {
+        "url": "https://github.com/maxadamski/vitamin/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/maxadamski/vitamin.git"
+    },
+    "homepage": "https://maxadamski.com/vitamin/"
+}

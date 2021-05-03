@@ -1,0 +1,72 @@
+fileTypes: ["v", "vita"]
+name: Vitamin
+scopeName: source.v
+uuid: b5a8b312-87b3-45e7-9258-7a3e50d1af3b
+
+patterns:
+- name: keyword.control.vitamin
+  match: \b(let|var|use|use-syntax|use-macro|use-implicit|fun|test|assert|opaque|Lazy|Quoted|Expand|Args|undefined|unreachable)\b
+- name: storage.modifier.vitamin
+  match: \b(tag|imm|mut|rd|wr)\b
+- name: keyword.other.vitamin
+  match: \b(do|if|elif|else|while|for|case|of|defer|guard|pass|label|jump|block|with|where|return|continue|break|quote|shift|reset)\b
+- name: storage.type.vitamin
+  match: \b(Type|Unit|None|Bool|Any|Never|Union|Inter|Record|Variant|Enum|Module|Array|List|Set|Map|Ptr|Str|Int|Size|Float|I8|I16|I32|I64|U8|U16|U32|U64|F32|F64)\b
+
+- name: comment.block.vitamin
+  begin: '#\['
+  end: ']#'
+- name: comment.line.double-slash.vitamin
+  match: "#.*$\n?"
+
+- name: keyword.control.arrow.vitamin
+  match: =\>|-\>|\<-
+- name: keyword.operator.vitamin
+  match: \b(is|as|in)\b
+- name: keyword.operator.logical.vitamin
+  match: ==|!=|<=|>=|<|>
+- name: keyword.operator.logical.vitamin
+  match: \b(not|and|or|xor)\b
+- name: keyword.operator.vitamin
+  match: (:=|:|=|==|!=|<=|>=|<|>|-|\+|\*|\||&|\?|\?\?|\$|\$\$)|((?<=[^\.])\.\.\.(?=[^\.]))|((?<=[^\.])\.(?=[^\.]))
+- name: keyword.operator.vitamin
+  match: \b(div|mod)\b
+
+- name: variable.language.vitamin
+  match: \b(self|\$[0-9]+)\b
+- name: support.type.vitamin
+  match: \b[A-Z][A-Za-z0-9_-]*\b
+- name: entity.name.varaible
+  match: \b[@]?[A-Za-z_][A-Za-z0-9_-]*\b
+- name: punctuation.separator.comma.vitamin
+  match: ','
+- name: punctuation.separator.semicolon.vitamin
+  match: ';'
+
+- name: constant.numeric.decimal.vitamin
+  match: \b-?[0-9]+(\.[0-9]+)?[A-Za-z]*\b
+- name: constant.numeric.octal.vitamin
+  match: \b-?0o[0-7]+\b
+- name: constant.numeric.hex.vitamin
+  match: \b-?0x[0-9A-Fa-f]+\b
+- name: constant.numeric.bin.vitamin
+  match: \b-?0b[01]+\b
+
+- name: string.quoted.block.vitamin
+  begin: '"""'
+  end: '"""'
+- name: string.quoted.block.vitamin
+  begin: >-
+    '''
+  end: >-
+    '''
+- name: string.quoted.double.vitamin
+  match: '"(\.|[^"])*"'
+- name: string.quoted.single.vitamin
+  match: >-
+    '(\.|[^\'])*'
+- name: string.quoted.single.vitamin
+  match: '`.*`'
+
+- name: constant.language.vitamin
+  match: \b(true|false|none)\b
