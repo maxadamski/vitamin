@@ -16,7 +16,29 @@ Int = I64
 Any = Inter()
 Never = Union()
 Unit = Record()
-unit = ()
+
+true = Symbol(true)
+false = Symbol(false)
+none = Symbol(none)
+Bool = Set(true, false)
+None = Set(none)
+
+Lazy : (x: Type) -> Type
+
+`and` = (x y: Lazy(Bool)) -> Bool =>
+	case x
+	of true y
+	of false false 
+
+`or` = (x y: Lazy(Bool)) -> Bool =>
+	case x
+	of true true
+	of false y
+
+`not` = (x: Bool) -> Bool =>
+	case x
+	of true false
+	of false true
 
 test "Variable identity"
     # identity
@@ -159,6 +181,7 @@ test "Intersection of value set types"
     assert (Set(red, grn) & (A & Set(red, blu))) == (Set(red) & A)
 
 test "Unit records"
+    unit = ()
     assert Unit == Record()
     assert unit == ()
     assert type-of(Unit) == Type
@@ -201,3 +224,19 @@ test "Opaque functions"
     assert unwrap(Raw-Pointer(x)) == Size
     assert unwrap(Raw-Pointer(y)) == Size
     assert unwrap(Raw-Pointer(x)) == unwrap(Raw-Pointer(y))
+
+test "Bool operators"
+    assert (not true) == false
+    assert (not false) == true
+
+    assert (true and true) == true
+    assert (false and true) == false
+    assert (true and false) == false
+    assert (false and false) == false
+
+    assert (true or true) == true
+    assert (false or true) == true
+    assert (true or false) == true
+    assert (false or false) == false
+
+    # TODO: fix short-circuiting

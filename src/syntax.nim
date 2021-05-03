@@ -88,7 +88,7 @@ parser.add_groups "Use As Qualifier Member Not And Or Xor Cmp Lambda Definition 
 
 # oprerator group order definitions
 parser.add_order "Apply > Group > Pow-Base > Inverse > Pow > Mul > Add > As > Assignment Definition"
-parser.add_order "Apply > Group > Cmp > Not > And Or Xor > Statement > Lambda > Assignment Definition"
+parser.add_order "Apply > Group > Cmp Not > And Or Xor > Statement > Lambda > Assignment Definition"
 parser.add_order "Add Mul Inverse > Cmp > Lambda"
 parser.add_order "Group > Prefix-Type > Set-Type > Lambda-Type > Comma > Typing > Assignment Definition"
 parser.add_order "Lambda-Type Apply > Set-Type > Lambda"
