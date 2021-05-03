@@ -3,6 +3,7 @@ The Vitamin Programming Language
 
 Vitamin grants you great power you need it, and doesn't get in your way, when you don't.
 
+**NOTE:** The language is currently a work-in-progress, so expect most things not to work!
 
 ## Features
 
