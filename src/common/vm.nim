@@ -242,15 +242,15 @@ proc is_subtype*(x, y: Val): bool =
             discard
     else:
         if y.kind == UnionTypeVal:
-            if y.values.len == 0: return true
+            if y.values.len == 0: return false
             return y.values.any_it(is_subtype(x, it))
         if y.kind == InterTypeVal:
-            if y.values.len == 0: return false
+            if y.values.len == 0: return true
             return y.values.all_it(is_subtype(x, it))
-        if x.kind == InterTypeVal:
-            return not is_subtype(y, x)
-        if x.kind == UnionTypeVal:
-            return not is_subtype(y, x)
+        #if x.kind == InterTypeVal:
+        #    return not is_subtype(y, x)
+        #if x.kind == UnionTypeVal:
+        #    return not is_subtype(y, x)
     return false
     #raise error(term(), "Unknown if {x} is subtype of {y}".fmt)
 
@@ -264,9 +264,6 @@ proc norm_union*(args: varargs[Val]): Val =
             outer = norm_union(outer.values)
         case outer.kind
         of UnionTypeVal:
-            # X|Any = Any
-            if outer.values.len == 0:
-                return UnionType()
             # flatten union
             for inner in outer.values:
                 case inner.kind
@@ -275,9 +272,9 @@ proc norm_union*(args: varargs[Val]): Val =
                 else:
                     types.add(inner)
         of InterTypeVal:
-            # X|Never = X
+            # X|Any = Any
             if outer.values.len == 0:
-                continue
+                return InterType()
             types.add(outer)
         of SetTypeVal:
             sets.add(outer)
@@ -303,9 +300,6 @@ proc norm_inter*(args: varargs[Val]): Val =
             outer = norm_inter(outer.values)
         case outer.kind
         of InterTypeVal:
-            # X&Never = Never
-            if outer.values.len == 0:
-                return InterType()
             # flatten intersections
             for inner in outer.values:
                 case inner.kind
@@ -314,9 +308,9 @@ proc norm_inter*(args: varargs[Val]): Val =
                 else:
                     types.add(inner)
         of UnionTypeVal:
-            # X&Any = X
+            # X&Never = Never
             if outer.values.len == 0:
-                continue
+                return UnionType()
             unions.add(outer)
         of SetTypeVal:
             sets.add(outer)
@@ -446,7 +440,7 @@ func str*(v: Val): string =
     of UnionTypeVal, InterTypeVal:
         let op = if v.kind == UnionTypeVal: " | " else: " & "
         if v.values.len == 0:
-            return if v.kind == UnionTypeVal: "Any" else: "Never"
+            return if v.kind == UnionTypeVal: "Never" else: "Any"
         "(" & v.values.map(str).join(op) & ")"
 
     of FunVal:

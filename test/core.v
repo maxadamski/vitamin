@@ -13,8 +13,8 @@ Str : Type
 Size = U64
 Int = I64
 
-Any = Union()
-Never = Inter()
+Any = Inter()
+Never = Union()
 Unit = Record()
 unit = ()
 
@@ -120,7 +120,7 @@ test "Value set types"
 
 test "Type union laws"
     A, B, C : Type
-    assert type-of(Any) == Type
+    assert type-of(Never) == Type
     assert Union(A) == A
     assert (A | Any) == Any
     assert (A | Never) == A
@@ -131,7 +131,7 @@ test "Type union laws"
 
 test "Type intersection laws"
     A, B, C, D : Type
-    assert type-of(Never) == Type
+    assert type-of(Any) == Type
     assert Inter(A) == A
     assert (A & Any) == A
     assert (A & Never) == Never

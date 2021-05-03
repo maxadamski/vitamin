@@ -490,7 +490,7 @@ The intersection of no types is `&`, and is used to define `Any`. All types are 
 
 The union of no types is `|`, and is used to define `Never`, a type representing an impossible value. Such a value is useful to represent an infinite loop or a function that never returns (for example `Basic.exit`), since they will *never* produce a value. Some languages call this type `noreturn` or a bottom type.
 
-The following laws apply.
+The following laws apply for unions.
 
 	1. A|B     == B|A      # commutativity
 	2. A|(B|C) == (A|B)|C  # associativity
@@ -504,6 +504,19 @@ The following reductions follow.
 	A|Never == A
 	A|A     == A
 
+The following laws apply for intersections.
+
+	1. A&B     == B&A      # commutativity
+	2. A&(B&C) == (A&B)&C  # associativity
+	3. A&B     == A        # simplification (if B is subtype of A)
+	4. A&B is subtype of A
+	5. if A and B are supertypes of C, then A&B is a supertype of C
+
+The following reductions follow.
+
+	ArAny   == A
+	A&Never == Never
+	A&A     == A
 
 # Set Types
 

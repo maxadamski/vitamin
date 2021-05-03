@@ -13,9 +13,9 @@ Quoted, Lazy, Args, Expand : (a: Type) -> Type
 
 Unit = Record()
 
-Never = Inter()
+Never = Union()
 
-Any = Union()
+Any = Inter()
 
 undefined : Never
 
