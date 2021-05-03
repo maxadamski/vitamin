@@ -32,6 +32,8 @@ patterns:
 - name: keyword.operator.vitamin
   match: \b(div|mod)\b
 
+- name: constant.language.vitamin
+  match: \b(true|false|none)\b
 - name: variable.language.vitamin
   match: \b(self|\$[0-9]+)\b
 - name: support.type.vitamin
@@ -67,6 +69,3 @@ patterns:
     '(\.|[^\'])*'
 - name: string.quoted.single.vitamin
   match: '`.*`'
-
-- name: constant.language.vitamin
-  match: \b(true|false|none)\b

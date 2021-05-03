@@ -92,6 +92,12 @@
       </dict>
       <dict>
         <key>name</key>
+        <string>constant.language.vitamin</string>
+        <key>match</key>
+        <string>\b(true|false|none)\b</string>
+      </dict>
+      <dict>
+        <key>name</key>
         <string>variable.language.vitamin</string>
         <key>match</key>
         <string>\b(self|\$[0-9]+)\b</string>
@@ -177,12 +183,6 @@
         <string>string.quoted.single.vitamin</string>
         <key>match</key>
         <string>`.*`</string>
-      </dict>
-      <dict>
-        <key>name</key>
-        <string>constant.language.vitamin</string>
-        <key>match</key>
-        <string>\b(true|false|none)\b</string>
       </dict>
     </array>
   </dict>

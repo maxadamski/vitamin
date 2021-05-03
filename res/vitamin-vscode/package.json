@@ -2,7 +2,7 @@
     "name": "vitamin",
     "displayName": "Vitamin",
     "description": "Vitamin programming language support",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "maxadamski",
     "icon": "icon.png",
     "engines": {
