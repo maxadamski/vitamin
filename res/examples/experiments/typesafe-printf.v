@@ -1,4 +1,4 @@
-Format-Params = (format: String) -> Type =>
+Format-Params(format: String) -> Type =
 	format = format.strip-left-except("%")
 	if format.empty
 		return Unit

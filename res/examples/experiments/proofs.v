@@ -1,6 +1,6 @@
 
 # function with a proof as an implicit parameter
-safe-index = (array: [A], index: U64; in-bounds: Proof(0 <= index < array.len) = _) -> A =>
+safe-index(array: [A], index: U64; in-bounds: Proof(0 <= index < array.len) = _) -> A =
 	array[index]
 
 a = [1 2 3 4]
@@ -25,10 +25,8 @@ if proof-1 = proof(0 <= i < a.len)
 	print(proof-1)
 	assert is-correct(safe-index(a, i, in-bounds=proof-1)
 
-# valid - proofs must sometimes be computed at runtime
+# valid - proofs can be computed at runtime
 
-proof-2 = impure-runtime-bounds-check(p, min=0, max=a.len)
+proof-2 = impure-runtime-bounds-check(i, min=0, max=a.len)
 if proof-2:
 	assert is-correct(safe-index(a, i, in-bounds=proof-2))
-
-

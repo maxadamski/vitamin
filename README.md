@@ -25,7 +25,7 @@ Documentation and more examples are also mirrored on the [Vitamin language websi
 **Simple Fizz Buzz**
 
 ```vitamin
-fizzbuzz = (i: Int) =>
+fizzbuzz(i: Int) =
 	case
 	of i mod 15 == 0 'FizzBuzz'
 	of i mod  3 == 0 'Fizz'
@@ -41,10 +41,10 @@ for i in irange(1, 100)
 
 ```vitamin
 # Vectors of length `n` and element type `a` are pointers to mutable `a` 
-Vector = opaque (n: Size, a: Type) => &mut a
+opaque Vector(n: Size, a: Type) = &mut a
 
 # Parameters `n`, `m` and `a` will be computed and passed implicitly
-concat = (x: Vector($n, $a), y: Vector($m, a)) -> Vector(n+m, a) =>
+concat(x: Vector($n, $a), y: Vector($m, a)) -> Vector(n+m, a) =
 	items = new(mut a, count=n+m)
 	copy(from=x.items, to=items, count=n)
 	copy(from=y.items, to=offset(items, n), count=m)

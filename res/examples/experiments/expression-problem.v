@@ -1,5 +1,5 @@
 # Solving the expression problem with "type classes".
-# This should have no runtime overhead.
+# This must have no runtime overhead.
 
 # 1. initial data types and oprations
 
@@ -27,7 +27,7 @@ use Hash-Add = (hash = (x: Add) => hash-int(x.lhs + x.rhs))
 
 # 3. Adding a new data type
 
-Sub = {lhs rhs: Int}
+Sub = Record(lhs rhs: Int)
 
 use Eval-Sub = (eval = (x: Sub) => x.lhs - x.rhs)
 use Show-Sub = (eval = (x: Sub) => '\(x.lhs) - \(x.rhs)')

@@ -8,7 +8,7 @@ Equal = (A: Type) => {
 	`!=` : (x y: A) -> Bool => not x == y
 }
 
-Order = (A: Type, ?equal: Equal(A)) => {
+Order = (A: Type, equal: Equal(A) = _) => {
 	use equal
 	`>`  : (x y: A) -> Bool
 	`<`  = (x y: A) -> Bool => not x > y or x == y

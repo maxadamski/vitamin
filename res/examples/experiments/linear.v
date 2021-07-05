@@ -1,14 +1,14 @@
 # test linear types
 
-Handle = unique {fd: Size}
+Handle = unique Record(fd: Size)
 
-open = (path: String) -> Handle =>
+open(path: String) -> Handle =
 	Handle(fd=Sys.open(path))
 
-write = (handle: Handle, bytes: &U8) -> Size =>
+write(handle: Handle, bytes: &U8) -> Size =
 	Sys.write(handle.fd, bytes)
 
-close = (handle: move Handle) -> Unit =>
+close(handle: move Handle) -> Unit =
 	Sys.close(handle.fd)
 	drop handle
 

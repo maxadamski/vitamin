@@ -1,14 +1,12 @@
-import matrix
-import glfw
-import gl
+use import tensor, glfw, gl
 
-vertices = [
-	-0.6 -0.4 1 0 0;
-	 0.6 -0.4 0 1 0;
-	 0.0  0.6 0 0 1;
- ]
+vertices : Tensor = [
+	-0.6 -0.4 1 0 0,
+	0.6 -0.4 0 1 0,
+	0.0  0.6 0 0 1,
+]
 
-vertex-shader-text = "
+vertex-shader-text = """
 #version 110
 uniform mat4 MVP;
 attribute vec3 vCol;
@@ -17,24 +15,24 @@ varying vec3 color;
 void main() {
 	gl_Position = MVP * vec4(vPos, 0.0, 1.0);
 }
-"
+"""
 
-fragment-shader-text = "
+fragment-shader-text = """
 #version 110
 varying vec3 color;
 void main() {
 	gl_FragColor = vec4(color, 1.0);
 }
-"
+"""
 
-on-error = (code: I32, text: String) =>
+on-error(code: I32, text: String) =
 	print(stderr, "error: \(text)")
  
-on-key = (window: &Window, key code action mods: I32) =>
+on-key(window: &Window, key code action mods: I32) =
 	if key == .escape and action == .press
 		set-window-should-close(window, true)
 
-main = () =>
+main() =
 	error-callback(on-error)
 	if not glfw.init() return
 	defer glfw.terminate()
@@ -55,12 +53,12 @@ main = () =>
 	link(program)
 
 	mvp-loc = uniform-location(program, 'MVP')
-	(vpos-loc, vcol-loc) = attribute-locations(program, 'vPos', 'vCol')
+	vpos-loc, vcol-loc = attribute-locations(program, 'vPos', 'vCol')
 	vertex-attribute(vpos-loc, 2, Float)
 	vertex-attribute(vcol-loc, 3, Float)
 
 	while not window-closed(window)
-		(width, height) = framebuffer-size(window)
+		width, height = framebuffer-size(window)
 		ratio = width / height
 		viewport(0, 0, width, height)
 		clear(.color-buffer-bit)
