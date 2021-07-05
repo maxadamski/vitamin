@@ -3,11 +3,10 @@
 # Core
 #
 
-Has-Prelude : Type
-
-Atom, Term : Type
-
-Expr = Term | Atom
+{`:` Has-Prelude Type}
+{`:` Atom Type}
+{`:` Term Type}
+{define Expr {Union Term Atom}}
 
 Quoted, Lazy, Args, Expand : (a: Type) -> Type
 
@@ -47,29 +46,29 @@ Tril = Set(true, false, none)
 imm = Symbol(imm)
 mut = Symbol(mut)
 tag = Symbol(tag)
-rd = Symbol(rd)
-wr = Symbol(wr)
-Cap = Set(imm, mut, tag, rd, wr)
-Cap-Readable = Set(mut, rd, imm)
-Cap-Writable = Set(mut, wr)
+rdo = Symbol(rdo)
+wro = Symbol(wro)
+Cap = Set(imm, mut, tag, rdo, wro)
+Cap-Readable = Set(mut, rdo, imm)
+Cap-Writable = Set(mut, wro)
 
 # generic pointer
 Ptr = opaque (cap: Cap, a: Type) => Size
 
 # pointer with any writable capability
-Writable = (cap: Cap-Writable, a: Type) => Ptr(cap, a)
+Writable = (cap: Cap-Writable = _, a: Type) => Ptr(cap, a)
 
 # pointer with any readable capability
-Readable = (cap: Cap-Readable, a: Type) => Ptr(cap, a)
+Readable = (cap: Cap-Readable = _, a: Type) => Ptr(cap, a)
 
 # remove immutability optimizations
-imm-to-rd : (a: Type, p: Ptr(imm, a)) -> Ptr(rd, a)
+imm-to-rdo : (a: Type, p: Ptr(imm, a)) -> Ptr(rdo, a)
 
 # remove write capability
-mut-to-rd : (a: Type, p: Ptr(mut, a)) -> Ptr(rd, a)
+mut-to-rdo : (a: Type, p: Ptr(mut, a)) -> Ptr(rdo, a)
 
 # remove read capability
-mut-to-wr : (a: Type, p: Ptr(mut, a)) -> Ptr(wr, a)
+mut-to-wro : (a: Type, p: Ptr(mut, a)) -> Ptr(wro, a)
 
 # remove read and write capabilities
 any-to-tag : (cap: Cap, a: Type = _, p: Ptr(cap, a)) -> Ptr(tag, a)
@@ -136,9 +135,9 @@ Str = opaque Ptr(imm, U8)
 
 concat : (left right: Str) -> Str
 
-join : (items: Args(List(rd, Str)); start sep end: Str) -> Str
+join : (items: Args(List(rdo, Str)); start sep end: Str) -> Str
 
-split : (it: Str, separator: Str; count: ?Int = none) -> List(rd, Str)
+split : (it: Str, separator: Str; count: ?Int = none) -> List(rdo, Str)
 
 has-prefix = (it prefix: Str) -> Bool =>
 	it.len >= prefix.len and it[:prefix.len] == prefix
@@ -181,7 +180,7 @@ read : (file = stdin, bytes: ?Size = none) -> Str
 
 write : (file = stdout, string: Str) -> Unit
 
-print = (file = stdout, values: Args(List(rd, Any)); sep: Str, end: Str) -> Unit =>
+print = (file = stdout, values: Args(List(rdo, Any)); sep: Str, end: Str) -> Unit =>
 	if values.len > 0
 		write(file, values[0])
 		for x in values
@@ -309,32 +308,4 @@ for-each = (it: Bucket-Array(A), operation: A -> Unit) =>
 		for item in bucket.items
 			operation(item)
 
-]#
-
-
-#fix = (r: Type, f: (x: a) -> a) -> a => f(fix(f), x)
-
-#fix = (a: Type, f: (_: a) -> a) => (x: a) => f(fix(f))(x)
-
-`while` = (cond body: Quoted(Expr)) -> Expand(Expr) =>
-	loop = gensym()
-	quote
-		$loop = () =>
-			case $cond
-			of true 
-				$body
-				$loop()
-			of false
-				()
-		$loop()
-
-#[
-i = ref(mut, Int, 0)
-j = ref(mut, Int, 0)
-while *i < 10
-	j := 0
-	while *j < 10
-		print(*i, *j)
-		j := *j + 1
-	i := *i + 1
 ]#

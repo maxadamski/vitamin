@@ -6,6 +6,8 @@ const debug_interp = 0
 
 var global_fun_id: uint32 = 1000
 
+var next_gensym_id = 0
+
 # boilerplate declarations
 #proc norm*(env: Env, exp: Exp): Exp
 proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val
@@ -243,7 +245,7 @@ proc make_lambda_type(env: Env, params: seq[Exp], ret: Exp, body: Option[Exp]): 
     (typ: fun_typ, env: local)
 
 proc desugar_lambda_type_params(exp: Exp): seq[Exp] =
-    if not exp.has_prefix("(_)"): assert false
+    if not exp.has_prefix("(_)"): raise error(exp, "Lambda parameters must be surrounded by round parens. {exp.src}".fmt)
     let total = exp[1]
     for outer in total.exprs:
         for inner in outer.exprs:
@@ -362,13 +364,51 @@ proc expand_square_group(env: Env, args: seq[Val]): Val =
     return VExp(append(atom("list"), total_list))
 
 proc expand_apply(env: Env, args: seq[Val]): Val =
-    return VExp(concat(args[0].exp, args[1].exp))
+    # `()` : (func: Expr, args: [[[Expr]]]) -> Eval(Expr)
+
+    # Anatomy of a group:
+    # (a b, d e; f g, h i)
+    #  _ _  _ _  _ _  _ _ exprs       (level 0)
+    #  ---  ---  ---  --- inner group (level 1)
+    #  --------  -------- outer group (level 2)
+    #  ------------------ total group (level 3)
+
+    var call = @[args[0].exp]
+    let total = args[1].exp
+    assert total.len <= 1
+    for outer in total.exprs:
+        for inner in outer.exprs:
+            for exp in inner.exprs:
+                call &= exp
+    return VExp(term(call))
+
+proc expand_define(env: Env, args: seq[Val]): Val =
+    let (lhs, rhs) = (args[0].exp, args[1].exp)
+    if lhs.is_term:
+        if lhs.has_prefix("->"):
+            # short function definition with return type
+            let name = lhs[1][1]
+            let params = term(atom("(_)"), lhs[1][2])
+            let res_typ = lhs[2]
+            let fun_typ = term(atom("->"), params, res_typ)
+            let fun = append(atom("=>"), fun_typ, rhs)
+            return VExp(append(atom("define"), name, fun))
+        if lhs.has_prefix("()"):
+            # short function definition or pattern matching
+            let name = lhs[1]
+            let params = term(atom("(_)"), lhs[2])
+            let fun = append(atom("=>"), params, rhs)
+            return VExp(append(atom("define"), name, fun))
+    return VExp(append(atom("define"), lhs, rhs))
 
 proc expand_compare(env: Env, exp: Exp): Exp =
     # TODO: handle more cases
     let args = exp.tail
     if args.len != 3: raise error(exp, "Only two-argument comparisons are supported right now. {exp.src}".fmt)
     term(args[1], args[0], args[2])
+
+proc eval_compare(env: Env, args: seq[Val]): Val =
+    VExp(expand_compare(env, args[0].exp))
 
 proc v_cast(env: Env, val: Val, dst_typ: Val, exp: Exp = term()): Val =
     var val = val
@@ -479,6 +519,15 @@ proc quasiquote(env: Env, x: Exp): Exp =
             exprs.add(quasiquote(env, sub))
     term(exprs)
 
+proc eval_gensym(env: Env, args: seq[Val]): Val =
+    # ref : (cap: Cap, type: Type, value: type) -> Ptr(cap, type)
+    next_gensym_id += 1
+    return VExp(atom("__" & $next_gensym_id))
+
+proc eval_quote(env: Env, args: seq[Val]): Val =
+    let exp = args[0].exp
+    return Val(kind: ExpVal, exp: quasiquote(env, exp))
+
 #endregion
 
 proc v_levelof*(env: Env, val: Val): int =
@@ -488,8 +537,16 @@ proc v_levelof*(env: Env, val: Val): int =
     of UnionTypeVal, InterTypeVal: max_or(val.values.map_it(v_levelof(env, it)), default=0)
     of RecTypeVal: max_or(val.slots.map_it(v_levelof(env, it.typ)), default=0)
     of SetTypeVal: 0
-    #of FunTypeVal: max(max_or(val.fun_typ.params.map_it(v_levelof(env, it.typ)), default=0), v_levelof(env, val.fun_typ.ret_typ))
-    else: raise error("`level-of` expected an argument of Type, but got {v_typeof(env, val)}.")
+    of FunTypeVal:
+        let local = env.extend()
+        let typ = val.fun_typ
+        var max_level = 0
+        for par in typ.params:
+            local.assume(par.name, eval(local, par.typ))
+            max_level = max(max_level, v_level_of(local, v_infer(local, par.typ)))
+        max_level = max(max_level, v_level_of(local, v_infer(local, typ.result)))
+        return max_level
+    else: raise error("`level-of` expected an argument of Type, but got {val.str}.".fmt)
 
 proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
     if val.typ.is_some: return val.typ.get
@@ -702,7 +759,7 @@ proc v_infer*(env: Env, exp: Exp): Val =
 
         if exp.len >= 1 and exp[0].kind == expAtom:
             case exp[0].value:
-            of "=":
+            of "define":
                 ensure_arg_count(exp, 2)
                 if exp[1].kind != expAtom:
                     raise error(exp[1], "Expected an Atom on the left side of definition, but found Term {exp[1]}. {exp[1].src}".fmt)
@@ -729,6 +786,8 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 for branch in branches:
                     types.add(v_infer(env, branch[1]))
                 return v_union(env, types)
+            of "compare":
+                return eval(env, atom("Bool"))
             of "if":
                 #echo exp
                 var types: seq[Val]
@@ -745,14 +804,10 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 return typ
             of "Union", "Inter", "Set", "Record", "Lambda":
                 return type0
-            of "compare":
-                return eval(env, atom("Bool"))
             of "list":
                 return eval(env, atom("List"))
             of "Symbol":
                 return Val(kind: SymbolTypeVal, name: exp[1].value)
-            of "quote":
-                return eval(env, atom("Expr"))
             of "print":
                 return RecordType()
             of "opaque":
@@ -835,6 +890,9 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
 
         if exp.len >= 1 and exp[0].kind == expAtom:
             case exp[0].value
+            of "{_}":
+                return eval(env, term(exp.tail))
+
             of ":":
                 ensure_arg_count(exp, 2)
                 let lhs = exp[1]
@@ -856,7 +914,7 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
 
                 return unit
             
-            of "=":
+            of "define":
                 ensure_arg_count(exp, 2)
                 if exp[1].kind != expAtom:
                     raise error(exp[1], "Expected an Atom on the left side of definition, but found Term {exp[1]}. {exp[1].src}".fmt)
@@ -932,6 +990,9 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 else:
                     return eval(env, atom("false"))
 
+            of "compare":
+                return eval(env, expand_compare(env, exp))
+
             of "case":
                 let switch = exp[1]
                 let typ = v_infer(env, switch)
@@ -972,9 +1033,6 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
             of "print":
                 echo exp.tail.map_it(eval(env, it)).join(" ")
                 return unit
-            of "quote":
-                ensure_arg_count(exp, 1)
-                return Val(kind: ExpVal, exp: quasiquote(env, exp[1]))
             of "opaque":
                 ensure_arg_count(exp, 1)
                 let val = eval(env, exp[1])
@@ -1012,8 +1070,6 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 return eval_record_type(env, exp)
             of "record":
                 return eval_record(env, exp)
-            of "compare":
-                return eval(env, expand_compare(env, exp))
 
         if exp.len >= 1:
             let fun = eval(env, exp[0])
@@ -1041,6 +1097,15 @@ proc define(env: Env, name: string, val: Val) =
 
 var global_env* = Env(parent: nil)
 global_env.define "Type", type0
+
+global_env.define "=", Val(kind: BuiltinFunVal, builtin_fun: expand_define, builtin_typ: FunTyp(
+    params: @[
+        FunParam(name: "pattern", typ: atom("Expr"), quoted: true),
+        FunParam(name: "expr", typ: atom("Expr"), quoted: true),
+    ],
+    result: atom("Expr"),
+    is_macro: true,
+))
 
 global_env.define "(_)", Val(kind: BuiltinFunVal, builtin_fun: expand_group, builtin_typ: FunTyp(
     params: @[
@@ -1125,12 +1190,6 @@ global_env.define "ref", Val(kind: BuiltinFunVal, builtin_fun: eval_ref, builtin
     result: term(atom("Ptr"), atom("cap"), atom("type")),
 ))
 
-var next_sym = 0
-proc eval_gensym(env: Env, args: seq[Val]): Val =
-    # ref : (cap: Cap, type: Type, value: type) -> Ptr(cap, type)
-    next_sym += 1
-    return VExp(atom("__" & $next_sym))
-
 global_env.define "gensym", Val(kind: BuiltinFunVal, builtin_fun: eval_gensym, builtin_typ: FunTyp(
     params: @[],
     result: atom("Atom"),
@@ -1149,4 +1208,11 @@ global_env.define "assert", Val(kind: BuiltinFunVal, builtin_fun: eval_assert, b
         FunParam(name: "assertion", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Unit"),
+))
+
+global_env.define "quote", Val(kind: BuiltinFunVal, builtin_fun: eval_quote, builtin_typ: FunTyp(
+    params: @[
+        FunParam(name: "expr", typ: atom("Expr"), quoted: true),
+    ],
+    result: atom("Expr"),
 ))

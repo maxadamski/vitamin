@@ -109,7 +109,6 @@ parser.add_infix_none "As", "as", "??"
 
 # left-associative infix operators
 parser.add_infix_left "Member", "."
-parser.add_infix_left "Definition", "="
 parser.add_infix_left "Typing", ":"
 parser.add_infix_left "Add", "+", "-"
 parser.add_infix_left "Mul", "*", "/", "mod", "div"
@@ -148,13 +147,17 @@ parser.add_prefix_mix "Group", "(", "(_)", "(".t & group.deepCopy.opt & ")".t
 
 parser.add_prefix_mix "Group", "[", "[_]", "[".t & group.deepCopy.opt & "]".t
 
+parser.add_prefix_mix "Group", "{", "{_}", ("{".t & "Any".E.star & "}".t).splice
+
 parser.add_infix_mix "Apply", "[", "[]", ("[".t & slice.list(",") & ",".opt & "]".t).splice
 
-parser.add_infix_mix "Apply", "(", "()", "(".t & "Any".E.list(",".t & "$CNT".tr.star).opt & ",".opt & ")".t
+parser.add_infix_mix "Apply", "(", "()", "(".t & group.deepcopy.opt & ")".t
 
 parser.add_prefix_mix "Apply", "Variant", "Variant".t & "(".t & group.deepCopy.opt  & ")".t
 
 parser.add_infix_mix "Pow-Base", "^", "^".t & "Pow".e
+
+parser.add_infix_mix "Definition", "=", "=".t & "Definition".b
 
 parser.add_infix_mix "Lambda", "=>", "=>".t & "Lambda".b
 

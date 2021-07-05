@@ -375,6 +375,8 @@ proc equal*(x, y: Val): bool =
         x.name == y.name
     of SetTypeVal, UnionTypeVal, InterTypeVal:
         sets_equal(x.values, y.values)
+    of FunTypeVal:
+        equal(x.fun_typ, y.fun_typ)
     of OpaqueFunVal:
         equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings
         #equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings

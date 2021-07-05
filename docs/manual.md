@@ -582,6 +582,25 @@ Implicit conversions are defined like this
 
 # Expressions
 
+## `=`
+
+### Usage 1: Variable definition with inferred type
+
+`<atom> = <expr>`
+
+
+### Usage 2: Variable definition with explicit type
+
+`<atom>: <type> = <expr>`
+
+
+### Usage 3: Short function definition
+
+1. `<atom>() = <body>`
+2. `<atom>() -> <type> = <body>`
+3. `<atom>(<param-list>) = <body>`
+4. `<atom>(<param-list>) -> <type> = <body>`
+
 
 ## `=>`
 
@@ -697,14 +716,12 @@ Passing value as the first function argument (UFCS)
 	assert a.add(b) is-the-same-as add(a, b)
 
 
-## `macro`
+## Macros
 
-Lambdas marked with the `macro` qualifier must return a value of type `Expr`. When calling a macro, the returned abstract syntax tree expression is evaluated.
-
-	`+` = macro (x y: Expr) =>
+	`+`(x y: Expr) -> Expand(Expr) =
 		quote add($x, $y)
 	
-	`for-2` = macro (name vals body: Expr) =>
+	`for-2`(name vals body: Expr) -> Expand(Expr) =
 	    var = gensym()
 		quote
 			$var = iterate($vals)

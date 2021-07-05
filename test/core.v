@@ -1,8 +1,8 @@
 ## Tests of core language functionality
 
-Term : Type
-Atom : Type
-Expr = Term | Atom
+{`:` Atom Type}
+{`:` Term Type}
+{define Expr {Union Term Atom}}
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
 
@@ -240,3 +240,41 @@ test "Bool operators"
     assert (false or false) == false
 
     # TODO: fix short-circuiting
+
+test "Short named function syntax"
+    nullary2 = () -> None => none
+    nullary1() -> None = none
+    assert type-of(nullary1) == type-of(nullary2)
+
+    unary2 = (x: None) -> None => x
+    unary1(x: None) -> None = x
+    assert type-of(unary1) == type-of(unary2)
+
+    multiline1(x y: Bool) -> Bool =
+        print("whatever")
+        x and y
+
+    multiline2 = (x y: Bool) -> Bool =>
+        print("whatever")
+        x and y
+
+    assert type-of(multiline1) == type-of(multiline2)
+
+test "Short named function syntax with inferred return"
+    nullary1() = none
+    nullary2 = () => none
+    assert type-of(nullary1) == type-of(nullary2)
+
+    unary1(x: None) = x
+    unary2 = (x: None) => x
+    assert type-of(unary1) == type-of(unary2)
+
+    multiline1(x y: Bool) =
+        print("whatever")
+        x and y
+
+    multiline2 = (x y: Bool) =>
+        print("whatever")
+        x and y
+
+    assert type-of(multiline1) == type-of(multiline2)
