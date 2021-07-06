@@ -2,6 +2,8 @@ import options, tables, sequtils, strformat, strutils, algorithm
 import common/[vm, exp, error]
 from common/utils import reverse_iter, max_or
 
+# TODO: Allow access to the expression stack in macros
+
 const debug_interp = 0
 
 var global_fun_id: uint32 = 1000
@@ -86,13 +88,13 @@ proc expand_record(env: Env, exp: Exp): Exp =
         fields.add(term(name, typ, val))
     return append(atom("record"), fields)
 
-proc eval_record_type(env: Env, exp: Exp): Val =
+proc eval_record_type(env: Env, args: seq[Val]): Val =
     var slots: seq[RecSlot]
     var extensible = false
     var extension: Option[Exp]
-    if exp.len == 1:
+    if args.len == 0:
         return RecordType()
-    for group in exp[1].exprs:
+    for group in args[0].exp.exprs:
         for list in group.exprs: 
             var list_type: Val
             var has_type = false
@@ -115,9 +117,9 @@ proc eval_record_type(env: Env, exp: Exp): Val =
                         name_typ = x[1]
                         slot.default = some(x[2])
                     if not name_typ[0].is_token(":"):
-                        raise error(exp, "Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
+                        raise error(x, "Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
                     if name_typ[1].kind != expAtom:
-                        raise error(exp, "Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
+                        raise error(x, "Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
                     slot.name = name_typ[1].value
                     slot.typ = eval(env, name_typ[2])
                     list_type = slot.typ
@@ -125,16 +127,17 @@ proc eval_record_type(env: Env, exp: Exp): Val =
                 slots.add(slot)
     return RecordType(slots, extensible, extension)
 
-proc eval_record(env: Env, exp: Exp): Val =
+proc eval_record(env: Env, args: seq[Val]): Val =
     var fields: seq[RecField]
-    for arg in exp.tail:
-        let (name, typ_exp, val_exp) = (arg[0], arg[1], arg[2])
+    for arg in args:
+        let exp = arg.exp
+        let (name, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
         let val = eval(env, val_exp)
         var typ = v_typeof(env, val)
         if not typ_exp.is_nil:
             let exp_typ = eval(env, typ_exp)
             if not is_subtype(typ, exp_typ):
-                raise error(arg, "Expected value of {exp_typ}, but found {val} of {typ}. {arg.src}".fmt)
+                raise error(exp, "Expected value of {exp_typ}, but found {val} of {typ}. {exp.src}".fmt)
             typ = exp_typ
         fields.add(RecField(name: name.value, val: val, typ: typ))
     return Record(fields)
@@ -401,14 +404,16 @@ proc expand_define(env: Env, args: seq[Val]): Val =
             return VExp(append(atom("define"), name, fun))
     return VExp(append(atom("define"), lhs, rhs))
 
-proc expand_compare(env: Env, exp: Exp): Exp =
+proc expand_compare(env: Env, args: seq[Exp]): Exp =
     # TODO: handle more cases
-    let args = exp.tail
+    let exp = term(args)
     if args.len != 3: raise error(exp, "Only two-argument comparisons are supported right now. {exp.src}".fmt)
     term(args[1], args[0], args[2])
 
 proc eval_compare(env: Env, args: seq[Val]): Val =
-    VExp(expand_compare(env, args[0].exp))
+    # TODO: handle more cases
+    let args = args.map_it(it.exp)
+    eval(env, expand_compare(env, args))
 
 proc v_cast(env: Env, val: Val, dst_typ: Val, exp: Exp = term()): Val =
     var val = val
@@ -423,21 +428,21 @@ proc v_cast(env: Env, val: Val, dst_typ: Val, exp: Exp = term()): Val =
         "Can't upcast, because type `{src_typ.str}` is not a subtype of `{dst_typ.str}`.\n\n".fmt &
         "Can't downcast, because there is no evidence, that `{val.str}` was upcast from type `{dst_typ.str}`. {exp.src}".fmt)
     
-proc eval_as(env: Env, exp: Exp): Val =
-    ensure_arg_count(exp, 2)
-    let dst_typ = eval(env, exp[2])
+proc eval_as(env: Env, args: seq[Val]): Val =
+    let (lhs, rhs) = (args[0].exp, args[1].exp)
+    let dst_typ = eval(env, rhs)
     if not is_type(env, dst_typ):
-        raise error(exp[2], "Second argument of `as` must be of Type, but got value {dst_typ}. {exp[2].src}".fmt)
+        raise error(rhs, "Second argument of `as` must be of Type, but got value {dst_typ}. {rhs.src}".fmt)
     # eval rhs and cast literal
-    let val = eval(env, exp[1], as_type=dst_typ)
-    return v_cast(env, val, dst_typ, exp=exp)
+    let val = eval(env, lhs, as_type=dst_typ)
+    return v_cast(env, val, dst_typ, exp=term(lhs, rhs))
 
 proc eval_assert(env: Env, args: seq[Val]): Val =
     let exp = v_expand(env, args[0].exp)
     var cond = exp
     #var expect_error = false
     if cond.has_prefix("compare"):
-        cond = expand_compare(env, cond)
+        cond = expand_compare(env, cond.tail)
     if cond.has_prefix("==") or cond.has_prefix("!="):
         let op = cond[0].value
         let (lhs, rhs) = (cond[1], cond[2])
@@ -532,11 +537,16 @@ proc eval_quote(env: Env, args: seq[Val]): Val =
 
 proc v_levelof*(env: Env, val: Val): int =
     case val.kind
-    of TypeVal: val.level + 1
-    of HoldVal: v_levelof(env, v_typeof(env, val))
-    of UnionTypeVal, InterTypeVal: max_or(val.values.map_it(v_levelof(env, it)), default=0)
-    of RecTypeVal: max_or(val.slots.map_it(v_levelof(env, it.typ)), default=0)
-    of SetTypeVal: 0
+    of SetTypeVal:
+        0
+    of TypeVal:
+        val.level + 1
+    of HoldVal:
+        v_levelof(env, v_typeof(env, val))
+    of UnionTypeVal, InterTypeVal:
+        max_or(val.values.map_it(v_levelof(env, it)), default=0)
+    of RecTypeVal:
+        max_or(val.slots.map_it(v_levelof(env, it.typ)), default=0)
     of FunTypeVal:
         let local = env.extend()
         let typ = val.fun_typ
@@ -544,51 +554,18 @@ proc v_levelof*(env: Env, val: Val): int =
         for par in typ.params:
             local.assume(par.name, eval(local, par.typ))
             max_level = max(max_level, v_level_of(local, v_infer(local, par.typ)))
-        max_level = max(max_level, v_level_of(local, v_infer(local, typ.result)))
-        return max_level
-    else: raise error("`level-of` expected an argument of Type, but got {val.str}.".fmt)
+        max(max_level, v_level_of(local, v_infer(local, typ.result)))
+    else:
+        raise error("`level-of` expected an argument of Type, but got {val.str}.".fmt)
 
-proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
-    if val.typ.is_some: return val.typ.get
-    case val.kind
-    of TypeVal, RecTypeVal, FunTypeVal, SetTypeVal, UnionTypeVal, InterTypeVal,
-        SymbolTypeVal:
-        Universe(v_levelof(env, val))
-    of RecVal:
-        RecordType(val.fields.map_it(RecSlot(name: it.name, typ: it.typ)))
-    of FunVal:
-        Val(kind: FunTypeVal, fun_typ: val.fun.typ)
-    of BuiltinFunVal:
-        Val(kind: FunTypeVal, fun_typ: val.builtin_typ)
-    of SymbolVal:
-        Val(kind: SetTypeVal, values: @[val])
-    of MemVal:
-        Hold("Size")
-    of NumVal:
-        Hold("I64")
-    of ExpVal:
-        case val.exp.kind
-        of expAtom: Hold("Atom")
-        of expTerm: Hold("Term")
-    of OpaqueVal:
-        v_typeof(env, val.inner)
-    of OpaqueFunVal:
-        v_typeof(env, val.result)
-    of HoldVal:
-        let res = env.get_opt(val.name)
-        if res.is_none:
-            raise error("`{val.name}` is not assumed. This shouldn't happen!".fmt)
-        res.get.typ
-    #else:
-    #    raise error("`type-of` not implemented for term {val.str} of kind {val.kind}.".fmt)
-
-proc v_type_macro*(env: Env, exp: Exp): Val =
+proc eval_typeof*(env: Env, args: seq[Val]): Val =
     #if exp.kind == expAtom and exp.tag in {aSym, aLit}:
     #    let name = exp.value
     #    let res = env.get_opt(name)
     #    if res.is_none:
     #        raise error(exp, "I don't know the type of `{name}` since it isn't defined or assumed. {exp.src}".fmt)
     #    return res.get.typ
+    let exp = args[0].exp
     let val = eval(env, exp)
     return v_typeof(env, val)
 
@@ -692,6 +669,187 @@ proc v_expand*(env: Env, exp: Exp): Exp =
             discard
     exp
 
+proc eval_name*(env: Env, exp: Exp, unwrap: bool): Val =
+    let name = exp.value
+    let res = env.get_opt(name)
+    if res.is_none:
+        #return Hold(name)
+        raise error(exp, "{name} is not defined. {exp.src}".fmt)
+    if res.get.is_placeholder:
+        return Hold(name)
+    if not res.get.is_defined:
+        #return Hold(name)
+        raise error(exp, "{name} is assumed, but not defined. {exp.src}".fmt)
+    let val = res.get.val
+    if not unwrap and val.kind == OpaqueVal:
+        return Hold(name)
+    return val
+
+proc eval_num_literal*(env: Env, exp: Exp, as_type: Option[Val]): Val =
+    let num = parse_int(exp.value)
+    # TODO: check if can cast
+    if as_type.is_some:
+        return Val(kind: NumVal, num: num, typ: some(as_type.get))
+    else:
+        return Val(kind: NumVal, num: num)
+
+proc eval_levelof(env: Env, args: seq[Val]): Val =
+    Val(kind: NumVal, num: v_levelof(env, args[0]))
+
+proc eval_print(env: Env, args: seq[Val]): Val =
+    echo args.join(" ")
+    return unit
+
+proc eval_opaque(env: Env, args: seq[Val]): Val =
+    let val = args[0]
+    if val.kind == FunTypeVal:
+        val.fun_typ.is_opaque = true
+        return val
+    elif val.kind == FunVal:
+        val.fun.typ.is_opaque = true
+        return val
+    else:
+        return Opaque(val)
+
+proc eval_unwrap(env: Env, args: seq[Val]): Val =
+    let exp = args[0].exp
+    var val = eval(env, exp)
+    if val.kind == HoldVal:
+        val = env.get_opt(val.name).get.val
+    case val.kind:
+    of OpaqueVal:
+        return val.inner
+    of OpaqueFunVal:
+        return val.result
+    else:
+        raise error(exp, "{val.str} is not an opaque value. {exp.src}".fmt)
+
+proc eval_symbol(env: Env, args: seq[Val]): Val =
+    let exp = args[0].exp
+    return Val(kind: SymbolVal, name: exp.value)
+
+proc eval_equals(env: Env, args: seq[Val]): Val =
+    let (lhs, rhs) = (args[0].exp, args[1].exp)
+    let lhs_val = eval(env, lhs)
+    let rhs_val = eval(env, rhs)
+    let lhs_typ = v_typeof(env, lhs_val)
+    let rhs_typ = v_typeof(env, rhs_val)
+    if not equal(lhs_typ, rhs_typ):
+        let exp = term(lhs, rhs)
+        raise error(exp, "Can't compare arguments of different types {lhs_val} of {lhs_typ} and {rhs_val} of {rhs_typ}. {exp.src}".fmt)
+    if equal(lhs_val, rhs_val):
+        return eval(env, atom("true"))
+    else:
+        return eval(env, atom("false"))
+
+proc eval_less_than(env: Env, args: seq[Val]): Val =
+    let (lhs_exp, rhs_exp) = (args[0].exp, args[1].exp)
+    let lhs = eval(env, lhs_exp)
+    let rhs = eval(env, lhs_exp)
+    if lhs.kind != NumVal:
+        raise error(lhs_exp, "Argument must be numeric, but got {lhs.kind}. {lhs_exp.src}".fmt)
+    if rhs.kind != NumVal:
+        raise error(rhs_exp, "Argument must be numeric, but got {rhs.kind}. {rhs_exp.src}".fmt)
+    if lhs.num < rhs.num:
+        return eval(env, atom("true"))
+    else:
+        return eval(env, atom("false"))
+
+proc eval_case(env: Env, args: seq[Val]): Val =
+    let switch = args[0].exp
+    let branches = args[1 .. ^1].map_it(it.exp)
+    let typ = v_infer(env, switch)
+    for branch in branches:
+        let local = env.extend()
+        if v_match(local, branch[0], switch):
+            return eval(local, branch[1])
+    raise error(switch, "Not all cases covered for value {switch} of {typ}. {switch.src}".fmt)
+
+proc eval_mul(env: Env, args: seq[Val]): Val =
+    let (lhs_exp, rhs_exp) = (args[0].exp, args[1].exp)
+    let lhs = eval(env, lhs_exp)
+    let rhs = eval(env, rhs_exp)
+    if lhs.kind != NumVal: raise error(lhs_exp, "Argument must be numeric. {lhs_exp.src}".fmt)
+    if rhs.kind != NumVal: raise error(rhs_exp, "Argument must be numeric. {rhs_exp.src}".fmt)
+    return Val(kind: NumVal, num: lhs.num * rhs.num)
+
+proc eval_add(env: Env, args: seq[Val]): Val =
+    let (lhs_exp, rhs_exp) = (args[0].exp, args[1].exp)
+    let lhs = eval(env, lhs_exp)
+    let rhs = eval(env, rhs_exp)
+    if lhs.kind != NumVal: raise error(lhs_exp, "Argument must be numeric. {lhs_exp.src}".fmt)
+    if rhs.kind != NumVal: raise error(rhs_exp, "Argument must be numeric. {rhs_exp.src}".fmt)
+    return Val(kind: NumVal, num: lhs.num + rhs.num)
+
+proc eval_deref(env: Env, args: seq[Val]): Val =
+    let exp = args[0].exp
+    let mem = eval(env, exp)
+    assert mem.kind == MemVal
+    if not mem.rd:
+        raise error(exp, "Can't read from non-readable pointer. {exp.src}".fmt)
+    return mem.mem_ptr
+
+proc eval_define(env: Env, args: seq[Val]): Val =
+    let (lhs, rhs) = (args[0].exp, args[1].exp)
+    if lhs.kind != expAtom:
+        raise error(lhs, "Expected an Atom on the left side of definition, but found Term {lhs}. {lhs.src}".fmt)
+    let name = lhs.value
+    if name in env.vars and env.vars[name].is_defined:
+        let v = env.vars[name]
+        let d = if v.definition.is_some: "\n\nIt was already defined here: {v.definition.get.src(hi=false)}".fmt else: ""
+        raise error(lhs, "Cannot define `{name}`. {lhs.src} {d}".fmt)
+    env.vars[name] = Var(is_placeholder: true)
+    #var typ = v_infer(env, exp[2])
+    var val = eval(env, rhs)
+    let typ = v_typeof(env, val)
+    let exp = term(lhs, rhs)
+    env.vars[name] = Var(val: val, typ: typ, is_defined: true, definition: some(exp))
+    return unit
+
+proc eval_assume(env: Env, args: seq[Val]): Val =
+    let (lhs, rhs) = (args[0].exp, args[1].exp)
+    var names: seq[string]
+    if lhs.kind == expAtom:
+        names.add(lhs.value)
+    elif lhs.has_prefix(","):
+        for arg in lhs.tail:
+            if arg.kind != expAtom:
+                raise error(arg, fmt"The left side of assumption must be a list of names. {arg.src}")
+            names.add(arg.value)
+    else:
+        raise error(lhs, fmt"The left side of assumption must be a name or a list of names. {lhs.src}")
+    for name in names:
+        let typ = eval(env, rhs, as_type=type0)
+        env.assume(name, typ)
+    return unit
+
+proc eval_assign(env: Env, args: seq[Val]): Val =
+    let (lhs_exp, rhs_exp) = (args[0].exp, args[1].exp)
+    let lhs = eval(env, lhs_exp)
+    assert lhs.kind == MemVal
+    if not lhs.wr:
+        raise error(lhs_exp, "Can't write to non-writable pointer. {lhs_exp.src}".fmt)
+    let rhs = eval(env, rhs_exp, as_type=lhs.mem_typ)
+    assert is_subtype(v_typeof(env, rhs), lhs.mem_typ)
+    lhs.mem_ptr = rhs
+    return rhs
+
+proc eval_ref(env: Env, args: seq[Val]): Val =
+    # ref : (cap: Cap, type: Type, value: type) -> Ptr(cap, type)
+    let (cap, typ, val_exp) = (args[0].name, args[1], args[2].exp)
+    #echo "CALL ref {cap} {typ} {val}".fmt
+    let rd = cap == "rdo" or cap == "imm" or cap == "mut"
+    let wr = cap == "wro" or cap == "mut"
+    let imm = cap == "imm"
+    let mem = eval(env, val_exp)
+    let mem_typ = v_typeof(env, mem)
+    if not is_subtype(mem_typ, typ):
+        raise error(val_exp, "Value {mem} of {mem_typ} is incompatible with type {typ}. {val_exp.src}".fmt)
+    return Val(kind: MemVal, mem_ptr: mem, mem_typ: typ, wr: wr, rd: rd, imm: imm)
+
+proc v_norm*(env: Env, exp: Exp): Exp =
+    v_reify(env, eval(env, exp))
+
 proc v_reify*(env: Env, val: Val): Exp =
     when debug_interp > 0:
         echo "reify " & val.str
@@ -727,8 +885,39 @@ proc v_reify*(env: Env, val: Val): Exp =
     else:
         raise error("Can't reify value {val.str} of kind {val.kind}.".fmt)
 
-proc v_norm*(env: Env, exp: Exp): Exp =
-    v_reify(env, eval(env, exp))
+proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
+    if val.typ.is_some: return val.typ.get
+    case val.kind
+    of TypeVal, RecTypeVal, FunTypeVal, SetTypeVal, UnionTypeVal, InterTypeVal,
+        SymbolTypeVal:
+        Universe(v_levelof(env, val))
+    of RecVal:
+        RecordType(val.fields.map_it(RecSlot(name: it.name, typ: it.typ)))
+    of FunVal:
+        Val(kind: FunTypeVal, fun_typ: val.fun.typ)
+    of BuiltinFunVal:
+        Val(kind: FunTypeVal, fun_typ: val.builtin_typ)
+    of SymbolVal:
+        Val(kind: SetTypeVal, values: @[val])
+    of MemVal:
+        Hold("Size")
+    of NumVal:
+        Hold("I64")
+    of ExpVal:
+        case val.exp.kind
+        of expAtom: Hold("Atom")
+        of expTerm: Hold("Term")
+    of OpaqueVal:
+        v_typeof(env, val.inner)
+    of OpaqueFunVal:
+        v_typeof(env, val.result)
+    of HoldVal:
+        let res = env.get_opt(val.name)
+        if res.is_none:
+            raise error("`{val.name}` is not assumed. This shouldn't happen!".fmt)
+        res.get.typ
+    #else:
+    #    raise error("`type-of` not implemented for term {val.str} of kind {val.kind}.".fmt)
 
 proc v_infer*(env: Env, exp: Exp): Val =
     # TODO: implement me correctly!!!
@@ -752,11 +941,9 @@ proc v_infer*(env: Env, exp: Exp): Val =
             return res.get.typ
         else:
             return v_typeof(env, eval(env, exp))
-
     of expTerm:
         if exp.len == 0:
             return unit
-
         if exp.len >= 1 and exp[0].kind == expAtom:
             case exp[0].value:
             of "define":
@@ -818,7 +1005,6 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 return eval(env, exp[2])
             else:
                 discard
-
         if exp.len >= 1:
             let fun_typ = v_infer(env, exp[0])
             case fun_typ.kind
@@ -836,9 +1022,7 @@ proc v_infer*(env: Env, exp: Exp): Val =
             #    return eval(env, typ.fun_typ.result)
             else:
                 return Val(kind: InterTypeVal)
-
                 #raise error(exp, "{fun_typ} is not a function type. {exp.src}".fmt)
-
     raise error(exp, "`infer` not implemented for expression {exp}. {exp.src}".fmt)
 
 proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
@@ -847,253 +1031,66 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
     case exp.kind
     of expAtom:
         case exp.tag
-        of aSym, aLit:
-            let name = exp.value
-            let res = env.get_opt(name)
-            if res.is_none:
-                #return Hold(name)
-                raise error(exp, "{name} is not defined. {exp.src}".fmt)
-            if res.get.is_placeholder:
-                return Hold(name)
-            if not res.get.is_defined:
-                #return Hold(name)
-                raise error(exp, "{name} is assumed, but not defined. {exp.src}".fmt)
-            let val = res.get.val
-            if not unwrap and val.kind == OpaqueVal:
-                return Hold(name)
-            return val
-
-        of aNum:
-
-            let num = parse_int(exp.value)
-            # TODO: check if can cast
-            if as_type.is_some:
-                return Val(kind: NumVal, num: num, typ: some(as_type.get))
-            else:
-                return Val(kind: NumVal, num: num)
-
-        #of aStr:
-        #    let str = exp.value
-        #    let len = str.len
-        #    let p = alloc(len * sizeof(uint8))
-        #    copy_mem(p, cast[pointer](str.cstring), len)
-        #    let val = Val(kind: MemVal, memory: p)
-        #    return Val(kind: CastVal, val: val, typ: Hold("Str"))
-        
-        else:
-            raise error(exp, "I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
-
+        of aSym, aLit: return eval_name(env, exp, unwrap)
+        of aNum: return eval_num_literal(env, exp, as_type)
+        else: raise error(exp, "I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
     of expTerm:
         if exp.len == 0:
             return unit
             #raise error(exp, "Can't evaluate empty term. {exp.src}".fmt)
-
         if exp.len >= 1 and exp[0].kind == expAtom:
             case exp[0].value
-            of "{_}":
-                return eval(env, term(exp.tail))
-
-            of ":":
-                ensure_arg_count(exp, 2)
-                let lhs = exp[1]
-
-                var names: seq[string]
-                if lhs.kind == expAtom:
-                    names.add(lhs.value)
-                elif lhs.has_prefix(","):
-                    for arg in lhs.tail:
-                        if arg.kind != expAtom:
-                            raise error(arg, fmt"The left side of assumption must be a list of names. {arg.src}")
-                        names.add(arg.value)
-                else:
-                    raise error(lhs, fmt"The left side of assumption must be a name or a list of names. {lhs.src}")
-
-                for name in names:
-                    let typ = eval(env, exp[2], as_type=type0)
-                    env.assume(name, typ)
-
-                return unit
-            
-            of "define":
-                ensure_arg_count(exp, 2)
-                if exp[1].kind != expAtom:
-                    raise error(exp[1], "Expected an Atom on the left side of definition, but found Term {exp[1]}. {exp[1].src}".fmt)
-                let name = exp[1].value
-                if name in env.vars and env.vars[name].is_defined:
-                    let v = env.vars[name]
-                    let d = if v.definition.is_some: "\n\nIt was already defined here: {v.definition.get.src(hi=false)}".fmt else: ""
-                    raise error(exp, "Cannot define `{name}`. {exp.src} {d}".fmt)
-                env.vars[name] = Var(is_placeholder: true)
-                #var typ = v_infer(env, exp[2])
-                var val = eval(env, exp[2])
-                let typ = v_typeof(env, val)
-                env.vars[name] = Var(val: val, typ: typ, is_defined: true, definition: some(exp))
-                return unit
-
-            of ":=":
-                let lhs = eval(env, exp[1])
-                assert lhs.kind == MemVal
-                if not lhs.wr:
-                    raise error(exp, "Can't write to non-writable pointer. {exp.src}".fmt)
-                let rhs = eval(env, exp[2], as_type=lhs.mem_typ)
-                assert is_subtype(v_typeof(env, rhs), lhs.mem_typ)
-                lhs.mem_ptr = rhs
-                return rhs
-
-            of "*":
-                if exp.len == 2:
-                    let res = eval(env, exp[1])
-                    assert res.kind == MemVal
-                    if not res.rd:
-                        raise error(exp, "Can't read from non-readable pointer. {exp.src}".fmt)
-                    return res.mem_ptr
-
-                if exp.len == 3:
-                    let lhs = eval(env, exp[1])
-                    let rhs = eval(env, exp[2])
-                    if lhs.kind != NumVal:
-                        raise error(exp[1], "Argument must be numeric. {exp[1].src}".fmt)
-                    if rhs.kind != NumVal:
-                        raise error(exp[2], "Argument must be numeric. {exp[2].src}".fmt)
-                    return Val(kind: NumVal, num: lhs.num * rhs.num)
-
-            of "+":
-                let lhs = eval(env, exp[1])
-                let rhs = eval(env, exp[2])
-                if lhs.kind != NumVal:
-                    raise error(exp[1], "Argument must be numeric, but got {lhs.kind}. {exp[1].src}".fmt)
-                if rhs.kind != NumVal:
-                    raise error(exp[2], "Argument must be numeric, but got {rhs.kind}. {exp[2].src}".fmt)
-                return Val(kind: NumVal, num: lhs.num + rhs.num)
-
-            of "<":
-                let lhs = eval(env, exp[1])
-                let rhs = eval(env, exp[2])
-                if lhs.kind != NumVal:
-                    raise error(exp[1], "Argument must be numeric, but got {lhs.kind}. {exp[1].src}".fmt)
-                if rhs.kind != NumVal:
-                    raise error(exp[2], "Argument must be numeric, but got {rhs.kind}. {exp[2].src}".fmt)
-                if lhs.num < rhs.num:
-                    return eval(env, atom("true"))
-                else:
-                    return eval(env, atom("false"))
-
-            of "==":
-                let lhs = eval(env, exp[1])
-                let rhs = eval(env, exp[2])
-                let lhs_typ = v_typeof(env, lhs)
-                let rhs_typ = v_typeof(env, rhs)
-                if not equal(lhs_typ, rhs_typ):
-                    raise error(exp, "Can't compare arguments of different types {lhs} of {lhs_typ} and {rhs} of {rhs_typ}. {exp.src}".fmt)
-                if equal(lhs, rhs):
-                    return eval(env, atom("true"))
-                else:
-                    return eval(env, atom("false"))
-
-            of "compare":
-                return eval(env, expand_compare(env, exp))
-
-            of "case":
-                let switch = exp[1]
-                let typ = v_infer(env, switch)
-                let branches = exp.exprs[2 .. ^1]
-                for branch in branches:
-                    let local = env.extend()
-                    if v_match(local, branch[0], switch):
-                        return eval(local, branch[1])
-                raise error(exp, "Not all cases covered for value {switch} of {typ}. {exp.src}".fmt)
-
             of "block":
                 var res = unit
                 for stat in exp.tail:
                     res = eval(env, stat)
                 return res
-
-            of "Symbol":
-                ensure_arg_count(exp, 1)
-                if exp[1].kind != expAtom:
-                    raise error(exp[1], "Symbol expected an Atom as it's sole argument, but was given Term {exp[1]}. {exp[1].src}".fmt)
-                return Val(kind: SymbolVal, name: exp[1].value)
-            of "Set":
-                ensure_args_are_not_types(env, exp.tail)
-                return v_value_set(env, exp.tail.map_it(eval(env, it)))
-            of "Union":
-                ensure_args_are_types(env, exp.tail)
-                return v_union(env, exp.tail.map_it(eval(env, it)))
-            of "Inter":
-                ensure_args_are_types(env, exp.tail)
-                return v_inter(env, exp.tail.map_it(eval(env, it)))
-            of "type-of":
-                ensure_arg_count(exp, 1)
-                return v_type_macro(env, exp[1])
-            of "level-of":
-                ensure_arg_count(exp, 1)
-                let level = v_levelof(env, eval(env, exp[1]))
-                return Val(kind: NumVal, num: level)
-            of "print":
-                echo exp.tail.map_it(eval(env, it)).join(" ")
-                return unit
-            of "opaque":
-                ensure_arg_count(exp, 1)
-                let val = eval(env, exp[1])
-                if val.kind == FunTypeVal:
-                    val.fun_typ.is_opaque = true
-                    return val
-                elif val.kind == FunVal:
-                    val.fun.typ.is_opaque = true
-                    return val
-                else:
-                    return Opaque(val)
-            of "unwrap":
-                ensure_arg_count(exp, 1)
-                var val = eval(env, exp[1])
-                if val.kind == HoldVal:
-                    val = env.get_opt(val.name).get.val
-                case val.kind:
-                of OpaqueVal:
-                    return val.inner
-                of OpaqueFunVal:
-                    return val.result
-                else:
-                    raise error(exp, "{val.str} is not an opaque value. {exp.src}".fmt)
-            #of "unsafe-access":
-            #    let adr = eval(env, exp[1])
-            #    let idx = eval(env, exp[2])
-            #    assert adr.kind == MemVal
-            #    assert idx.kind == NumVal
-            #    let p = cast[int](adr.memory) + idx.num
-            #    let v = cast[int](cast[ptr uint8](p)[])
-            #    return Val(kind: NumVal, num: v)
-            of "as":
-                return eval_as(env, exp)
-            of "Record":
-                return eval_record_type(env, exp)
-            of "record":
-                return eval_record(env, exp)
-
+            of "*":
+                if exp.len == 2: return eval_deref(env, exp.tail.map_it(VExp(it)))
+                if exp.len == 3: return eval_mul(env, exp.tail.map_it(VExp(it)))
+            of "{_}": return eval(env, term(exp.tail))
+            of ":": return eval_assume(env, exp.tail.map_it(VExp(it))) # `:` : (x: Atom, y: Type) -> Unit
+            of "define": return eval_define(env, exp.tail.map_it(VExp(it))) # `=` : (a: Type = _, x: Atom, y: a) -> a
+            of "compare": return eval_compare(env, exp.tail.map_it(VExp(it))) # `compare` : (xs: Quoted(Expr)) -> Bool
+            of "case": return eval_case(env, exp.tail.map_it(VExp(it))) # `case` : (args : Args(Quoted(Expr))) -> case-type(args)
+            of ":=": return eval_assign(env, exp.tail.map_it(VExp(it))) # `:=` : (x: Ptr($cap: Set(wr|mut), a), y: $a) -> a
+            of "+": return eval_add(env, exp.tail.map_it(VExp(it))) # `+` : (a: Type = _, lhs rhs: a) -> a
+            of "<": return eval_less_than(env, exp.tail.map_it(VExp(it))) # `<` : (lhs rhs : Quoted(Exp)) -> Bool
+            of "==": return eval_equals(env, exp.tail.map_it(VExp(it))) # `==` : (lhs rhs : Quoted(Expr)) -> Bool
+            of "Symbol": return eval_symbol(env, exp.tail.map_it(VExp(it))) # Symbol : (atom: Atom) -> ???
+            of "Set": return v_value_set(env, exp.tail.map_it(eval(env, it))) # Set : (values : Args(Any)) -> Type
+            of "Union": return v_union(env, exp.tail.map_it(eval(env, it))) # Union : (types : Args(Type)) -> Type
+            of "Inter": return v_inter(env, exp.tail.map_it(eval(env, it))) # Inter : (types : Args(Type)) -> Type
+            of "type-of": return eval_typeof(env, exp.tail.map_it(VExp(it))) # type-of : (x: Quoted(Expr)) -> Type
+            of "level-of": return eval_levelof(env, exp.tail.map_it(eval(env, it))) # level-of : (x: Type) -> Int
+            of "print": return eval_print(env, exp.tail.map_it(eval(env, it))) # print : (args : Args(Any)) -> Unit
+            of "opaque": return eval_opaque(env, exp.tail.map_it(eval(env, it)))
+            of "unwrap": return eval_unwrap(env, exp.tail.map_it(VExp(it)))
+            of "as": return eval_as(env, exp.tail.map_it(VExp(it))) # `as` : (x: Any, y: Type) -> y
+            of "Record": return eval_record_type(env, exp.tail.map_it(VExp(it))) # `Record` : (???) -> Type
+            of "record": return eval_record(env, exp.tail.map_it(VExp(it))) # `record` : (???) -> Record(???)
         if exp.len >= 1:
             let fun = eval(env, exp[0])
-
             case fun.kind
             of HoldVal:
                 # can't evaluate, so normalize arguments and return the term
                 let head = v_reify(env, fun)
                 let args = exp.tail.map_it(v_norm(env, it))
                 return VExp(append(head, args))
-
             of BuiltinFunVal:
                 return apply_builtin(env, fun, exp)
-
             of FunVal:
                 return apply_lambda(env, fun, exp)
             else:
                 let fun_typ = v_typeof(env, fun)
                 raise error(exp, "{fun} of {fun_typ} is not callable. {exp.src}".fmt)
-        
     raise error(exp, "I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
 
 proc define(env: Env, name: string, val: Val) =
     env.vars[name] = Var(val: val, typ: v_typeof(env, val), is_defined: true)
+
+#proc assume(env: Env, name: string, typ: Val) =
+#    env.vars[name] = Var(typ: typ, is_defined: false)
 
 var global_env* = Env(parent: nil)
 global_env.define "Type", type0
@@ -1167,19 +1164,6 @@ global_env.define "Lambda", Val(kind: BuiltinFunVal, builtin_fun: eval_lambda_ty
     result: atom("Any"),
 ))
 
-proc eval_ref(env: Env, args: seq[Val]): Val =
-    # ref : (cap: Cap, type: Type, value: type) -> Ptr(cap, type)
-    let (cap, typ, val_exp) = (args[0].name, args[1], args[2].exp)
-    #echo "CALL ref {cap} {typ} {val}".fmt
-    let rd = cap == "rdo" or cap == "imm" or cap == "mut"
-    let wr = cap == "wro" or cap == "mut"
-    let imm = cap == "imm"
-    let mem = eval(env, val_exp)
-    let mem_typ = v_typeof(env, mem)
-    if not is_subtype(mem_typ, typ):
-        raise error(val_exp, "Value {mem} of {mem_typ} is incompatible with type {typ}. {val_exp.src}".fmt)
-    return Val(kind: MemVal, mem_ptr: mem, mem_typ: typ, wr: wr, rd: rd, imm: imm)
-
 
 global_env.define "ref", Val(kind: BuiltinFunVal, builtin_fun: eval_ref, builtin_typ: FunTyp(
     params: @[
@@ -1216,3 +1200,19 @@ global_env.define "quote", Val(kind: BuiltinFunVal, builtin_fun: eval_quote, bui
     ],
     result: atom("Expr"),
 ))
+
+#[
+global_env.define "Record", Val(kind: BuiltinFunVal, builtin_fun: eval_record_type, builtin_typ: FunTyp(
+    params: @[
+        FunParam(name: "fields", typ: atom("Expr"), quoted: true),
+    ],
+    result: atom("Type"),
+))
+
+global_env.define "record", Val(kind: BuiltinFunVal, builtin_fun: eval_record, builtin_typ: FunTyp(
+    params: @[
+        FunParam(name: "fields", typ: atom("Expr"), quoted: true),
+    ],
+    result: atom("Expr"),
+))
+]#
