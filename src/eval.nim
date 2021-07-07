@@ -3,6 +3,7 @@ import common/[vm, exp, error]
 from common/utils import reverse_iter, max_or
 
 # TODO: Allow access to the expression stack in macros
+# TODO: Properly handle neutral values (especially in apply_builtin, apply_lambda)
 
 const debug_interp = 0
 
@@ -86,7 +87,7 @@ proc expand_record(env: Env, exp: Exp): Exp =
             raise error(name, "Field name must be an atom, but got term {name}. {name.src}".fmt)
 
         fields.add(term(name, typ, val))
-    return append(atom("record"), fields)
+    return term(atom("record"), term(fields))
 
 proc eval_record_type(env: Env, args: seq[Val]): Val =
     var slots: seq[RecSlot]
@@ -129,8 +130,7 @@ proc eval_record_type(env: Env, args: seq[Val]): Val =
 
 proc eval_record(env: Env, args: seq[Val]): Val =
     var fields: seq[RecField]
-    for arg in args:
-        let exp = arg.exp
+    for exp in args[0].exp.exprs:
         let (name, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
         let val = eval(env, val_exp)
         var typ = v_typeof(env, val)
@@ -141,6 +141,21 @@ proc eval_record(env: Env, args: seq[Val]): Val =
             typ = exp_typ
         fields.add(RecField(name: name.value, val: val, typ: typ))
     return Record(fields)
+
+proc eval_record_result(env: Env, args: seq[Val]): Val =
+    var slots: seq[RecSlot]
+    for exp in args[0].exp.exprs:
+        let (name, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
+        var typ: Val
+        if not typ_exp.is_nil:
+            typ = eval(env, typ_exp)
+            #if not is_subtype(typ, exp_typ):
+            #    raise error(exp, "Expected value of {exp_typ}, but found {val} of {typ}. {exp.src}".fmt)
+        else:
+            typ = v_infer(env, val_exp)
+        slots.add(RecSlot(name: name.value, typ: typ))
+
+    return RecordType(slots)
 
 #endregion
 
@@ -212,26 +227,25 @@ proc make_lambda_type(env: Env, params: seq[Exp], ret: Exp, body: Option[Exp]): 
         param_list.add(make_lambda_param(local, param))
 
     var ret_exp = ret
-    var ret_typ: Val
     var is_macro = false
     var is_pure = false
     var did_infer_result = false
 
     if not ret_exp.is_nil:
-        ret_exp = v_norm(local, ret_exp)
         if ret_exp.has_prefix("Expand"):
             ret_exp = ret_exp[1]
             is_macro = true
-        ret_typ = eval(local, ret_exp)
+        ret_exp = v_norm(local, ret_exp)
 
     if body.is_some:
         let typ = v_infer(local, body.get)
         if ret_exp.is_nil:
             did_infer_result = true
-            ret_typ = typ
-        else:
-            if not is_subtype(typ, ret_typ):
-                raise error(body.get, "Function body type {typ}, doesn't match expected return type {ret_typ}. {term(ret_exp, body.get).src}".fmt)
+            ret_exp = v_reify(env, typ)
+        #else:
+            #let ret_typ = eval(local, ret_exp)
+            #if not is_subtype(typ, ret_typ):
+            #    raise error(body.get, "Function body type {typ}, doesn't match expected return type {ret_typ}. {term(ret_exp, body.get).src}".fmt)
         is_pure = infer_pure(local, body.get)
 
     elif ret_exp.is_nil:
@@ -240,7 +254,7 @@ proc make_lambda_type(env: Env, params: seq[Exp], ret: Exp, body: Option[Exp]): 
 
     let fun_typ = FunTyp(
         params: param_list,
-        result: v_reify(local, ret_typ),
+        result: ret_exp,
         is_macro: is_macro,
         is_pure: is_pure,
     )
@@ -334,6 +348,7 @@ proc expand_group(env: Env, args: seq[Val]): Val =
         let is_tuple = inner.is_term(3) and inner[0].is_token("=")
         if not is_tuple:
             return VExp(inner)
+
 
     return VExp(expand_record(env, exprs[0]))
 
@@ -430,12 +445,13 @@ proc v_cast(env: Env, val: Val, dst_typ: Val, exp: Exp = term()): Val =
     
 proc eval_as(env: Env, args: seq[Val]): Val =
     let (lhs, rhs) = (args[0].exp, args[1].exp)
+
     let dst_typ = eval(env, rhs)
     if not is_type(env, dst_typ):
         raise error(rhs, "Second argument of `as` must be of Type, but got value {dst_typ}. {rhs.src}".fmt)
     # eval rhs and cast literal
     let val = eval(env, lhs, as_type=dst_typ)
-    return v_cast(env, val, dst_typ, exp=term(lhs, rhs))
+    return v_cast(env, val, dst_typ, exp=term(lhs))
 
 proc eval_assert(env: Env, args: seq[Val]): Val =
     let exp = v_expand(env, args[0].exp)
@@ -599,22 +615,31 @@ proc v_inter*(env: Env, args: seq[Val]): Val =
     return norm_inter(args[0], args[1])
 
 proc apply_builtin(env: Env, fun: Val, exp: Exp, expand = true): Val =
-    let typ = fun.builtin_typ
-    ensure_arg_count(exp, typ.params.len)
+    validate_builtin(fun)
+    let typ = fun.builtin_typ.get
+    #ensure_arg_count(exp, typ.params.len)
 
     var local = env.extend()
     var args: seq[Val]
+    var neutral = false
     for (param, arg) in zip(typ.params, exp.tail):
-        let val = if param.quoted:
-            VExp(arg)
-        else:
-            eval(env, arg)
-        let arg_typ = v_typeof(local, val)
+        if neutral:
+            args.add(VExp(v_norm(local, arg)))
+            continue
+        let arg_val = if param.quoted: VExp(arg) else: eval(env, arg)
+        if arg_val.kind == HoldVal:
+            neutral = true
+            args.add(VExp(v_reify(local, arg_val)))
+            continue
+        let arg_typ = v_typeof(local, arg_val)
         let par_typ = eval(local, param.typ)
         if not is_subtype(arg_typ, par_typ):
-            raise error(arg, "Argument {val} of {arg_typ} does not match type {par_typ} of parameter `{param.name}`. {arg.src}\n\nIn the following function definition:\n\n>> {LambdaType(typ)}".fmt)
-        local.declare(param.name, val, par_typ)
-        args.add(val)
+            raise error(arg, "Argument {arg_val} of {arg_typ} does not match type {par_typ} of parameter `{param.name}`. {arg.src}\n\nIn the following function definition:\n\n>> {LambdaType(typ)}".fmt)
+        local.declare(param.name, arg_val, par_typ)
+        args.add(arg_val)
+
+    if neutral:
+        return VExp(term(@[exp[0]] & args.map_it(it.exp)))
 
     #let args = exp.tail.map_it(eval(env, it))
     let res = fun.builtin_fun(env, args)
@@ -655,7 +680,8 @@ proc v_expand*(env: Env, exp: Exp): Exp =
         let fun = eval(env, exp[0])
         case fun.kind
         of BuiltinFunVal:
-            if fun.builtin_typ.is_macro:
+            validate_builtin(fun)
+            if fun.builtin_typ.get.is_macro:
                 let res = apply_builtin(env, fun, exp, expand=false)
                 assert res.kind == ExpVal
                 return v_expand(env, res.exp)
@@ -819,8 +845,19 @@ proc eval_assume(env: Env, args: seq[Val]): Val =
     else:
         raise error(lhs, fmt"The left side of assumption must be a name or a list of names. {lhs.src}")
     for name in names:
-        let typ = eval(env, rhs, as_type=type0)
-        env.assume(name, typ)
+        let local = env.find(name)
+        let exp = term(lhs, rhs)
+        if local != nil:
+            if local.vars[name].definition.is_none:
+                local.vars[name].definition = some(exp)
+            if local.vars[name].val.kind == BuiltinFunVal and local.vars[name].val.builtin_typ.is_none:
+                let fun_typ = eval(env, rhs).fun_typ
+                local.vars[name].val.builtin_typ = some(fun_typ)
+                local.vars[name].typ = Val(kind: FunTypeVal, fun_typ: fun_typ)
+
+        else:
+            let typ = eval(env, rhs, as_type=type0)
+            env.assume(name, typ, definition=some(exp))
     return unit
 
 proc eval_assign(env: Env, args: seq[Val]): Val =
@@ -847,7 +884,12 @@ proc eval_ref(env: Env, args: seq[Val]): Val =
         raise error(val_exp, "Value {mem} of {mem_typ} is incompatible with type {typ}. {val_exp.src}".fmt)
     return Val(kind: MemVal, mem_ptr: mem, mem_typ: typ, wr: wr, rd: rd, imm: imm)
 
+proc eval_infer(env: Env, args: seq[Val]): Val =
+    v_infer(env, args[0].exp)
+
 proc v_norm*(env: Env, exp: Exp): Exp =
+    when debug_interp > 0:
+        echo "norm " & exp.str
     v_reify(env, eval(env, exp))
 
 proc v_reify*(env: Env, val: Val): Exp =
@@ -896,7 +938,8 @@ proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
     of FunVal:
         Val(kind: FunTypeVal, fun_typ: val.fun.typ)
     of BuiltinFunVal:
-        Val(kind: FunTypeVal, fun_typ: val.builtin_typ)
+        validate_builtin(val)
+        Val(kind: FunTypeVal, fun_typ: val.builtin_typ.get)
     of SymbolVal:
         Val(kind: SetTypeVal, values: @[val])
     of MemVal:
@@ -916,6 +959,28 @@ proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
         if res.is_none:
             raise error("`{val.name}` is not assumed. This shouldn't happen!".fmt)
         res.get.typ
+
+    #[
+    of NeutralVal:
+        case val.neu.kind:
+        of NVar:
+            let name = val.neu.name
+            let res = env.get_opt(name)
+            if res.is_none:
+                raise error("`{name}` is not assumed. This shouldn't happen!".fmt)
+            res.get.typ
+        of NApp:
+            let typ = v_typeof(env, VNeu(val.neu.head))
+
+            let local = env.extend()
+            for arg in val.neu.args:
+                let arg_val = if par.quoted: VExp(arg) else: eval(local, arg)
+                let arg_typ = v_typeof(local, arg_val)
+                local.declare(par.name, arg_val, arg_typ)
+            return eval(local, typ.result)
+    ]#
+
+        
     #else:
     #    raise error("`type-of` not implemented for term {val.str} of kind {val.kind}.".fmt)
 
@@ -965,16 +1030,12 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 return RecordType()
             of ":":
                 return RecordType()
-            of ":=":
-                return v_infer(env, exp[1])
             of "case":
                 let branches = exp.exprs[2 .. ^1]
                 var types: seq[Val]
                 for branch in branches:
                     types.add(v_infer(env, branch[1]))
                 return v_union(env, types)
-            of "compare":
-                return eval(env, atom("Bool"))
             of "if":
                 #echo exp
                 var types: seq[Val]
@@ -989,18 +1050,14 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 for stat in exp.tail:
                     typ = v_infer(env, stat)
                 return typ
-            of "Union", "Inter", "Set", "Record", "Lambda":
+            of "Union", "Inter", "Set":
                 return type0
-            of "list":
-                return eval(env, atom("List"))
             of "Symbol":
                 return Val(kind: SymbolTypeVal, name: exp[1].value)
             of "print":
                 return RecordType()
             of "opaque":
                 return v_typeof(env, eval(env, exp))
-            of "record":
-                return RecordType()
             of "as":
                 return eval(env, exp[2])
             else:
@@ -1013,8 +1070,10 @@ proc v_infer*(env: Env, exp: Exp): Val =
             of FunTypeVal:
                 let typ = fun_typ.fun_typ
                 let local = env.extend()
-                for par in typ.params:
-                    local.assume(par.name, eval(local, par.typ))
+                for (par, arg) in zip(typ.params, exp.tail):
+                    let arg_val = if par.quoted: VExp(arg) else: eval(local, arg)
+                    let arg_typ = v_typeof(local, arg_val)
+                    local.declare(par.name, arg_val, arg_typ)
                 return eval(local, typ.result)
             #of HoldVal:
             #    let typ = v_typeof(env, fun)
@@ -1045,30 +1104,19 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 for stat in exp.tail:
                     res = eval(env, stat)
                 return res
-            of "*":
-                if exp.len == 2: return eval_deref(env, exp.tail.map_it(VExp(it)))
-                if exp.len == 3: return eval_mul(env, exp.tail.map_it(VExp(it)))
             of "{_}": return eval(env, term(exp.tail))
             of ":": return eval_assume(env, exp.tail.map_it(VExp(it))) # `:` : (x: Atom, y: Type) -> Unit
             of "define": return eval_define(env, exp.tail.map_it(VExp(it))) # `=` : (a: Type = _, x: Atom, y: a) -> a
-            of "compare": return eval_compare(env, exp.tail.map_it(VExp(it))) # `compare` : (xs: Quoted(Expr)) -> Bool
-            of "case": return eval_case(env, exp.tail.map_it(VExp(it))) # `case` : (args : Args(Quoted(Expr))) -> case-type(args)
-            of ":=": return eval_assign(env, exp.tail.map_it(VExp(it))) # `:=` : (x: Ptr($cap: Set(wr|mut), a), y: $a) -> a
-            of "+": return eval_add(env, exp.tail.map_it(VExp(it))) # `+` : (a: Type = _, lhs rhs: a) -> a
-            of "<": return eval_less_than(env, exp.tail.map_it(VExp(it))) # `<` : (lhs rhs : Quoted(Exp)) -> Bool
-            of "==": return eval_equals(env, exp.tail.map_it(VExp(it))) # `==` : (lhs rhs : Quoted(Expr)) -> Bool
+            of "case": return eval_case(env, exp.tail.map_it(VExp(it))) # `case` : (exprs : Args(Quoted(Exprs))) -> case-aux(exprs)
             of "Symbol": return eval_symbol(env, exp.tail.map_it(VExp(it))) # Symbol : (atom: Atom) -> ???
             of "Set": return v_value_set(env, exp.tail.map_it(eval(env, it))) # Set : (values : Args(Any)) -> Type
             of "Union": return v_union(env, exp.tail.map_it(eval(env, it))) # Union : (types : Args(Type)) -> Type
             of "Inter": return v_inter(env, exp.tail.map_it(eval(env, it))) # Inter : (types : Args(Type)) -> Type
-            of "type-of": return eval_typeof(env, exp.tail.map_it(VExp(it))) # type-of : (x: Quoted(Expr)) -> Type
-            of "level-of": return eval_levelof(env, exp.tail.map_it(eval(env, it))) # level-of : (x: Type) -> Int
             of "print": return eval_print(env, exp.tail.map_it(eval(env, it))) # print : (args : Args(Any)) -> Unit
+            of "as": return eval_as(env, exp.tail.map_it(VExp(it))) # `as` : (x: a, y: Type) -> y
             of "opaque": return eval_opaque(env, exp.tail.map_it(eval(env, it)))
             of "unwrap": return eval_unwrap(env, exp.tail.map_it(VExp(it)))
-            of "as": return eval_as(env, exp.tail.map_it(VExp(it))) # `as` : (x: Any, y: Type) -> y
-            of "Record": return eval_record_type(env, exp.tail.map_it(VExp(it))) # `Record` : (???) -> Type
-            of "record": return eval_record(env, exp.tail.map_it(VExp(it))) # `record` : (???) -> Record(???)
+            #of "as": return eval_as(env, exp.tail.map_it(VExp(it))) # `as` : (x: Any, y: Type) -> y
         if exp.len >= 1:
             let fun = eval(env, exp[0])
             case fun.kind
@@ -1089,130 +1137,131 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
 proc define(env: Env, name: string, val: Val) =
     env.vars[name] = Var(val: val, typ: v_typeof(env, val), is_defined: true)
 
-#proc assume(env: Env, name: string, typ: Val) =
-#    env.vars[name] = Var(typ: typ, is_defined: false)
+proc def_builtin_fun(env: Env, name: string, fun: BuiltinFun, typ: FunTyp) =
+    env.define name, Val(kind: BuiltinFunVal, builtin_name: name, builtin_fun: fun, builtin_typ: some(typ))
+
+proc set_builtin_fun(env: Env, name: string, fun: BuiltinFun) =
+    let val = Val(kind: BuiltinFunVal, builtin_name: name, builtin_fun: fun)
+    env.vars[name] = Var(val: val, typ: nil, is_defined: true)
 
 var global_env* = Env(parent: nil)
+
 global_env.define "Type", type0
 
-global_env.define "=", Val(kind: BuiltinFunVal, builtin_fun: expand_define, builtin_typ: FunTyp(
+global_env.def_builtin_fun "=", expand_define, FunTyp(
     params: @[
         FunParam(name: "pattern", typ: atom("Expr"), quoted: true),
         FunParam(name: "expr", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Expr"),
     is_macro: true,
-))
+)
 
-global_env.define "(_)", Val(kind: BuiltinFunVal, builtin_fun: expand_group, builtin_typ: FunTyp(
+global_env.def_builtin_fun "(_)", expand_group, FunTyp(
     params: @[
         FunParam(name: "group", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Expr"),
     is_macro: true,
-))
+)
 
-global_env.define "[_]", Val(kind: BuiltinFunVal, builtin_fun: expand_square_group, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "group", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-))
-
-global_env.define "()", Val(kind: BuiltinFunVal, builtin_fun: expand_apply, builtin_typ: FunTyp(
+global_env.def_builtin_fun "()", expand_apply, FunTyp(
     params: @[
         FunParam(name: "func", typ: atom("Expr"), quoted: true),
         FunParam(name: "args", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Expr"),
     is_macro: true,
-))
+)
 
-global_env.define "=>", Val(kind: BuiltinFunVal, builtin_fun: expand_lambda, builtin_typ: FunTyp(
+global_env.def_builtin_fun "=>", expand_lambda, FunTyp(
     params: @[
         FunParam(name: "head", typ: atom("Expr"), quoted: true),
         FunParam(name: "body", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Expr"),
     is_macro: true,
-))
+)
 
-global_env.define "->", Val(kind: BuiltinFunVal, builtin_fun: expand_lambda_type, builtin_typ: FunTyp(
+global_env.def_builtin_fun "->", expand_lambda_type, FunTyp(
     params: @[
         FunParam(name: "params", typ: atom("Expr"), quoted: true),
         FunParam(name: "result", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Expr"),
     is_macro: true,
-))
+)
 
-global_env.define "lambda", Val(kind: BuiltinFunVal, builtin_fun: eval_lambda, builtin_typ: FunTyp(
+global_env.def_builtin_fun "lambda", eval_lambda, FunTyp(
     params: @[
         FunParam(name: "params", typ: atom("Expr"), quoted: true),
         FunParam(name: "result", typ: atom("Expr"), quoted: true),
         FunParam(name: "body", typ: atom("Expr"), quoted: true),
     ],
-    result: atom("Any"),
-))
+    result: term(atom("Lambda"), atom("params"), atom("result")),
+)
 
-global_env.define "Lambda", Val(kind: BuiltinFunVal, builtin_fun: eval_lambda_type, builtin_typ: FunTyp(
+global_env.def_builtin_fun "Lambda", eval_lambda_type, FunTyp(
     params: @[
         FunParam(name: "params", typ: atom("Expr"), quoted: true),
         FunParam(name: "result", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Any"),
-))
-
-
-global_env.define "ref", Val(kind: BuiltinFunVal, builtin_fun: eval_ref, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "cap", typ: atom("Cap")),
-        FunParam(name: "type", typ: atom("Type")),
-        FunParam(name: "value", typ: atom("Expr"), quoted: true),
-    ],
-    result: term(atom("Ptr"), atom("cap"), atom("type")),
-))
-
-global_env.define "gensym", Val(kind: BuiltinFunVal, builtin_fun: eval_gensym, builtin_typ: FunTyp(
-    params: @[],
-    result: atom("Atom"),
-))
-
-global_env.define "test", Val(kind: BuiltinFunVal, builtin_fun: eval_test, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "name", typ: atom("Atom"), quoted: true),
-        FunParam(name: "body", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Atom"),
-))
-
-global_env.define "assert", Val(kind: BuiltinFunVal, builtin_fun: eval_assert, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "assertion", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Unit"),
-))
-
-global_env.define "quote", Val(kind: BuiltinFunVal, builtin_fun: eval_quote, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "expr", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-))
-
-#[
-global_env.define "Record", Val(kind: BuiltinFunVal, builtin_fun: eval_record_type, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "fields", typ: atom("Expr"), quoted: true),
     ],
     result: atom("Type"),
-))
+)
 
-global_env.define "record", Val(kind: BuiltinFunVal, builtin_fun: eval_record, builtin_typ: FunTyp(
-    params: @[
-        FunParam(name: "fields", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-))
-]#
+#global_env.set_builtin_fun "record", eval_record
+
+global_env.set_builtin_fun "record", eval_record
+
+global_env.set_builtin_fun "record-aux", eval_record_result
+
+global_env.set_builtin_fun "Record", eval_record_type
+
+# `type-of` : (expr: Quoted(Expr)) -> Type
+global_env.set_builtin_fun "type-of", eval_infer
+
+# `level-of` : (expr: Quoted(Expr)) -> Type
+global_env.set_builtin_fun "level-of", eval_levelof
+
+# `quote` = (expr: Quoted(Expr)) -> Expr => expr
+global_env.set_builtin_fun "quote", eval_quote
+
+# `gensym` : () -> Atom
+global_env.set_builtin_fun "gensym", eval_gensym
+
+# `ref` : (cap: Cap, type: Type, value: Quoted(Expr)) -> Ptr(cap, type)
+global_env.set_builtin_fun "ref", eval_ref
+
+#
+# non-essential definitions
+#
+
+global_env.set_builtin_fun "test", eval_test
+
+global_env.set_builtin_fun "assert", eval_assert
+
+# `==` : (lhs rhs : Quoted(Expr)) -> Bool
+global_env.set_builtin_fun "==", eval_equals
+
+# `<` : (lhs rhs : Quoted(Expr)) -> Bool
+global_env.set_builtin_fun "<", eval_less_than
+
+# `as` : (x: a, y: Type) -> y
+#global_env.set_builtin_fun "as", eval_as
+
+# `compare` : (expr: Quoted(Expr)) -> Bool
+global_env.set_builtin_fun "compare", eval_compare 
+
+#global_env.set_builtin_fun "[_]", expand_square_group
+
+# `+` : (a: Type = _, lhs rhs: a) -> a
+#global_env.set_builtin_fun "+", eval_add
+
+# `*` : (a: Type = _, lhs rhs: a) -> a
+#global_env.set_builtin_fun "*", eval_mul
+
+# `:=` : (x: Ptr(cap: Set(wro, mut), a), y: a) -> a
+#global_env.set_builtin_fun ":=", eval_assign 
+
+# `*_` : (x: Ptr(cap: Set(rdo, imm), a)) -> a
+#global_env.set_builtin_fun "deref", eval_deref

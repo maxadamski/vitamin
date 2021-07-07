@@ -2,20 +2,33 @@
 
 {`:` Atom Type}
 {`:` Term Type}
+#define(Expr, Term | Atom)
 {define Expr {Union Term Atom}}
 
-assert error(Has-Prelude) # run this file without prelude (-P option)
+Lambda : (params result: Quoted(Expr)) -> Type
+Lazy : (x: Type) -> Type
+Quoted : (x: Type) -> Type
 
-I64 : Type
-U64 : Type
-Str : Type
-
-Size = U64
-Int = I64
+record-aux : (values: Expr) -> Type
+record : (values: Quoted(Expr)) -> record-aux(values)
+`Record` : (fields: Quoted(Expr)) -> Type
+`quote` : (expr: Quoted(Expr)) -> Expr
+`gensym` : () -> Atom
+`type-of` : (expr: Quoted(Expr)) -> Type
 
 Any = Inter()
 Never = Union()
 Unit = Record()
+
+`as` : (expr: Quoted(Expr), type: Type) -> type
+`test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
+`assert` : (cond: Quoted(Expr)) -> Unit
+
+I64, U64, Str : Type
+Size = U64
+Int = I64
+
+`level-of` : (type: Type) -> Int
 
 true = Symbol(true)
 false = Symbol(false)
@@ -23,7 +36,9 @@ none = Symbol(none)
 Bool = Set(true, false)
 None = Set(none)
 
-Lazy : (x: Type) -> Type
+`==` : (lhs rhs: Quoted(Expr)) -> Bool
+`compare` : (expr: Quoted(Expr)) -> Bool
+
 
 `and` = (x y: Lazy(Bool)) -> Bool =>
 	case x
@@ -39,6 +54,8 @@ Lazy : (x: Type) -> Type
 	case x
 	of true false
 	of false true
+
+assert error(Has-Prelude) # run this file without prelude (-P option)
 
 test "Variable identity"
     # identity
@@ -108,12 +125,12 @@ test "Integer literals"
     assert type-of(forty-two) == I64
 
 test "Opaque values"
-    Bool = opaque Int
-    None = opaque Int
+    My-Bool = opaque Int
+    My-None = opaque Int
 
-    true  = 1 as Bool
-    false = 0 as Bool
-    none  = 0 as None
+    true  = 1 as My-Bool
+    false = 0 as My-Bool
+    none  = 0 as My-None
 
     # cast identity
     assert true == true
@@ -121,9 +138,9 @@ test "Opaque values"
     assert none == none
 
     # cast type
-    assert type-of(true) == Bool
-    assert type-of(false) == Bool
-    assert type-of(none) == None
+    assert type-of(true) == My-Bool
+    assert type-of(false) == My-Bool
+    assert type-of(none) == My-None
     assert type-of(true) != Int
     assert type-of(false) != Int
     assert type-of(none) != Int

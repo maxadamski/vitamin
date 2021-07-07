@@ -147,7 +147,8 @@ func str*(x: Exp): string =
             return x.value
     of expTerm:
         if x.exprs.len >= 3 and x.exprs[0].is_token("()"):
-            return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
+            return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
+            #return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
         elif x.exprs.len >= 2 and x.exprs[0].is_token("[]"):
             return x.exprs[1].str & "[" & x.exprs[2 .. ^1].map(str).join(", ") & "]"
         elif x.exprs.len >= 2 and x.exprs[0].is_token("Record"):

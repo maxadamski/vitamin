@@ -16,7 +16,7 @@ type
         HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, NumVal, ExpVal, MemVal, FunVal,
         FunTypeVal, BuiltinFunVal, OpaqueVal, OpaqueFunVal,
-        SymbolVal, SymbolTypeVal, SetTypeVal
+        SymbolVal, SymbolTypeVal, SetTypeVal #, NeutralVal
 
     Val* = ref object
         typ*: Option[Val]
@@ -51,6 +51,9 @@ type
         of HoldVal, SymbolVal, SymbolTypeVal:
             name*: string
 
+        #of NeutralVal:
+        #    neu*: Neutral
+
         of NumVal:
             num*: int
 
@@ -69,8 +72,9 @@ type
             inner*: Val
 
         of BuiltinFunVal:
+            builtin_name*: string
             builtin_fun*: BuiltinFun
-            builtin_typ*: FunTyp
+            builtin_typ*: Option[FunTyp]
 
 
     NeutralTag* = enum NVar, NApp
@@ -144,6 +148,8 @@ func Hold*(name: string): Val =
 func VExp*(exp: Exp): Val =
     Val(kind: ExpVal, exp: exp)
 
+#func VNeu*(neu: Neutral): Val = Val(kind: NeutralVal, neu: neu)
+
 func Opaque*(inner: Val): Val =
     Val(kind: OpaqueVal, inner: inner)
 
@@ -181,11 +187,19 @@ proc Lambda*(typ: FunTyp, body: Exp, env: Env): Val =
 func extend*(env: Env): Env =
     Env(parent: env)
 
-func assume*(env: Env, name: string, typ: Val) =
-    env.vars[name] = Var(val: Hold(name), typ: typ, is_defined: true)
+func assume*(env: Env, name: string, typ: Val, definition = none(Exp)) =
+    env.vars[name] = Var(val: Hold(name), typ: typ, is_defined: true, definition: definition)
 
 func declare*(env: Env, name: string, val, typ: Val) =
     env.vars[name] = Var(val: val, typ: typ, is_defined: true)
+
+func find*(env: Env, name: string): Env =
+    if name in env.vars:
+        env
+    elif env.parent != nil:
+        env.parent.find(name)
+    else:
+        nil
 
 func get_opt*(env: Env, name: string): Option[Var] =
     if name in env.vars:
@@ -194,6 +208,10 @@ func get_opt*(env: Env, name: string): Option[Var] =
         env.parent.get_opt(name)
     else:
         none(Var)
+
+proc validate_builtin*(val: Val) =
+    if val.builtin_typ.is_none:
+        raise error("Type of builtin `{val.builtin_name}` must be assumed before usage!".fmt)
 
 proc sets_inter*(xs, ys: seq[Val]): seq[Val] =
     for x in xs:
@@ -414,6 +432,9 @@ func str*(v: Val): string =
     case v.kind
     of HoldVal, SymbolVal, SymbolTypeVal:
         v.name
+
+    #of NeutralVal:
+    #    v.neu.str
 
     of SetTypeVal:
         "Set(" & v.values.map(str).join(", ") & ")"
