@@ -65,6 +65,8 @@ Requires Nim 1.4.2 and Nimble.
 chmod +x build
 # install dependencies
 ./build setup
+# run tests (optional)
+./build test
 # compile for the current architecture
 ./build
 ```
