@@ -130,7 +130,7 @@ parser.add_prefix_none "Use", "use"
 parser.add_prefix "Inverse", "-", fun="inv"
 
 # associative prefix operators
-parser.add_prefix_left "Qualifier", "opaque", "macro", "pure"
+parser.add_prefix_left "Qualifier", "pure"
 parser.add_prefix_left "Prefix-Type", "?", ".."
 parser.add_prefix_left "Member", ".", "*"
 
@@ -147,13 +147,9 @@ parser.add_prefix_mix "Group", "(", "(_)", "(".t & group.deepCopy.opt & ")".t
 
 parser.add_prefix_mix "Group", "[", "[_]", "[".t & group.deepCopy.opt & "]".t
 
-parser.add_prefix_mix "Group", "{", "{_}", ("{".t & "Any".E.star & "}".t).splice
-
 parser.add_infix_mix "Apply", "[", "[]", ("[".t & slice.list(",") & ",".opt & "]".t).splice
 
 parser.add_infix_mix "Apply", "(", "()", "(".t & group.deepcopy.opt & ")".t
-
-parser.add_prefix_mix "Apply", "Variant", "Variant".t & "(".t & group.deepCopy.opt  & ")".t
 
 parser.add_infix_mix "Pow-Base", "^", "^".t & "Pow".e
 

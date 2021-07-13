@@ -15,7 +15,7 @@ type
     ValTag* = enum
         HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, NumVal, ExpVal, MemVal, FunVal,
-        FunTypeVal, BuiltinFunVal, OpaqueVal, OpaqueFunVal,
+        FunTypeVal, BuiltinFunVal, OpaqueVal, UniqueVal,
         SymbolVal, SymbolTypeVal, SetTypeVal #, NeutralVal
 
     Val* = ref object
@@ -42,7 +42,7 @@ type
         of FunVal:
             fun*: Fun
 
-        of OpaqueFunVal:
+        of OpaqueVal:
             disp_name*: string
             result*: Val
             opaque_fun*: Fun
@@ -68,7 +68,7 @@ type
         #of CastVal:
         #    val*, typ*: Val
 
-        of OpaqueVal:
+        of UniqueVal:
             inner*: Val
 
         of BuiltinFunVal:
@@ -150,8 +150,8 @@ func VExp*(exp: Exp): Val =
 
 #func VNeu*(neu: Neutral): Val = Val(kind: NeutralVal, neu: neu)
 
-func Opaque*(inner: Val): Val =
-    Val(kind: OpaqueVal, inner: inner)
+func Unique*(inner: Val): Val =
+    Val(kind: UniqueVal, inner: inner)
 
 func Universe*(level: int): Val =
     Val(kind: TypeVal, level: 0)
@@ -387,7 +387,7 @@ proc equal*(x, y: Val): bool =
     case x.kind
     of TypeVal:
         x.level == y.level
-    of OpaqueVal:
+    of UniqueVal:
         x == y
     of HoldVal, SymbolVal:
         x.name == y.name
@@ -395,7 +395,7 @@ proc equal*(x, y: Val): bool =
         sets_equal(x.values, y.values)
     of FunTypeVal:
         equal(x.fun_typ, y.fun_typ)
-    of OpaqueFunVal:
+    of OpaqueVal:
         equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings
         #equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings
     of FunVal:
@@ -439,7 +439,7 @@ func str*(v: Val): string =
     of SetTypeVal:
         "Set(" & v.values.map(str).join(", ") & ")"
 
-    of OpaqueVal:
+    of UniqueVal:
         "Opaque(" & v.inner.str & ")"
 
     #of CastVal:
@@ -469,7 +469,7 @@ func str*(v: Val): string =
     of FunVal:
         "Lambda(...)"
 
-    of OpaqueFunVal:
+    of OpaqueVal:
         var name = if v.disp_name != "": v.disp_name else: "Lambda(...)"
         var args: seq[string]
         for (key, val) in v.bindings:

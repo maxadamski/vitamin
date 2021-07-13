@@ -1,59 +1,38 @@
 ## Tests of core language functionality
 
-{`:` Atom Type}
-{`:` Term Type}
-#define(Expr, Term | Atom)
-{define Expr {Union Term Atom}}
-
-Lambda : (params result: Quoted(Expr)) -> Type
+I64, U64, Str : Type
+Size = U64
+Int = I64
 Lazy : (x: Type) -> Type
 Quoted : (x: Type) -> Type
-
+Opaque : (x: Type) -> Type
+Expand : (x: Type) -> Type
+Lambda : (params result: Quoted(Expr)) -> Type
 record-aux : (values: Expr) -> Type
 record : (values: Quoted(Expr)) -> record-aux(values)
 `Record` : (fields: Quoted(Expr)) -> Type
 `quote` : (expr: Quoted(Expr)) -> Expr
-`gensym` : () -> Atom
-`type-of` : (expr: Quoted(Expr)) -> Type
-
+gensym : () -> Atom
+type-of : (expr: Quoted(Expr)) -> Type
+level-of : (type: Type) -> Int
+Symbol-Type : Type
+Symbol : (atom: Quoted(Atom)) -> Symbol-Type
+Array : (type: Type) -> Type
 Any = Inter()
 Never = Union()
 Unit = Record()
-
-`as` : (expr: Quoted(Expr), type: Type) -> type
-`test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
-`assert` : (cond: Quoted(Expr)) -> Unit
-
-I64, U64, Str : Type
-Size = U64
-Int = I64
-
-`level-of` : (type: Type) -> Int
-
 true = Symbol(true)
 false = Symbol(false)
 none = Symbol(none)
 Bool = Set(true, false)
 None = Set(none)
-
+`test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
+`assert` : (cond: Quoted(Expr)) -> Unit
 `==` : (lhs rhs: Quoted(Expr)) -> Bool
-`compare` : (expr: Quoted(Expr)) -> Bool
-
-
-`and` = (x y: Lazy(Bool)) -> Bool =>
-	case x
-	of true y
-	of false false 
-
-`or` = (x y: Lazy(Bool)) -> Bool =>
-	case x
-	of true true
-	of false y
-
-`not` = (x: Bool) -> Bool =>
-	case x
-	of true false
-	of false true
+compare : (expr: Quoted(Expr)) -> Bool
+`and`(x y: Lazy(Bool)) -> Bool = case x of true y of false false
+`or`(x y: Lazy(Bool)) -> Bool = case x of true true of false y
+`not`(x: Bool) -> Bool = case x of true false of false true
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
 
@@ -95,24 +74,31 @@ test "Multiple assumption shorthand syntax"
     assert type-of(B) == Type
     assert type-of(C) == Type
 
-test "Opaque values have different identities"
+test "Unique values have different identities"
     A : Type
-    P = opaque A
-    Q = opaque A
+    P = Unique(A)
+    Q = Unique(A)
 
     # type-of(opaque x) is by definition type-of(x)
-    assert type-of(A) == Type
-    assert type-of(P) == Type
-    assert type-of(Q) == Type
+    assert type-of(P) == type-of(A)
+    assert type-of(Q) == type-of(A)
 
     # each opaque value is unique
     assert P != A
     assert Q != A
+    assert P != Q
 
-test "Opaque value unwrapping"
+test "Unique functions"
+    foo(x: Type) = x
+    bar = Unique(foo)
+    A = Type
+    assert foo(A) == A
+    assert error(bar(A))
+
+test "Unique value unwrapping"
     A : Type
-    P = opaque A
-    Q = opaque A
+    P = Unique(A)
+    Q = Unique(A)
     assert unwrap(P) == A
     assert unwrap(Q) == A
     assert unwrap(P) == unwrap(Q)
@@ -124,9 +110,9 @@ test "Integer literals"
     assert type-of(42) == I64
     assert type-of(forty-two) == I64
 
-test "Opaque values"
-    My-Bool = opaque Int
-    My-None = opaque Int
+test "Unique values"
+    My-Bool = Unique(Int)
+    My-None = Unique(Int)
 
     true  = 1 as My-Bool
     false = 0 as My-Bool
@@ -150,8 +136,9 @@ test "Value set types"
     grn = Symbol(grn)
     blu = Symbol(blu)
 
-    assert type-of(red) == Set(red)
+    assert type-of(red) == Symbol-Type
     assert Set(red, red) == Set(red)
+    assert Set(red, blu) != Set(red, grn)
     assert Set(red, grn, red) == Set(red, grn)
     assert Set(red, grn, blu) == Set(blu, grn, red)
     assert type-of(red as Set(red, grn, blu)) == Set(red, grn, blu)
@@ -204,6 +191,7 @@ test "Unit records"
     assert type-of(Unit) == Type
     assert type-of(unit) == Unit
     assert type-of((x=Unit)) == Record(x: Type)
+    assert type-of((x=unit)) == Record(x: Unit)
 
 test "Single row records"
     Single = Record(x: Type)
@@ -218,23 +206,21 @@ test "Record row shorthand syntax"
     assert R1 == R2
 
 test "Row order doesn't affect record type equality"
-    Double = Record(x: Type, y: I64)
-    assert type-of(Double) == Type
-    assert Double == Record(x: Type, y: I64)
-    assert Double == Record(y: I64, x: Type)
-    assert type-of((x=Unit, y=42)) == Double
-    assert type-of((y=42, x=Unit)) == Double
+    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
+    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
 
-test "Upcast to Any"
-    true = Symbol(true)
+test "Type upcast to Any"
     assert type-of(Type as Any) == Any
-    assert type-of(true as Any) == Any
+
+test "Type upcast is idempotent"
     assert type-of((true as Any) as Any) == Any
-    #assert type-of((true as Any) as Bool) == Bool
+
+test "Type upcast is invertible"
+    assert type-of((true as Any) as Bool) == Bool
 
 test "Opaque functions"
     x, y : Type
-    Raw-Pointer = opaque (a: Type) => Size
+    Raw-Pointer = (a: Type) -> Opaque(Type) => Size
     assert Raw-Pointer(x) != Size
     assert Raw-Pointer(x) != Raw-Pointer(y)
     assert Raw-Pointer(x) == Raw-Pointer(x)

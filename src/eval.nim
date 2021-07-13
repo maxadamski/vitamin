@@ -229,12 +229,17 @@ proc make_lambda_type(env: Env, params: seq[Exp], ret: Exp, body: Option[Exp]): 
     var ret_exp = ret
     var is_macro = false
     var is_pure = false
+    var is_opaque = false
     var did_infer_result = false
 
     if not ret_exp.is_nil:
+        ret_exp = v_expand(env, ret_exp)
         if ret_exp.has_prefix("Expand"):
             ret_exp = ret_exp[1]
             is_macro = true
+        if ret_exp.has_prefix("Opaque"):
+            ret_exp = ret_exp[1]
+            is_opaque = true
         ret_exp = v_norm(local, ret_exp)
 
     if body.is_some:
@@ -252,11 +257,15 @@ proc make_lambda_type(env: Env, params: seq[Exp], ret: Exp, body: Option[Exp]): 
         let exp = term(params)
         raise error(exp, "You have to provide a function result type or function body, so the result type can be inferred. {exp.src}".fmt)
 
+    if is_macro and is_opaque:
+        raise error(term(params), "Lambda cannot be a macro and opaque at the same time")
+
     let fun_typ = FunTyp(
         params: param_list,
         result: ret_exp,
         is_macro: is_macro,
         is_pure: is_pure,
+        is_opaque: is_opaque,
     )
 
     (typ: fun_typ, env: local)
@@ -667,9 +676,11 @@ proc apply_lambda(env: Env, fun: Val, exp: Exp, expand = true): Val =
         var name = ""
         if exp[0].kind == expAtom:
             name = exp[0].value
-        res = Val(kind: OpaqueFunVal, disp_name: name, result: res, bindings: bindings, opaque_fun: fun.fun)
+        res = Val(kind: OpaqueVal, disp_name: name, result: res, bindings: bindings, opaque_fun: fun.fun)
     if fun_typ.is_macro and expand:
-        assert res.kind == ExpVal
+        if res.kind != ExpVal:
+            let res_typ = v_typeof(env, res)
+            raise error(exp, "Expected macro to return a value of type Expr, but got {res_typ}. {exp.src}".fmt)
         return eval(env, res.exp)
     return res
 
@@ -707,8 +718,6 @@ proc eval_name*(env: Env, exp: Exp, unwrap: bool): Val =
         #return Hold(name)
         raise error(exp, "{name} is assumed, but not defined. {exp.src}".fmt)
     let val = res.get.val
-    if not unwrap and val.kind == OpaqueVal:
-        return Hold(name)
     return val
 
 proc eval_num_literal*(env: Env, exp: Exp, as_type: Option[Val]): Val =
@@ -726,26 +735,15 @@ proc eval_print(env: Env, args: seq[Val]): Val =
     echo args.join(" ")
     return unit
 
-proc eval_opaque(env: Env, args: seq[Val]): Val =
-    let val = args[0]
-    if val.kind == FunTypeVal:
-        val.fun_typ.is_opaque = true
-        return val
-    elif val.kind == FunVal:
-        val.fun.typ.is_opaque = true
-        return val
-    else:
-        return Opaque(val)
-
 proc eval_unwrap(env: Env, args: seq[Val]): Val =
     let exp = args[0].exp
     var val = eval(env, exp)
     if val.kind == HoldVal:
         val = env.get_opt(val.name).get.val
     case val.kind:
-    of OpaqueVal:
+    of UniqueVal:
         return val.inner
-    of OpaqueFunVal:
+    of OpaqueVal:
         return val.result
     else:
         raise error(exp, "{val.str} is not an opaque value. {exp.src}".fmt)
@@ -913,7 +911,7 @@ proc v_reify*(env: Env, val: Val): Exp =
         append(atom(op), val.values.map_it(v_reify(env, it)))
     of SymbolVal:
         term(atom("Symbol"), atom(val.name))
-    of OpaqueFunVal:
+    of OpaqueVal:
         var args: seq[Exp]
         var local = env.extend()
         for (name, arg) in val.bindings:
@@ -941,7 +939,8 @@ proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
         validate_builtin(val)
         Val(kind: FunTypeVal, fun_typ: val.builtin_typ.get)
     of SymbolVal:
-        Val(kind: SetTypeVal, values: @[val])
+        #Val(kind: SetTypeVal, values: @[val])
+        eval(env, atom("Symbol-Type"))
     of MemVal:
         Hold("Size")
     of NumVal:
@@ -950,9 +949,9 @@ proc v_typeof*(env: Env, val: Val, as_type: Option[Val]): Val =
         case val.exp.kind
         of expAtom: Hold("Atom")
         of expTerm: Hold("Term")
-    of OpaqueVal:
+    of UniqueVal:
         v_typeof(env, val.inner)
-    of OpaqueFunVal:
+    of OpaqueVal:
         v_typeof(env, val.result)
     of HoldVal:
         let res = env.get_opt(val.name)
@@ -1027,24 +1026,20 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 #else:
                 #    typ = v_typeof(env, val)
                 env.assume(name, typ)
-                return RecordType()
-            of ":":
-                return RecordType()
+                return typ
             of "case":
                 let branches = exp.exprs[2 .. ^1]
                 var types: seq[Val]
                 for branch in branches:
                     types.add(v_infer(env, branch[1]))
                 return v_union(env, types)
-            of "if":
-                #echo exp
-                var types: seq[Val]
-                types.add(v_infer(env, exp[2]))
-                if not exp[4].is_nil:
-                    types.add(v_infer(env, exp[4]))
-                return v_union(env, types)
-            of "for":
-                return RecordType()
+            #of "if":
+            #    #echo exp
+            #    var types: seq[Val]
+            #    types.add(v_infer(env, exp[2]))
+            #    if not exp[4].is_nil:
+            #        types.add(v_infer(env, exp[4]))
+            #    return v_union(env, types)
             of "block":
                 var typ = RecordType()
                 for stat in exp.tail:
@@ -1052,12 +1047,13 @@ proc v_infer*(env: Env, exp: Exp): Val =
                 return typ
             of "Union", "Inter", "Set":
                 return type0
-            of "Symbol":
-                return Val(kind: SymbolTypeVal, name: exp[1].value)
-            of "print":
-                return RecordType()
-            of "opaque":
+            of "Unique":
                 return v_typeof(env, eval(env, exp))
+            of "Symbol":
+                return eval(env, atom("Symbol-Type"))
+                #return Val(kind: SymbolTypeVal, name: exp[1].value)
+            of ":", "print":
+                return RecordType()
             of "as":
                 return eval(env, exp[2])
             else:
@@ -1104,19 +1100,16 @@ proc eval*(env: Env, exp: Exp, as_type: Option[Val], unwrap = false): Val =
                 for stat in exp.tail:
                     res = eval(env, stat)
                 return res
-            of "{_}": return eval(env, term(exp.tail))
             of ":": return eval_assume(env, exp.tail.map_it(VExp(it))) # `:` : (x: Atom, y: Type) -> Unit
             of "define": return eval_define(env, exp.tail.map_it(VExp(it))) # `=` : (a: Type = _, x: Atom, y: a) -> a
             of "case": return eval_case(env, exp.tail.map_it(VExp(it))) # `case` : (exprs : Args(Quoted(Exprs))) -> case-aux(exprs)
-            of "Symbol": return eval_symbol(env, exp.tail.map_it(VExp(it))) # Symbol : (atom: Atom) -> ???
             of "Set": return v_value_set(env, exp.tail.map_it(eval(env, it))) # Set : (values : Args(Any)) -> Type
             of "Union": return v_union(env, exp.tail.map_it(eval(env, it))) # Union : (types : Args(Type)) -> Type
             of "Inter": return v_inter(env, exp.tail.map_it(eval(env, it))) # Inter : (types : Args(Type)) -> Type
+            of "Unique": return Unique(eval(env, exp[1]))
             of "print": return eval_print(env, exp.tail.map_it(eval(env, it))) # print : (args : Args(Any)) -> Unit
             of "as": return eval_as(env, exp.tail.map_it(VExp(it))) # `as` : (x: a, y: Type) -> y
-            of "opaque": return eval_opaque(env, exp.tail.map_it(eval(env, it)))
-            of "unwrap": return eval_unwrap(env, exp.tail.map_it(VExp(it)))
-            #of "as": return eval_as(env, exp.tail.map_it(VExp(it))) # `as` : (x: Any, y: Type) -> y
+            of "unwrap": return eval_unwrap(env, exp.tail.map_it(VExp(it))) # `unwrap` : Opaque(a, uid) -> a
         if exp.len >= 1:
             let fun = eval(env, exp[0])
             case fun.kind
@@ -1147,6 +1140,9 @@ proc set_builtin_fun(env: Env, name: string, fun: BuiltinFun) =
 var global_env* = Env(parent: nil)
 
 global_env.define "Type", type0
+global_env.assume "Atom", type0
+global_env.assume "Term", type0
+global_env.define "Expr", global_env.eval(term(atom("Union"), atom("Atom"), atom("Term")))
 
 global_env.def_builtin_fun "=", expand_define, FunTyp(
     params: @[
@@ -1216,6 +1212,8 @@ global_env.set_builtin_fun "record", eval_record
 global_env.set_builtin_fun "record-aux", eval_record_result
 
 global_env.set_builtin_fun "Record", eval_record_type
+
+global_env.set_builtin_fun "Symbol", eval_symbol
 
 # `type-of` : (expr: Quoted(Expr)) -> Type
 global_env.set_builtin_fun "type-of", eval_infer
