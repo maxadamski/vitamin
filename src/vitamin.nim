@@ -87,10 +87,8 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string), sta
             quit(0)
         for x in exprs:
             let val = eval(env, x)
-            if print:
-                let typ = v_typeof(env, val)
-                if val != unit:
-                    echo val.str, " : ", typ.str
+            if print and val != unit:
+                echo val.str
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error)
