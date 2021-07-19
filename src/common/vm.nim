@@ -1,133 +1,8 @@
 import options, tables, strutils, sequtils, algorithm
-import exp, utils, error
+import exp, utils, error, types
+import patty
 
-type
-    Var* = object
-        val*, typ*: Val
-        is_defined*: bool
-        is_placeholder*: bool
-        definition*: Option[Exp]
-
-    Env* = ref object
-        parent*: Env
-        vars*: Table[string, Var]
-
-    ValTag* = enum
-        HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
-        TypeVal, NumVal, ExpVal, MemVal, FunVal,
-        FunTypeVal, BuiltinFunVal, OpaqueVal, UniqueVal,
-        SymbolVal, SymbolTypeVal, SetTypeVal #, NeutralVal
-
-    Val* = ref object
-        typ*: Option[Val]
-
-        case kind*: ValTag
-        of TypeVal:
-            level*: int
-
-        of SetTypeVal, UnionTypeVal, InterTypeVal:
-            values*: seq[Val]
-
-        of RecTypeVal:
-            slots*: seq[RecSlot]
-            extensible*: bool
-            extension*: Option[Exp]
-
-        of RecVal:
-            fields*: seq[RecField]
-
-        of FunTypeVal:
-            fun_typ*: FunTyp
-
-        of FunVal:
-            fun*: Fun
-
-        of OpaqueVal:
-            disp_name*: string
-            result*: Val
-            opaque_fun*: Fun
-            bindings*: seq[(string, Val)]
-
-        of HoldVal, SymbolVal, SymbolTypeVal:
-            name*: string
-
-        #of NeutralVal:
-        #    neu*: Neutral
-
-        of NumVal:
-            num*: int
-
-        of MemVal:
-            mem_ptr*: Val
-            mem_typ*: Val
-            wr*, rd*, imm*: bool
-
-        of ExpVal:
-            exp*: Exp
-
-        #of CastVal:
-        #    val*, typ*: Val
-
-        of UniqueVal:
-            inner*: Val
-
-        of BuiltinFunVal:
-            builtin_name*: string
-            builtin_fun*: BuiltinFun
-            builtin_typ*: Option[FunTyp]
-
-
-    NeutralTag* = enum NVar, NApp
-
-    Neutral* = ref object
-        case kind*: NeutralTag
-        of NVar:
-            name*: string
-        of NApp:
-            head*: Neutral
-            args*: seq[Arg]
-
-    Arg* = object
-        name*: string
-        value*: Val
-        keyword*: bool
-
-    FunParam* = object
-        name*: string
-        typ*: Exp
-        default*: Option[Exp]
-        did_infer_typ*: bool
-        searched*: bool
-        quoted*: bool
-        keyword*: bool
-        variadic*: bool
-        lazy*: bool
-
-    FunTyp* = object
-        params*: seq[FunParam]
-        result*: Exp
-        #autoapply*: bool
-        is_opaque*: bool
-        is_pure*: bool
-        is_macro*: bool
-
-    Fun* = object
-        typ*: FunTyp
-        body*: Exp
-        env*: Option[Env]
-
-    RecSlot* = object
-        name*: string
-        typ*: Val
-        default*: Option[Exp]
-        typ_inferred_from_default*: bool
-        typ_inferred_from_position*: bool
-
-    RecField* = object
-        name*: string
-        val*, typ*: Val
-
-    BuiltinFun* = proc(env: Env, args: seq[Val]): Val
+{.experimental: "notnil".}
 
 func str*(v: Val): string
 
@@ -170,7 +45,7 @@ func SetType*(values: varargs[Val]): Val =
 func Record*(fields: varargs[RecField]): Val =
     Val(kind: RecVal, fields: @fields)
 
-func RecordType*(slots: varargs[RecSlot], extensible = false, extension = none(Exp)): Val =
+func RecordType*(slots: varargs[RecSlot], extensible = false, extension = None[Exp]()): Val =
     Val(kind: RecTypeVal, slots: @slots, extensible: extensible or extension.is_some, extension: extension)
 
 func LambdaType*(params: varargs[FunParam], ret: Exp): FunTyp =
@@ -180,18 +55,24 @@ func LambdaType*(typ: FunTyp): Val =
     Val(kind: FunTypeVal, fun_typ: typ)
 
 proc Lambda*(typ: FunTyp, body: Exp, env: Env): Val =
-    Val(kind: FunVal, fun: Fun(typ: typ, body: body, env: some(env)))
+    Val(kind: FunVal, fun: Fun(typ: typ, body: body, env: Some(env)))
 
 # end of constructors
 
 func extend*(env: Env): Env =
-    Env(parent: env)
+    Env(parent: env, in_macro: env.in_macro)
 
-func assume*(env: Env, name: string, typ: Val, definition = none(Exp)) =
-    env.vars[name] = Var(val: Hold(name), typ: typ, is_defined: true, definition: definition)
+func assume*(env: Env, name: string, typ: Val, site = None[Exp]()) =
+    env.vars[name] = Var(val: None[Val](), typ: Some(typ), site: site)
 
-func declare*(env: Env, name: string, val, typ: Val) =
-    env.vars[name] = Var(val: val, typ: typ, is_defined: true)
+func assume*(env: Env, name: string, typ: Val, site: Exp) =
+    env.assume(name, typ, Some(site))
+
+func define*(env: Env, name: string, val, typ: Val, site = None[Exp]()) =
+    env.vars[name] = Var(val: Some(val), typ: Some(typ), site: site)
+
+func define*(env: Env, name: string, val, typ: Val, site: Exp) =
+    env.define(name, val, typ, Some(site))
 
 func find*(env: Env, name: string): Env =
     if name in env.vars:
@@ -201,16 +82,47 @@ func find*(env: Env, name: string): Env =
     else:
         nil
 
-func get_opt*(env: Env, name: string): Option[Var] =
-    if name in env.vars:
-        some(env.vars[name])
-    elif env.parent != nil:
-        env.parent.get_opt(name)
+func site*(env: Env): Exp =
+    if env.site_stack.len > 0:
+        env.site_stack[^1]
     else:
-        none(Var)
+        term()
 
-proc validate_builtin*(val: Val) =
-    if val.builtin_typ.is_none:
+func push_call*(env: Env, site: Exp, infer = false) =
+    env.call_stack.add(TraceCall(site: site, infer: infer))
+
+func pop_call*(env: Env) =
+    discard env.call_stack.pop()
+
+func get*(env: Env, name: string): Opt[Var] =
+    if name in env.vars:
+        Some(env.vars[name])
+    elif env.parent != nil:
+        env.parent.get(name)
+    else:
+        None[Var]()
+
+func get_assumed*(env: Env, name: string): Opt[VarAssumed] =
+    let variable = env.get(name).or_else:
+        return None[VarAssumed]()
+    let typ = variable.typ.or_else:
+        return None[VarAssumed]()
+        #raise error(env.site, "Expected variable {name} to be assumed or defined at this point. {env.site.src}".fmt)
+    Some(VarAssumed(val: variable.val, typ: typ, site: variable.site))
+
+proc get_defined*(env: Env, name: string): Opt[VarDefined] =
+    let variable = env.get(name).or_else:
+        return None[VarDefined]()
+    let typ = variable.typ.or_else:
+        return None[VarDefined]()
+        #raise error(env.site, "Expected variable {name} to be typed at this point. {env.site.src}".fmt)
+    let val = variable.val.or_else:
+        return None[VarDefined]()
+        #raise error(env.site, "Expected variable {name} to be defined at this point. {env.site.src}".fmt)
+    Some(VarDefined(val: val, typ: typ, site: variable.site))
+
+proc get_builtin_typ*(val: Val): FunTyp =
+    val.builtin_typ.or_else:
         raise error("Type of builtin `{val.builtin_name}` must be assumed before usage!".fmt)
 
 proc sets_inter*(xs, ys: seq[Val]): seq[Val] =
@@ -259,6 +171,10 @@ proc is_subtype*(x, y: Val): bool =
         else:
             discard
     else:
+        if y.kind == UniqueVal:
+            return equal(x, y.inner)
+        if x.kind == UniqueVal:
+            return equal(x, y.inner)
         if y.kind == UnionTypeVal:
             if y.values.len == 0: return false
             return y.values.any_it(is_subtype(x, it))
@@ -396,11 +312,37 @@ proc equal*(x, y: Val): bool =
     of FunTypeVal:
         equal(x.fun_typ, y.fun_typ)
     of OpaqueVal:
-        equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings
-        #equal(x.opaque_fun.typ, y.opaque_fun.typ) and x.bindings == y.bindings
+        if not equal(x.opaque_fun.typ, y.opaque_fun.typ):
+            return false
+        for (x_name, x_val) in x.bindings:
+            var found = false
+            for (y_name, y_val) in y.bindings:
+                if x_name == y_name:
+                    if equal(x_val, y_val):
+                        found = true 
+                        break
+                    else:
+                        return false
+            if not found:
+                return false 
+        return true
     of FunVal:
-        #equal(x.fun.typ, x.fun.typ)
         x == y
+    of RecVal:
+        if x.fields.len != y.fields.len: return false
+        for xf in x.fields:
+            var found = false
+            for yf in y.fields:
+                if xf.name == yf.name:
+                    if equal(xf.val, yf.val):
+                        found = true 
+                        break
+                    else:
+                        return false
+            if not found:
+                return false 
+        return true
+
     of RecTypeVal:
         if x.slots.len != y.slots.len: return false
         let n = x.slots.len
@@ -413,6 +355,8 @@ proc equal*(x, y: Val): bool =
     #    return equal(x.val, y.val)
     of NumVal:
         return x.num == y.num
+    of ExpVal:
+        return x.exp == y.exp
     else:
         raise error(term(), "Equality for {x} and {y} ({x.kind}) not implemented".fmt)
 
@@ -452,10 +396,14 @@ func str*(v: Val): string =
         "Memory(...)"
 
     of ExpVal:
-        "Expr(" & v.exp.str & ")"
+        case v.exp.kind:
+        of expAtom:
+            "Atom(" & v.exp.str & ")"
+        of expTerm:
+            "Term(" & v.exp.str & ")"
 
     of BuiltinFunVal:
-        "Builtin-Lambda()"
+        "[Builtin-Lambda " & v.builtin_name & "]"
 
     of TypeVal:
         if v.level == 0: "Type" else: "Type" & $v.level
@@ -485,7 +433,8 @@ func str*(v: Val): string =
         for param in v.fun_typ.params:
             var s = param.name
             if not param.did_infer_typ: s &= ": " & param.typ.str
-            if param.default.is_some: s &= " = " & param.default.get.str
+            param.default.if_some(default):
+                s &= " = " & $default
             params.add(s)
         prefix & "(" & params.join(", ") & ") -> " & v.fun_typ.result.str
 
@@ -502,6 +451,7 @@ func str*(v: Val): string =
             var repr = ""
             if x.name != "": repr &= x.name & ": "
             repr &= x.typ.str
-            if x.default.is_some: repr &= " = " & x.default.get.str
+            x.default.if_some(default):
+                repr &= " = " & $default
             res.add(repr)
         "Record(" & res.join(", ") & ")"

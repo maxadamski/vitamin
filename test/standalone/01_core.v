@@ -1,5 +1,6 @@
 ## Tests of core language functionality
 
+Num-Literal : Type
 I64, U64, Str : Type
 Size = U64
 Int = I64
@@ -7,9 +8,14 @@ Lazy : (x: Type) -> Type
 Quoted : (x: Type) -> Type
 Opaque : (x: Type) -> Type
 Expand : (x: Type) -> Type
+`=` : (pattern value: Quoted(Expr)) -> Expand(Expr)
+`->` : (params result: Quoted(Expr)) -> Expand(Expr)
+`=>` : (head body: Quoted(Expr)) -> Expand(Expr)
+lambda-infer : (params result body: Expr) -> Type
+lambda : (params result body: Quoted(Expr)) -> lambda-infer(params, result, body)
 Lambda : (params result: Quoted(Expr)) -> Type
-record-aux : (values: Expr) -> Type
-record : (values: Quoted(Expr)) -> record-aux(values)
+record-infer : (values: Expr) -> Type
+record : (values: Quoted(Expr)) -> record-infer(values)
 `Record` : (fields: Quoted(Expr)) -> Type
 `quote` : (expr: Quoted(Expr)) -> Expr
 gensym : () -> Atom
@@ -27,6 +33,7 @@ none = Symbol(none)
 Bool = Set(true, false)
 None = Set(none)
 `test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
+`xtest` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
 `assert` : (cond: Quoted(Expr)) -> Unit
 `==` : (lhs rhs: Quoted(Expr)) -> Bool
 compare : (expr: Quoted(Expr)) -> Bool
@@ -55,6 +62,11 @@ test "Variable identity"
     assert Test-A == Test-B
     assert Test-B == Test-C
     assert Test-A == Test-C
+
+test "Function type equality"
+    assert ((x: Type) -> Type) == ((x: Type) -> Type)
+    assert ((x: Type) -> Type) != ((y: Type) -> Type)
+    assert ((x: Type) -> (y: Type) -> Type) == ((x: Type) -> (y: Type) -> Type)
 
 test "Assumed variables"
     # assumed equality

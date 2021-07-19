@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
 MAIN=src/vitamin.nim
 BIN=bin/vita
-NIMFLAGS="--hints:off"
+NIMFLAGS="--hints:off --experimental:notnil"
 
 case $1 in
 clean)
@@ -17,9 +17,18 @@ run)
 ;;
 test)
 	shift
-	for f in test/*.v; do
-		nim r $NIMFLAGS $MAIN -P $f
+	BIN=bin/vita-test
+	echo "BUILD $BIN"
+	nim c -o:$BIN $NIMFLAGS $MAIN
+	for f in test/standalone/[^X]*.v; do
+		echo "file $f (no prelude)"
+		$BIN -P $@ $f
 	done
+	for f in test/[^X]*.v; do
+		echo "file $f"
+		$BIN $@ $f
+	done
+	rm $BIN
 ;;
 release)
 	shift

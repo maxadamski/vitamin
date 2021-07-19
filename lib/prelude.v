@@ -1,41 +1,52 @@
 
-{`:` Atom Type}
-{`:` Term Type}
-#define(Expr, Term | Atom)
-{define Expr {Union Term Atom}}
+Has-Prelude : Type
 
-Lambda : (params result: Quoted(Expr)) -> Type
+Num-Literal : Type
+I64, U64, Str : Type
+Size = U64
+Int = I64
 Lazy : (x: Type) -> Type
 Quoted : (x: Type) -> Type
-
-record-aux : (values: Expr) -> Type
-record : (values: Quoted(Expr)) -> record-aux(values)
+Opaque : (x: Type) -> Type
+Expand : (x: Type) -> Type
+`=` : (pattern value: Quoted(Expr)) -> Expand(Expr)
+`->` : (params result: Quoted(Expr)) -> Expand(Expr)
+`=>` : (head body: Quoted(Expr)) -> Expand(Expr)
+lambda-infer : (params result body: Expr) -> Type
+lambda : (params result body: Quoted(Expr)) -> lambda-infer(params, result, body)
+Lambda : (params result: Quoted(Expr)) -> Type
+record-infer : (values: Expr) -> Type
+record : (values: Quoted(Expr)) -> record-infer(values)
 `Record` : (fields: Quoted(Expr)) -> Type
 `quote` : (expr: Quoted(Expr)) -> Expr
-`gensym` : () -> Atom
-`type-of` : (expr: Quoted(Expr)) -> Type
-
+gensym : () -> Atom
+type-of : (expr: Quoted(Expr)) -> Type
+level-of : (type: Type) -> Int
+Symbol-Type : Type
+Symbol : (atom: Quoted(Atom)) -> Symbol-Type
+Array : (type: Type) -> Type
 Any = Inter()
 Never = Union()
 Unit = Record()
-
-`as` : (expr: Quoted(Expr), type: Type) -> type
-`test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
-`assert` : (cond: Quoted(Expr)) -> Unit
-
-assert error(Has-Prelude) # run this file without prelude (-P option)
-
-I64 : Type
-U64 : Type
-Str : Type
-
-Size = U64
-Int = I64
-
 true = Symbol(true)
 false = Symbol(false)
 none = Symbol(none)
 Bool = Set(true, false)
 None = Set(none)
+`test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
+`xtest` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
+`assert` : (cond: Quoted(Expr)) -> Unit
+`==` : (lhs rhs: Quoted(Expr)) -> Bool
+compare : (expr: Quoted(Expr)) -> Bool
+`and`(x y: Lazy(Bool)) -> Bool = case x of true y of false false
+`or`(x y: Lazy(Bool)) -> Bool = case x of true true of false y
+`not`(x: Bool) -> Bool = case x of true false of false true
 
-`==` : (lhs rhs : Quoted(Expr)) -> Bool
+rdo = Symbol(rdo)
+wro = Symbol(wro)
+mut = Symbol(mut)
+imm = Symbol(imm)
+Cap = Set(rdo, wro, mut, imm)
+Ptr(cap: Cap, type: Type) -> Opaque(Type) = Size
+ref : (cap: Cap, type: Type, value: Quoted(Expr)) -> Ptr(cap, type)
+`:=` : (x y: Quoted(Expr)) -> Record()

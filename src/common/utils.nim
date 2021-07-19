@@ -1,4 +1,4 @@
-import options, tables, sequtils, strutils, strformat, algorithm
+import options, tables, sequtils, strutils, strformat, algorithm, os
 export options, tables, sequtils, strutils, strformat, algorithm
 
 # Flatten seq of seqs into seq
@@ -26,6 +26,13 @@ func hex_str*(x: uint64): string =
     if x < 0x100000000'u64:
         res = res[8 .. ^1]
     "0x" & res
+
+# Pretty path
+
+proc pretty_path*(path: string): string = 
+    let a = path.replace(get_env("HOME"), "~")
+    let b = path.replace(get_env("PWD") & "/", "")
+    if a.len < b.len: a else: b
 
 # Result/Either type
 
@@ -57,3 +64,43 @@ func err*[E, R](x: E): Result[E, R] =
 
 func ok*[E, R](x: R): Result[E, R] =
     Result[E, R](kind: OkResult, value: x)
+
+# Safer Option type
+
+import patty
+
+variantp Opt[T]:
+  None
+  Some(value: T)
+
+template None*(t: untyped): untyped =
+    None[t]()
+
+func is_some*[T](opt: Opt[T]): bool =
+  opt.kind == OptKind.Some
+
+func is_none*[T](opt: Opt[T]): bool =
+  opt.kind == OptKind.None
+
+proc `??`*[T](opt: Opt[T], default: T): T =
+    if opt.kind == OptKind.Some:
+        opt.value
+    else:
+        default
+
+template or_else*[T](opt: Opt[T], default: untyped): untyped =
+    if opt.kind == OptKind.Some:
+        opt.value
+    else:
+        default
+
+template if_some*[T](opt: Opt[T], name: untyped, op: untyped) =
+    if opt.kind == OptKind.Some:
+        let `name` {.inject.} = opt.value
+        op
+
+
+#func get_unsafe*[T](opt: Opt[T]): T =
+#  match opt:
+#    Some(value): value
+#    None: raise

@@ -176,8 +176,9 @@ parser.add_prefix_mix "Statement", "if", splice(
     ("$CNT".tr.opt & "else".tr & ":".opt & "Any".b).opt
 )
 
-parser.add_prefix_mix "Statement", "test",
-    splice("test".t & tok_rule("", tag=some(aStr), save=true) & ":".opt & "Any".b)
+for token in ["test", "xtest"]:
+    parser.add_prefix_mix "Statement", token,
+        splice(token.t & tok_rule("", tag=some(aStr), save=true) & ":".opt & "Any".b)
 
 for token in ["Record", "Variant"]:
     parser.add_prefix_mix "Apply", token, token.t & "(".t & group.deepCopy.opt  & ")".t

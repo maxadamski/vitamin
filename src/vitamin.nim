@@ -3,7 +3,7 @@ import options, tables
 import noise
 
 import scan, parse, eval
-import common/[vm, exp, error]
+import common/[vm, exp, error, types]
 from syntax import parser
 
 const (major_ver, minor_ver, patch_ver) = (0, 1, 0)
@@ -44,10 +44,16 @@ Optional arguments:
   -I, --no-interactive  do not enter REPL even if no input files were provided
   -S, --no-greeting     disable REPL greeting
   -d, --debug scan|indent|parse|run|stat
-                        show debug output for a compilation phase""".fmt
+                        show debug output for a compilation phase
+  --trace               force show stack trace on error
+  --trace-mode=MODE     MODE := expr | code | code+expr (default=expr)""".fmt
+
 
 var inputs, libs, command_args: seq[string]
 var debug: string
+var force_trace = false
+var code_in_trace = false
+var expr_in_trace = true
 
 proc panic(msg: string, code: int = 1) {.noreturn.} =
     echo msg
@@ -91,7 +97,7 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string), sta
                 echo val.str
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
-        print_error(error)
+        print_error(error, force_trace=force_trace, trace_code=code_in_trace, trace_expr=expr_in_trace)
 
 proc eval_file(env: Env, path: string) =
     let data = read_file(path)
@@ -201,7 +207,14 @@ proc main =
         of "-S", "--no-greeting": no_greeting = true
         of "-i", "--interative": force_interactive = true
         of "-I", "--no-interactive": force_batch = true
+        of "--trace": force_trace = true
         of "-d", "--debug": i += 1; debug = param_str(i)
+        of "--trace-mode=code":
+            code_in_trace = true; expr_in_trace = false
+        of "--trace-mode=expr":
+            code_in_trace = false; expr_in_trace = true
+        of "--trace-mode=code+expr", "--trace-mode=expr+code":
+            code_in_trace = true; expr_in_trace = true
         of "-c", "--command":
             i += 1; command = some(param_str(i)); i += 1
             while i <= param_count():

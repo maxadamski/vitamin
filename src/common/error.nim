@@ -1,15 +1,19 @@
 import exp
 import os, math, options, terminal, strutils, strformat
-
-type
-    VitaminError* = object of CatchableError
-        node*: Exp
+import types, utils
 
 var stdin_history* = ""
 
 func error*(node: Exp, msg: string): ref VitaminError =
     var error = new_exception(VitaminError, msg)
     error.node = node
+    error
+
+func error*(env: Env, msg: string, trace=false, exp=term()): ref VitaminError =
+    var error = new_exception(VitaminError, msg)
+    error.node = exp
+    error.env = env.deepcopy
+    error.with_trace = trace
     error
 
 func error*(msg: string): ref VitaminError =
@@ -24,25 +28,6 @@ proc err_header*(node: Exp, name: string, endl = "\n"): string =
         suffix = " " & path
     let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
     prefix & padding & suffix & endl
-
-proc print_error*(error: ref VitaminError, file: Option[string] = none(string), prefix = "ERROR") =
-    let prefix = "-- {prefix} ".fmt
-    var suffix = ""
-    if file.is_some:
-        suffix = " " & file.get
-    else:
-        let pos = error.node.calculate_position
-        if pos.is_some and pos.get.file != nil:
-            if pos.get.file[] == "":
-                suffix = " [input history]"
-            else:
-                let path = pos.get.file[].replace(get_env("HOME"), "~")
-                suffix = " " & path
-    let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
-    echo prefix, padding, suffix
-    echo ""
-    echo error.msg
-    echo ""
 
 proc text_lines(text: string, start: int, stop = start): string =
     text.split('\n')[start-1 ..< stop].join("\n")
@@ -129,3 +114,93 @@ proc bad_indent_error*(levels: seq[Exp], next: Exp): auto =
 
 proc parser_eos_error*(node: Exp, end_token: string): auto =
     error(node, "Unexpected end of file while looking for `{end_token}`\n\n{node.in_source}".fmt)
+
+proc top_site*(env: Env, require_source=false): Exp =
+    var env = env
+    while env != nil:
+        for call in env.call_stack.reverse_iter:
+            if not require_source or call.site.src != "":
+                return call.site
+        env = env.parent
+    return term()
+
+proc src*(env: Env): string =
+    return env.top_site(require_source=true).src
+
+proc trace*(env: Env, max_source_lines = 3, max_expr_width = 50, show_source=false, show_expr=true): string =
+    var trace: seq[string]
+    var env = env
+    while env != nil:
+        for call in env.call_stack.reverse_iter:
+            var mode = "eval"
+            if call.infer: mode = "type"
+            if env.in_macro: mode = "macr "
+            mode = "\e[1m" & mode & "\e[0m"
+
+            var head = mode & " in "
+            let pos_opt = call.site.calculate_position
+            var source: string
+
+            if pos_opt.is_some:
+                let pos = pos_opt.get
+                var file = if pos.file != nil:
+                    pos.file[].pretty_path
+                else:
+                    "<builtin>"
+                if not show_source:
+                    file &= ", line " & $pos.start_line
+                head &= "\e[4m{file}\e[0m".fmt
+                if show_source:
+                    source = call.site.in_source
+                    let line_count = source.count('\n')
+                    if line_count > max_source_lines:
+                        source = source.split('\n', 1)[0] & " \e[2m({line_count-1} more lines)\e[0m".fmt
+            else:
+                head &= "\e[4m<builtin>\e[0m"
+
+            var repr = call.site.str
+            if repr.len > max_expr_width:
+                repr = repr[0 .. max_expr_width] & " \e[2m({repr.len - max_expr_width} more chars)\e[0m".fmt
+
+            if show_expr or source.len == 0:
+                if source.len == 0:
+                    source = repr
+                else:
+                    source &= "\n" & repr
+
+            trace &= head & "\n" & source.indent(2)
+        env = env.parent
+    trace.reversed.join("\n")
+
+proc print_error*(error: ref VitaminError, file: Option[string] = none(string), prefix="ERROR", force_trace=false, trace_code=true, trace_expr=true) =
+    let prefix = "-- {prefix} ".fmt
+    var suffix = ""
+    if file.is_some:
+        suffix = " " & file.get
+    else:
+        var pos = error.node.calculate_position
+        var env = error.env
+        while env != nil and pos.is_none:
+            for call in env.call_stack.reverse_iter:
+                let site_pos = call.site.calculate_position
+                if site_pos.is_some and site_pos.get.file != nil:
+                    pos = site_pos
+                    break
+            env = env.parent
+
+        if pos.is_some and pos.get.file != nil:
+            if pos.get.file[] == "":
+                suffix = " [input history]"
+            else:
+                let path = pos.get.file[].pretty_path
+                suffix = " " & path
+
+
+    let padding = '-'.repeat(terminal_width() - prefix.len - suffix.len)
+    echo prefix, padding, suffix
+    echo ""
+    echo error.msg
+    echo ""
+    if error.env != nil and (error.with_trace or force_trace):
+        echo error.env.trace(show_source=trace_code, show_expr=trace_expr)
+        echo ""

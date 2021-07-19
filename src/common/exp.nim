@@ -36,6 +36,17 @@ func `[]`*(x: Exp, index: int): Exp =
 func `[]=`*(x: var Exp, index: int, value: Exp) =
     x.exprs[index] = value
 
+func `==`*(x: Exp, y: Exp): bool =
+    if x.kind != y.kind: return false
+    case x.kind
+    of expAtom: x.value == y.value
+    of expTerm:
+        if x.exprs.len != y.exprs.len: return false
+        for (xe, ye) in zip(x.exprs, y.exprs):
+            if xe != ye:
+                return false
+        true
+
 func is_literal*(x: Exp): bool =
     x.kind == expAtom and x.tag in {aNum, aStr, aLit}
 
@@ -146,7 +157,18 @@ func str*(x: Exp): string =
         else:
             return x.value
     of expTerm:
-        if x.exprs.len >= 3 and x.exprs[0].is_token("()"):
+        if x.has_prefix("Lambda"):
+            var params: seq[string]
+            for p in x[1].exprs:
+                if p[0].is_nil and p[2].is_nil:
+                    params.add(p[1].str)
+                elif not p[0].is_nil and not p[1].is_nil:
+                    params.add(p[0].str & ": " & p[1].str)
+                else:
+                    params.add(p.str)
+            return "((" & params.join(", ") & ") -> " & x[2].str & ")"
+
+        elif x.exprs.len >= 3 and x.exprs[0].is_token("()"):
             return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
             #return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
         elif x.exprs.len >= 2 and x.exprs[0].is_token("[]"):
