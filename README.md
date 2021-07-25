@@ -91,6 +91,15 @@ vita
 ```
 
 
+## Editor support
+
+- Vim: basic syntax support
+	- Copy `res/vitamin.vim` to the Vim/Neovim `syntax` directory
+	- Add this to `.vimrc`: `au BufRead,BufNewFile *.{v,vita} set filetype=vitamin`
+
+- Visual Studio Code: basic syntax support
+	- Install the `Vitamin` extension (`ext install maxadamski.vitamin`)
+
 ## Contributions
 
 Feel free to open issues to ask questions or make suggestions.
