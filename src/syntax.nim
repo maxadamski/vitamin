@@ -95,7 +95,7 @@ parser.add_order "Lambda-Type Apply > Set-Type > Lambda"
 parser.add_order "Apply > Typing"
 parser.add_order "Member Typing > Statement Definition"
 parser.add_order "And > Or"
-parser.add_order "Apply Group Cmp And Or Not Mul > Statement"
+parser.add_order "Apply Group Cmp And Or Not Mul As > Statement"
 parser.add_order "Member > Not Add Mul And Or Xor Cmp Lambda Apply Assignment"
 parser.add_order "Qualifier > Group Typing Definition Lambda"
 parser.add_order "Mul > Lambda"
@@ -105,7 +105,7 @@ parser.add_order "Group Apply > Lambda-Type > Typing Qualifier Lambda Definition
 parser.add_order "Definition Typing Group Apply > Use"
 
 # non-assocative infix operators
-parser.add_infix_none "As", "as", "??"
+parser.add_infix_none "As", "as", "??", "in"
 
 # left-associative infix operators
 parser.add_infix_left "Member", "."
@@ -163,7 +163,7 @@ parser.add_prefix_mix "Statement", "while",
     ("while".t & "Statement".E & ":".opt & "Any".b).splice
 
 parser.add_prefix_mix "Statement", "for",
-    ("for".t & "Statement".E & "in".t & "Statement".E & ":".opt & "Any".b).splice
+    ("for".t & "Statement".E & ":".opt & "Any".b).splice
 
 parser.add_prefix_mix "Statement", "case", splice(
     "case".t & "Statement".E.opt &

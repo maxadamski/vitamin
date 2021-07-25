@@ -22,7 +22,7 @@ Use CTRL-C or CTRL-D to exit.
 Commands:
   :q, :quit, :exit    exit the interactive session
   :h, :help           show this message
-  :env                show the current environment
+  :ctx                show the current environment
   :run FILE           run a file in the current environment
   :del NAME           delete name from the current enviroment
   :cls, :clear        clear the screen
@@ -70,8 +70,8 @@ proc print_version =
     echo "More at: https://maxadamski.com/vitamin"
     quit(0)
 
-proc print_env(env: Env) =
-    echo to_seq(env.vars.keys).join(" ")
+proc print_env(ctx: Ctx) =
+    echo to_seq(ctx.env.vars.keys).join(" ")
 
 proc find_source(name: string, search: seq[string]): Option[string] =
     if file_exists(name): return some(name)
@@ -81,7 +81,7 @@ proc find_source(name: string, search: seq[string]): Option[string] =
         if file_exists(full): return some(full)
     return none(string)
 
-proc eval_string(env: Env, str: string, file: Option[string] = none(string), start_line = 1, print = false) =
+proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), start_line = 1, print = false) =
     try:
         let tokens = scan(str, file, start_line=start_line).indent()
         if debug == "scan":
@@ -92,19 +92,19 @@ proc eval_string(env: Env, str: string, file: Option[string] = none(string), sta
             for x in exprs: echo x.str
             quit(0)
         for x in exprs:
-            let val = eval(env, x)
+            let val = ctx.eval(x)
             if print and val != unit:
                 echo val.str
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error, force_trace=force_trace, trace_code=code_in_trace, trace_expr=expr_in_trace)
 
-proc eval_file(env: Env, path: string) =
+proc eval_file(ctx: Ctx, path: string) =
     let data = read_file(path)
     #echo fmt"DEBUG: run {path}"
-    eval_string(env, data, some(path))
+    eval_string(ctx, data, some(path))
 
-proc repl(env: Env, silent: bool = false) =
+proc repl(ctx: Ctx, silent: bool = false) =
     const prompt_ok   = "λ "
     const prompt_len  = prompt_ok.len
     const prompt_cont = "  "
@@ -131,7 +131,7 @@ proc repl(env: Env, silent: bool = false) =
             stdout.write "\e[1A\e[K"
 
             stdin_history &= exp
-            eval_string(env, exp, print=true, start_line=stdin_history.count_lines-1)
+            eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
             noise.set_prompt(prompt_ok)
             lines = @[]
 
@@ -141,8 +141,8 @@ proc repl(env: Env, silent: bool = false) =
             break
         elif cmd == ":history":
             echo stdin_history
-        elif cmd == ":env":
-            print_env(env)
+        elif cmd == ":ctx":
+            print_env(ctx)
         elif cmd == ":cls" or cmd == ":clear":
             stdout.write "\x1b[2J\x1b[H"
         elif cmd.starts_with(":run"):
@@ -154,17 +154,17 @@ proc repl(env: Env, silent: bool = false) =
             if not file_exists(path):
                 echo fmt"File {path} doesn't exist!"
                 continue
-            eval_file(env, path)
+            eval_file(ctx, path)
         elif cmd.starts_with(":del"):
             let args = cmd.split(" ")
             if args.len != 2:
                 echo "Usage:  :del NAME"
                 continue
             let name = args[1]
-            if name notin env.vars:
+            if name notin ctx.env.vars:
                 echo fmt"Variable `{name}` is not in the environment!"
                 continue
-            env.vars.del(name)
+            ctx.env.vars.del(name)
             echo fmt"Deleted {name}"
         elif cmd == "":
             continue
@@ -185,7 +185,7 @@ proc repl(env: Env, silent: bool = false) =
                 stdout.write "\e[s\e[F\e[{last_col}C \e[u".fmt
 
             stdin_history &= exp & "\n"
-            eval_string(env, exp, print=true, start_line=stdin_history.count_lines-1)
+            eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
 
 proc main =
     let vpath = get_env("VITAPATH")
@@ -235,24 +235,24 @@ proc main =
             path = found.get
             
         if not file_exists(path): panic fmt"ERROR: prelude file {path} doesn't exist!"
-        eval_file(global_env, path)
+        global_ctx.eval_file(path)
 
     libs = libs.filterIt(dir_exists(it))
 
     for path in inputs:
         if not file_exists(path): panic fmt"ERROR: input file {path} doesn't exist!"
-        var local = global_env.extend()
-        eval_file(local, path)
+        var local = global_ctx.extend()
+        local.eval_file(path)
 
     if command.is_some:
         # TODO: pass command_args
         for i, arg in command_args:
             echo fmt"args[{i}] = {arg}"
         #echo command.get
-        eval_string(global_env, command.get)
+        global_ctx.eval_string(command.get)
 
     if ((inputs.len == 0 and command.is_none) or force_interactive) and not force_batch:
-        repl(global_env, no_greeting)
+        global_ctx.repl(no_greeting)
 
 when is_main_module:
     main()

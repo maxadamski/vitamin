@@ -4,7 +4,6 @@ Num-Literal : Type
 I64, U64, Str : Type
 Size = U64
 Int = I64
-Lazy : (x: Type) -> Type
 Quoted : (x: Type) -> Type
 Opaque : (x: Type) -> Type
 Expand : (x: Type) -> Type
@@ -17,146 +16,200 @@ Lambda : (params result: Quoted(Expr)) -> Type
 record-infer : (values: Expr) -> Type
 record : (values: Quoted(Expr)) -> record-infer(values)
 `Record` : (fields: Quoted(Expr)) -> Type
-`quote` : (expr: Quoted(Expr)) -> Expr
-gensym : () -> Atom
 type-of : (expr: Quoted(Expr)) -> Type
-level-of : (type: Type) -> Int
-Symbol-Type : Type
-Symbol : (atom: Quoted(Atom)) -> Symbol-Type
-Array : (type: Type) -> Type
+level-of : (type: Quoted(Expr)) -> Int
 Any = Inter()
 Never = Union()
 Unit = Record()
-true = Symbol(true)
-false = Symbol(false)
-none = Symbol(none)
-Bool = Set(true, false)
-None = Set(none)
+eval : (e: Expr) -> type-of(e)
+Lazy : (a: Type) -> Type
+`as` : (x: Quoted(Expr), y: Type) -> y
+Bool : Type
+None : Type
+none : None
 `test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
 `xtest` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
 `assert` : (cond: Quoted(Expr)) -> Unit
 `==` : (lhs rhs: Quoted(Expr)) -> Bool
 compare : (expr: Quoted(Expr)) -> Bool
-`and`(x y: Lazy(Bool)) -> Bool = case x of true y of false false
-`or`(x y: Lazy(Bool)) -> Bool = case x of true true of false y
-`not`(x: Bool) -> Bool = case x of true false of false true
+`quote` : (expr: Quoted(Expr)) -> Expr
+gensym : () -> Atom
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
 
-test "Variable identity"
-    # identity
-    assert Type == Type
+#
+# Variables
+#
 
-    Test-A = Type
-    Test-B = Type
-    Test-C = Type
+test "variable is equal to itself by unification"
+    A : Type
+    x : A
+    assert x == x
 
-    # variable identity
-    assert Test-A == Test-A
+test "variable is equal to itself by definition"
+    A : Type
+    x : A
+    y : A
+    y = x
+    assert x == y
 
-    # variable commutativity
-    assert Test-A == Test-B
-    assert Test-B == Test-A
+test "variables with different names are not syntactically equal"
+    T : Type
+    x : T
+    y : T
+    assert x != y
 
-    # variable transitivity
-    assert Test-A == Test-B
-    assert Test-B == Test-C
-    assert Test-A == Test-C
+test "variables with different names and incompatible types are not syntactically or definitionally equal"
+    A : Type
+    B : Type
+    x : A
+    y : B
+    assert x != y
 
-test "Function type equality"
-    assert ((x: Type) -> Type) == ((x: Type) -> Type)
-    assert ((x: Type) -> Type) != ((y: Type) -> Type)
-    assert ((x: Type) -> (y: Type) -> Type) == ((x: Type) -> (y: Type) -> Type)
+test "definitional equality of variable types"
+    A : Type
+    B : Type
+    x : A
+    y = x
+    z : B
+    assert type-of(x) == type-of(x)
+    assert type-of(x) == type-of(y)
+    assert type-of(x) != type-of(z)
+    assert type-of(y) != type-of(z)
+#
+# Simple functions
+#
 
-test "Assumed variables"
-    # assumed equality
-    assert I64 == I64
+test "monomorphic identity function with defined argument"
+    id = (x: Type) => x
+    assert id(Type) == Type
 
-    # assumed type
-    assert type-of(I64) == Type
+test "monomorphic identity function with assumed argument"
+    id = (x: Type) => x
+    A : Type
+    assert id(A) != A
+    assert id(A) == id(A)
 
-    I64-Alias = I64
+test "function type equality"
+    A = (x: Type) -> Type
+    B = (x: Bool) -> Type
+    assert A == A
+    assert A != B
 
-    # assumed alias equality
-    assert I64 == I64-Alias
+test "function types with different parameter labels are not equal"
+    A = (x: Type) -> Type
+    B = (y: Type) -> Type
+    assert A != B
 
-test "Multiple assumption shorthand syntax"
-    A, B, C : Type
-    assert type-of(A) == Type
+#
+# Unique values
+#
+
+test "unique value is not equal to its source value"
+    A : Type
+    x : A
+    y = unique(x)
+    assert x != y
+
+test "type of unique value is equal to the type of its source value"
+    A : Type
+    x : A
+    y = unique(x)
+    assert type-of(x) == type-of(y)
+
+test "unique value is equal to its source value after unwrapping"
+    A : Type
+    x : A
+    y = unique(x)
+    assert x == unwrap(y)
+
+test "unique value is not a subtype of the source value"
+    A : Type
+    B = unique(A)
+    assert not is-subtype(A, B)
+
+test "can explicitly coerce to unique type"
+    A : Type
+    B = unique(A)
     assert type-of(B) == Type
-    assert type-of(C) == Type
+    x : A
+    y = x as B
+    assert type-of(y) == B
 
-test "Unique values have different identities"
+test "can't implicly coerce to unique type"
     A : Type
-    P = Unique(A)
-    Q = Unique(A)
+    B = unique(A)
+    assert type-of(B) == Type
+    x : A
+    assert error(y : B = x)
 
-    # type-of(opaque x) is by definition type-of(x)
-    assert type-of(P) == type-of(A)
-    assert type-of(Q) == type-of(A)
+test "unique function breaks definitional equality"
+    f = (x: Type) => x
+    g = unique(f)
+    h = g
+    a = Type
+    assert f(a) == a
+    assert f(a) != g(a)
+    assert g(a) == h(a)
 
-    # each opaque value is unique
-    assert P != A
-    assert Q != A
-    assert P != Q
+test "unique function result can be unwrapped"
+    f = (x: Type) => x
+    g = unique(f)
+    h = g
+    a : Type
+    assert f(a) == unwrap(g)(a)
 
-test "Unique functions"
-    foo(x: Type) = x
-    bar = Unique(foo)
-    A = Type
-    assert foo(A) == A
-    assert error(bar(A))
+test "unwrapping unique function result is the same as calling a unique function after unwrappnig"
+    f = (x: Type) => x
+    g = unique(f)
+    a : Type
+    assert unwrap(g(a)) == unwrap(g)(a)
 
-test "Unique value unwrapping"
+test "unique value unwrapping"
     A : Type
-    P = Unique(A)
-    Q = Unique(A)
+    P = unique(A)
+    Q = unique(A)
     assert unwrap(P) == A
     assert unwrap(Q) == A
     assert unwrap(P) == unwrap(Q)
 
-test "Integer literals"
-    forty-two = 42
+test "unique functions"
+    x = 1
+    y = 2
+    Ptr = (a: Int) -> Type => Size
+    P = unique(Ptr)
+    assert P(x) != Size
+    assert P(y) != Size
+    assert P(x) == P(x)
+    assert P(x) != P(y)
+    assert unwrap(P(x)) == Size
+    assert unwrap(P(y)) == Size
+    assert unwrap(P(x)) == unwrap(P(x))
+    assert unwrap(P(x)) == unwrap(P(y))
 
-    # type of literal
-    assert type-of(42) == I64
-    assert type-of(forty-two) == I64
+#
+# Type coertions
+#
 
-test "Unique values"
-    My-Bool = Unique(Int)
-    My-None = Unique(Int)
+test "row order doesn't affect record type equality"
+    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
+    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
 
-    true  = 1 as My-Bool
-    false = 0 as My-Bool
-    none  = 0 as My-None
+test "type upcast to Any"
+    assert type-of(Type as Any) == Any
 
-    # cast identity
-    assert true == true
-    assert false == false
-    assert none == none
+test "type upcast is idempotent"
+    assert type-of((true as Any) as Any) == Any
 
-    # cast type
-    assert type-of(true) == My-Bool
-    assert type-of(false) == My-Bool
-    assert type-of(none) == My-None
-    assert type-of(true) != Int
-    assert type-of(false) != Int
-    assert type-of(none) != Int
+test "type upcast is invertible"
+    assert type-of((true as Any) as Bool) == Bool
 
-test "Value set types"
-    red = Symbol(red)
-    grn = Symbol(grn)
-    blu = Symbol(blu)
 
-    assert type-of(red) == Symbol-Type
-    assert Set(red, red) == Set(red)
-    assert Set(red, blu) != Set(red, grn)
-    assert Set(red, grn, red) == Set(red, grn)
-    assert Set(red, grn, blu) == Set(blu, grn, red)
-    assert type-of(red as Set(red, grn, blu)) == Set(red, grn, blu)
-    assert type-of(red as Set(red, grn)) != Set(grn, blu)
+#
+# Union and intersection types
+#
 
-test "Type union laws"
+test "type union laws"
     A, B, C : Type
     assert type-of(Never) == Type
     assert Union(A) == A
@@ -167,7 +220,7 @@ test "Type union laws"
     assert (A | (B | C)) == ((A | B) | C) # associativity
     assert (A | (B | C)) == ((A | B) | (A | C)) # distributivity
 
-test "Type intersection laws"
+test "type intersection laws"
     A, B, C, D : Type
     assert type-of(Any) == Type
     assert Inter(A) == A
@@ -180,67 +233,112 @@ test "Type intersection laws"
     assert (A & (B | C)) == ((A & B) | (A & C)) # distributivity over union
     assert (A & B & (C | D)) == ((A & B & C) | (A & B & D)) # distributivity over union
 
-test "Union of value set types"
-    red = Symbol(red)
-    grn = Symbol(grn)
-    blu = Symbol(blu)
-    A : Type
-    assert (Set(red, grn) | Set(red, blu)) == Set(red, grn, blu)
-    assert (Set(red, grn) | (A | Set(red, blu))) == (Set(red, grn, blu) | A)
+#
+# Gensym
+#
 
-test "Intersection of value set types"
-    red = Symbol(red)
-    grn = Symbol(grn)
-    blu = Symbol(blu)
-    A : Type
-    assert (Set(red, grn) & Set(red, blu)) == Set(red)
-    assert (Set(red, grn) & (A & Set(red, blu))) == (Set(red) & A)
+test "gensym produces unique Atoms"
+    assert gensym() != gensym()
 
-test "Unit records"
+#
+# Literals
+#
+
+test "integer literals"
+    forty-two = 42
+    assert type-of(42) == I64
+    assert type-of(forty-two) == I64
+
+#
+# Records
+#
+
+xtest "unit records"
     unit = ()
     assert Unit == Record()
-    assert unit == ()
     assert type-of(Unit) == Type
     assert type-of(unit) == Unit
     assert type-of((x=Unit)) == Record(x: Type)
     assert type-of((x=unit)) == Record(x: Unit)
 
-test "Single row records"
+test "single row records"
     Single = Record(x: Type)
     assert type-of(Single) == Type
     assert Single == Record(x: Type)
     assert type-of((x=Unit)) == Single
 
-test "Record row shorthand syntax"
+test "record row shorthand syntax"
     A, B, C : Type
     R1 = Record(a: A, b: B, c: B, d: C)
     R2 = Record(a: A, b c: B, d: C)
     assert R1 == R2
 
-test "Row order doesn't affect record type equality"
-    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
-    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
+#
+# Syntax sugar
+#
 
-test "Type upcast to Any"
-    assert type-of(Type as Any) == Any
+test "label-less function parameter"
+    A = Type -> Type
+    B = (_: Type) -> Type
+    assert A == B
 
-test "Type upcast is idempotent"
-    assert type-of((true as Any) as Any) == Any
+test "multiple assumption shorthand syntax"
+    A, B, C : Type
+    assert type-of(A) == Type
+    assert type-of(B) == Type
+    assert type-of(C) == Type
 
-test "Type upcast is invertible"
-    assert type-of((true as Any) as Bool) == Bool
+test "short named function syntax"
+    nullary2 = () -> None => none
+    nullary1() -> None = none
+    assert type-of(nullary1) == type-of(nullary2)
 
-test "Opaque functions"
-    x, y : Type
-    Raw-Pointer = (a: Type) -> Opaque(Type) => Size
-    assert Raw-Pointer(x) != Size
-    assert Raw-Pointer(x) != Raw-Pointer(y)
-    assert Raw-Pointer(x) == Raw-Pointer(x)
-    assert unwrap(Raw-Pointer(x)) == Size
-    assert unwrap(Raw-Pointer(y)) == Size
-    assert unwrap(Raw-Pointer(x)) == unwrap(Raw-Pointer(y))
+    unary2 = (x: None) -> None => x
+    unary1(x: None) -> None = x
+    assert type-of(unary1) == type-of(unary2)
 
-test "Bool operators"
+    multiline1(x y: Bool) -> Any =
+        print("whatever")
+        print("whenever")
+
+    multiline2 = (x y: Bool) -> Any =>
+        print("whatever")
+        print("whenever")
+
+    assert type-of(multiline1) == type-of(multiline2)
+
+test "short named function syntax with inferred return"
+    nullary1() = none
+    nullary2 = () => none
+    assert type-of(nullary1) == type-of(nullary2)
+
+    unary1(x: None) = x
+    unary2 = (x: None) => x
+    assert type-of(unary1) == type-of(unary2)
+
+    multiline1(x y: Bool) =
+        print("whatever")
+        print("whenever")
+
+    multiline2 = (x y: Bool) =>
+        print("whatever")
+        print("whenever")
+
+    assert type-of(multiline1) == type-of(multiline2)
+
+#
+# Booleans
+#
+
+Bool = unique(Int)
+true = 1 as Bool
+false = 0 as Bool
+# FIXME: Lazy should make binary operators short-circuit (right now it does nothing)
+`and`(x y: Lazy(Bool)) -> Bool = case x of true y of false false
+`or`(x y: Lazy(Bool)) -> Bool = case x of true true of false y
+`not`(x: Bool) -> Bool = case x of true false of false true
+
+test "bool operators"
     assert (not true) == false
     assert (not false) == true
 
@@ -254,42 +352,54 @@ test "Bool operators"
     assert (true or false) == true
     assert (false or false) == false
 
-    # TODO: fix short-circuiting
+#
+# Sets
+#
 
-test "Short named function syntax"
-    nullary2 = () -> None => none
-    nullary1() -> None = none
-    assert type-of(nullary1) == type-of(nullary2)
+Set : (a: Type) -> Type
+#set : (xs: Varargs(Quoted(Expr))) -> unify-types(map(infer-type, xs))
 
-    unary2 = (x: None) -> None => x
-    unary1(x: None) -> None = x
-    assert type-of(unary1) == type-of(unary2)
+xtest "type of a set is the union of the types of its values"
+	Cat, Dog : Type
+	lily, simba : Cat
+	buddy : Dog
+	assert type-of(set(lily, simba, buddy)) == Set(Cat|Dog)
 
-    multiline1(x y: Bool) -> Bool =
-        print("whatever")
-        x and y
+xtest "type of a set of homogeneous values"
+	Color : Type
+	red, grn, blu : Color
+	assert type-of(set(red, grn, blu)) == Set(Color)
 
-    multiline2 = (x y: Bool) -> Bool =>
-        print("whatever")
-        x and y
+xtest "subsets of set"
+	a, b, c : Type
+	abc = set(a, b, c)
+	assert is-subset(set(), abc)
+	assert is-subset(set(a), abc)
+	assert is-subset(set(b), abc)
+	assert is-subset(set(c), abc)
+	assert is-subset(set(a, b), abc)
+	assert is-subset(set(a, c), abc)
+	assert is-subset(set(b, c), abc)
 
-    assert type-of(multiline1) == type-of(multiline2)
+xtest "improper subset of set"
+	a, b, c : Type
+	abc = set(a, b, c)
+	assert is-subset(set(a, b, c), abc)
 
-test "Short named function syntax with inferred return"
-    nullary1() = none
-    nullary2 = () => none
-    assert type-of(nullary1) == type-of(nullary2)
+xtest "sets are invariant to element order"
+    a, b, c : Type
+    assert set(a, b, c) == set(b, c, a)
 
-    unary1(x: None) = x
-    unary2 = (x: None) => x
-    assert type-of(unary1) == type-of(unary2)
+xtest "sets merge duplicate items"
+    a, b : Type
+    assert set(a, a, b) == set(a, b)
 
-    multiline1(x y: Bool) =
-        print("whatever")
-        x and y
+xtest "set union"
+    red, grn, blu : Type
+    A : Type
+    assert union(set(red, grn), set(red, blu)) == set(red, grn, blu)
 
-    multiline2 = (x y: Bool) =>
-        print("whatever")
-        x and y
-
-    assert type-of(multiline1) == type-of(multiline2)
+xtest "set intersection"
+    red, grn, blu : Type
+    A : Type
+    assert intersection(set(red, grn), set(red, blu)) == set(red)

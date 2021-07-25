@@ -1,5 +1,6 @@
 import options, tables, sequtils, strutils, strformat, algorithm, os
 export options, tables, sequtils, strutils, strformat, algorithm
+import patty
 
 # Flatten seq of seqs into seq
 
@@ -16,16 +17,8 @@ iterator reverse_iter*[T](a: seq[T]): T {.inline.} =
 
 # maximum function with a default value
 
-proc max_or*(x: seq[int], default=0): int =
+func max_or*(x: seq[int], default=0): int =
     if x.len == 0: default else: max(x)
-
-# format a hexadecimal number
-
-func hex_str*(x: uint64): string =
-    var res = x.to_hex
-    if x < 0x100000000'u64:
-        res = res[8 .. ^1]
-    "0x" & res
 
 # Pretty path
 
@@ -65,9 +58,25 @@ func err*[E, R](x: E): Result[E, R] =
 func ok*[E, R](x: R): Result[E, R] =
     Result[E, R](kind: OkResult, value: x)
 
-# Safer Option type
+# Safe Either type
 
-import patty
+variantp Either[T, U]:
+    Left(left: T)
+    Right(right: U)
+
+func map_right*[T, U, V](val: Either[T, U], f: proc (x: U): V): Either[T, V] =
+    if opt.kind == EitherKind.Right: Right(f(val.right)) else: val
+
+func map_left*[T, U, V](val: Either[T, U], f: proc (x: T): V): Either[V, U] =
+    if opt.kind == EitherKind.Left: Left(f(val.left)) else: val
+
+func is_left*[T, U](val: Either[T, U]): bool =
+    val.kind == EitherKind.Left
+
+func is_right*[T, U](val: Either[T, U]): bool =
+    val.kind == EitherKind.Right
+
+# Safe Option type
 
 variantp Opt[T]:
   None
@@ -82,11 +91,11 @@ func is_some*[T](opt: Opt[T]): bool =
 func is_none*[T](opt: Opt[T]): bool =
   opt.kind == OptKind.None
 
-proc `??`*[T](opt: Opt[T], default: T): T =
-    if opt.kind == OptKind.Some:
-        opt.value
-    else:
-        default
+func `??`*[T](opt: Opt[T], default: T): T =
+    if opt.kind == OptKind.Some: opt.value else: default
+
+func map*[T, U](opt: Opt[T], f: proc (x: T): U): Opt[U] =
+    if opt.kind == OptKind.Some: Some(f(opt.value)) else: None(U)
 
 template or_else*[T](opt: Opt[T], default: untyped): untyped =
     if opt.kind == OptKind.Some:
@@ -98,9 +107,3 @@ template if_some*[T](opt: Opt[T], name: untyped, op: untyped) =
     if opt.kind == OptKind.Some:
         let `name` {.inject.} = opt.value
         op
-
-
-#func get_unsafe*[T](opt: Opt[T]): T =
-#  match opt:
-#    Some(value): value
-#    None: raise

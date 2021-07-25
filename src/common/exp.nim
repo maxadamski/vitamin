@@ -1,4 +1,4 @@
-import options, strutils, sequtils
+import options, strutils, strformat, sequtils, re
 
 type
     Position* = object
@@ -152,7 +152,7 @@ func str*(x: Exp): string =
         if x.tag == aWs: return "$WS"
         if x.tag == aNl: return "$NL"
         if x.tag == aStr: return "\"" & x.value & "\""
-        if ' ' in x.value or '{' in x.value or '}' in x.value:
+        if not x.value.match(re"[A-Za-z0-9_-]+"):
             return "`" & x.value & "`"
         else:
             return x.value
@@ -168,6 +168,19 @@ func str*(x: Exp): string =
                     params.add(p.str)
             return "((" & params.join(", ") & ") -> " & x[2].str & ")"
 
+        elif x.has_prefix("lambda"):
+            var params: seq[string]
+            for par in x[1].exprs:
+                var name = if par[0].is_nil: "_" else: par[0].str
+                var typ = if par[1].is_nil: "" else: " : " & par[1].str
+                var val = if par[2].is_nil: "" else: " = " & par[2].str
+                params.add(name & typ & val)
+            let typ = if x[2].is_nil: "" else: " -> " & x[2].str
+            let body = x[3].str
+            let params_str = params.join(", ")
+            return "lambda(({params_str}){typ} => {body})".fmt
+
+
         elif x.exprs.len >= 3 and x.exprs[0].is_token("()"):
             return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
             #return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
@@ -180,7 +193,10 @@ func str*(x: Exp): string =
         elif x.exprs.len >= 1 and x.exprs[0].is_token("[_]"):
             return "[" & x.exprs[1].str_group2 & "]"
         else:
-            return "{" & x.exprs.map(str).join(" ") & "}"
+            if x.exprs.len == 0:
+                return "()"
+            else:
+                return x.exprs[0].str & "(" & x.exprs[1 .. ^1].map(str).join(", ") & ")"
 
 func str_ugly*(x: Exp): string =
     case x.kind

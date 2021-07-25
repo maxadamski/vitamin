@@ -22,96 +22,31 @@ type
 
     Env* = ref object
         parent*: Env
-        in_macro*: bool
+        vars*: Table[string, Var]
+
+    Ctx* = ref object
+        env*: Env
         site_stack*: seq[Exp]
         call_stack*: seq[TraceCall]
-        vars*: Table[string, Var]
 
     VitaminError* = object of CatchableError
         node*: Exp
-        env*: Env
+        ctx*: Ctx
         with_trace*: bool
 
     ValTag* = enum
         HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, NumVal, ExpVal, MemVal, FunVal,
-        FunTypeVal, BuiltinFunVal, OpaqueVal, UniqueVal,
-        SymbolVal, SymbolTypeVal, SetTypeVal #, NeutralVal
+        FunTypeVal, UniqueVal,
+        SymbolVal, SymbolTypeVal, SetTypeVal, NeuVal,
+        #OpaqueVal
 
-    ValObj* = object
-        typ*: Opt[Val]
+    RecTyp* = object
+        slots*: seq[RecSlot]
+        extensible*: bool
+        extension*: Opt[Exp]
 
-        case kind*: ValTag
-        of TypeVal:
-            level*: int
-
-        of SetTypeVal, UnionTypeVal, InterTypeVal:
-            values*: seq[Val]
-
-        of RecTypeVal:
-            slots*: seq[RecSlot]
-            extensible*: bool
-            extension*: Opt[Exp]
-
-        of RecVal:
-            fields*: seq[RecField]
-
-        of FunTypeVal:
-            fun_typ*: FunTyp
-
-        of FunVal:
-            fun*: Fun
-
-        of OpaqueVal:
-            disp_name*: string
-            result*: Val
-            opaque_fun*: Fun
-            bindings*: seq[(string, Val)]
-
-        of HoldVal, SymbolVal, SymbolTypeVal:
-            name*: string
-
-        #of NeutralVal:
-        #    neu*: Neutral
-
-        of NumVal:
-            num*: int
-
-        of MemVal:
-            mem_ptr*: Val
-            mem_typ*: Val
-            wr*, rd*, imm*: bool
-
-        of ExpVal:
-            exp*: Exp 
-
-        #of CastVal:
-        #    val*, typ*: Val
-
-        of UniqueVal:
-            inner*: Val
-
-        of BuiltinFunVal:
-            builtin_name*: string
-            builtin_fun*: BuiltinFun
-            builtin_typ*: Opt[FunTyp]
-
-    Val* = ref ValObj not nil
-
-    NeutralTag* = enum NVar, NApp
-
-    Neutral* = ref object
-        case kind*: NeutralTag
-        of NVar:
-            name*: string
-        of NApp:
-            head*: Neutral
-            args*: seq[Arg]
-
-    Arg* = object
-        name*: string
-        value*: Val
-        keyword*: bool
+    BuiltinFunProc* = proc(ctx: Ctx, args: seq[Val]): Val
 
     FunParam* = object
         name*: string
@@ -130,16 +65,77 @@ type
         #autoapply*: bool
         is_opaque*: bool
         is_pure*: bool
+        is_total*: bool
         is_macro*: bool
 
     Fun* = object
-        typ*: FunTyp
-        body*: Exp
-        env*: Opt[Env]
+        name*: string # may be empty (anonymous function)
+        body*: Either[Exp, BuiltinFunProc]
+        typ*: Opt[FunTyp] # cannot be none at invocation
+        ctx*: Opt[Ctx] # closure context
+        builtin*: bool
+
+    ValObj* = object
+        typ*: Opt[Val]
+
+        case kind*: ValTag
+        of TypeVal:
+            level*: int
+
+        of SetTypeVal, UnionTypeVal, InterTypeVal:
+            values*: seq[Val]
+
+        of RecTypeVal:
+            rec_typ*: RecTyp
+
+        of RecVal:
+            fields*: seq[RecField]
+
+        of FunTypeVal:
+            fun_typ*: FunTyp
+
+        of FunVal:
+            fun*: Fun
+
+        of UniqueVal:
+            inner*: Val
+
+        #of OpaqueVal:
+        #    disp_name*: string
+        #    result*: Val
+        #    bindings*: seq[(string, Val)]
+
+        of HoldVal, SymbolVal, SymbolTypeVal:
+            name*: string
+
+        of NeuVal:
+            neu*: Neu
+
+        of NumVal:
+            num*: int
+
+        of MemVal:
+            mem_ptr*: Val
+            mem_typ*: Val
+            wr*, rd*, imm*: bool
+
+        of ExpVal:
+            exp*: Exp 
+
+    Val* = ref ValObj not nil
+
+    Neu* = ref object
+        head*: Val
+        args*: seq[Val]
+
+    Arg* = object
+        name*: string
+        value*: Val
+        keyword*: bool
 
     RecSlot* = object
         name*: string
-        typ*: Val
+        typ*: Exp
         default*: Opt[Exp]
         typ_inferred_from_default*: bool
         typ_inferred_from_position*: bool
@@ -148,4 +144,37 @@ type
         name*: string
         val*, typ*: Val
 
-    BuiltinFun* = proc(env: Env, args: seq[Val]): Val
+func Unique*(inner: Val): Val =
+    Val(kind: UniqueVal, inner: inner)
+
+func Universe*(level: int): Val =
+    Val(kind: TypeVal, level: 0)
+
+func Box*(x: Fun): Val =
+    Val(kind: FunVal, fun: x)
+
+func Box*(x: Exp): Val =
+    Val(kind: ExpVal, exp: x)
+
+func Box*(x: Neu): Val =
+    Val(kind: NeuVal, neu: x)
+
+func noun*(v: Val): string =
+    case v.kind
+    of SymbolVal: "symbol"
+    of SymbolTypeVal: "type"
+    of HoldVal: "variable"
+    of NeuVal: "unevaluated call"
+    of SetTypeVal: "set type"
+    of UniqueVal: "value"
+    #of OpaqueVal: ""
+    of NumVal: "number"
+    of MemVal: "memory"
+    of ExpVal: "expression"
+    of TypeVal: "type"
+    of UnionTypeVal: "union type"
+    of InterTypeVal: "intersection type"
+    of FunVal: "function"
+    of FunTypeVal: "function type"
+    of RecVal: "record"
+    of RecTypeVal: "record type"

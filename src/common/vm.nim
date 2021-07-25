@@ -1,16 +1,14 @@
 import options, tables, strutils, sequtils, algorithm
 import exp, utils, error, types
-import patty
 
 {.experimental: "notnil".}
+{.warning[ProveInit]: off.}
 
 func str*(v: Val): string
 
 func `$`*(x: Val): string = x.str
 
 proc equal*(x, y: Val): bool
-
-proc is_subtype*(x, y: Val): bool
 
 # Nim, why so much boilerplate :(
 
@@ -20,16 +18,7 @@ func Number*(num: int): Val =
 func Hold*(name: string): Val =
     Val(kind: HoldVal, name: name)
 
-func VExp*(exp: Exp): Val =
-    Val(kind: ExpVal, exp: exp)
-
 #func VNeu*(neu: Neutral): Val = Val(kind: NeutralVal, neu: neu)
-
-func Unique*(inner: Val): Val =
-    Val(kind: UniqueVal, inner: inner)
-
-func Universe*(level: int): Val =
-    Val(kind: TypeVal, level: 0)
 
 func UnionType*(values: varargs[Val]): Val =
     if values.len == 1: return values[0]
@@ -45,8 +34,8 @@ func SetType*(values: varargs[Val]): Val =
 func Record*(fields: varargs[RecField]): Val =
     Val(kind: RecVal, fields: @fields)
 
-func RecordType*(slots: varargs[RecSlot], extensible = false, extension = None[Exp]()): Val =
-    Val(kind: RecTypeVal, slots: @slots, extensible: extensible or extension.is_some, extension: extension)
+func RecordType*(slots: varargs[RecSlot], extensible = false, extension = None(Exp)): Val =
+    Val(kind: RecTypeVal, rec_typ: RecTyp(slots: @slots, extensible: extensible or extension.is_some, extension: extension))
 
 func LambdaType*(params: varargs[FunParam], ret: Exp): FunTyp =
     FunTyp(params: @params, result: ret)
@@ -54,13 +43,20 @@ func LambdaType*(params: varargs[FunParam], ret: Exp): FunTyp =
 func LambdaType*(typ: FunTyp): Val =
     Val(kind: FunTypeVal, fun_typ: typ)
 
-proc Lambda*(typ: FunTyp, body: Exp, env: Env): Val =
-    Val(kind: FunVal, fun: Fun(typ: typ, body: body, env: Some(env)))
+proc Lambda*(typ: FunTyp, body: Exp, ctx: Ctx): Val =
+    Val(kind: FunVal, fun: Fun(typ: Some(typ), body: Left[Exp, BuiltinFunProc](body), ctx: Some(ctx)))
 
 # end of constructors
 
 func extend*(env: Env): Env =
-    Env(parent: env, in_macro: env.in_macro)
+    Env(parent: env)
+
+func extend*(ctx: Ctx): Ctx =
+    Ctx(
+        env: ctx.env.extend(),
+        site_stack: ctx.site_stack,
+        call_stack: ctx.call_stack,
+    )
 
 func assume*(env: Env, name: string, typ: Val, site = None[Exp]()) =
     env.vars[name] = Var(val: None[Val](), typ: Some(typ), site: site)
@@ -82,17 +78,17 @@ func find*(env: Env, name: string): Env =
     else:
         nil
 
-func site*(env: Env): Exp =
-    if env.site_stack.len > 0:
-        env.site_stack[^1]
+func site*(ctx: Ctx): Exp =
+    if ctx.site_stack.len > 0:
+        ctx.site_stack[^1]
     else:
         term()
 
-func push_call*(env: Env, site: Exp, infer = false) =
-    env.call_stack.add(TraceCall(site: site, infer: infer))
+func push_call*(ctx: Ctx, site: Exp, infer = false) =
+    ctx.call_stack.add(TraceCall(site: site, infer: infer))
 
-func pop_call*(env: Env) =
-    discard env.call_stack.pop()
+func pop_call*(ctx: Ctx) =
+    discard ctx.call_stack.pop()
 
 func get*(env: Env, name: string): Opt[Var] =
     if name in env.vars:
@@ -107,7 +103,7 @@ func get_assumed*(env: Env, name: string): Opt[VarAssumed] =
         return None[VarAssumed]()
     let typ = variable.typ.or_else:
         return None[VarAssumed]()
-        #raise error(env.site, "Expected variable {name} to be assumed or defined at this point. {env.site.src}".fmt)
+        #raise error(ctx.site, "Expected variable {name} to be assumed or defined at this point. {ctx.site.src}".fmt)
     Some(VarAssumed(val: variable.val, typ: typ, site: variable.site))
 
 proc get_defined*(env: Env, name: string): Opt[VarDefined] =
@@ -115,15 +111,11 @@ proc get_defined*(env: Env, name: string): Opt[VarDefined] =
         return None[VarDefined]()
     let typ = variable.typ.or_else:
         return None[VarDefined]()
-        #raise error(env.site, "Expected variable {name} to be typed at this point. {env.site.src}".fmt)
+        #raise error(ctx.site, "Expected variable {name} to be typed at this point. {ctx.site.src}".fmt)
     let val = variable.val.or_else:
         return None[VarDefined]()
-        #raise error(env.site, "Expected variable {name} to be defined at this point. {env.site.src}".fmt)
+        #raise error(ctx.site, "Expected variable {name} to be defined at this point. {ctx.site.src}".fmt)
     Some(VarDefined(val: val, typ: typ, site: variable.site))
-
-proc get_builtin_typ*(val: Val): FunTyp =
-    val.builtin_typ.or_else:
-        raise error("Type of builtin `{val.builtin_name}` must be assumed before usage!".fmt)
 
 proc sets_inter*(xs, ys: seq[Val]): seq[Val] =
     for x in xs:
@@ -154,39 +146,6 @@ proc sets_equal*(xs, ys: seq[Val]): bool =
                     break inner
             return false
     true
-
-proc is_subtype*(x, y: Val): bool =
-    # is x a subtype of y
-    #if y.kind == UnionTypeVal and y.values.len == 0: return true
-    #if y.kind == InterTypeVal and y.values.len == 0: return false
-    if equal(x, y): return true
-    if x.kind == y.kind:
-        case x.kind
-        of SetTypeVal:
-            return equal(x, SetType(sets_inter(x.values, y.values)))
-        of UnionTypeVal:
-            return sets_inter(x.values, y.values).len > 0
-        of InterTypeVal:
-            return value_set(x.values & y.values).len > x.values.len
-        else:
-            discard
-    else:
-        if y.kind == UniqueVal:
-            return equal(x, y.inner)
-        if x.kind == UniqueVal:
-            return equal(x, y.inner)
-        if y.kind == UnionTypeVal:
-            if y.values.len == 0: return false
-            return y.values.any_it(is_subtype(x, it))
-        if y.kind == InterTypeVal:
-            if y.values.len == 0: return true
-            return y.values.all_it(is_subtype(x, it))
-        #if x.kind == InterTypeVal:
-        #    return not is_subtype(y, x)
-        #if x.kind == UnionTypeVal:
-        #    return not is_subtype(y, x)
-    return false
-    #raise error(term(), "Unknown if {x} is subtype of {y}".fmt)
 
 proc norm_union*(args: varargs[Val]): Val =
     var sets: seq[Val]
@@ -274,11 +233,13 @@ proc args_equal(xs, ys: seq[Arg]): bool =
         if not ys.any_it(it == x): return false
     true
 
-proc equal(x, y: Neutral): bool =
-    if x.kind != y.kind: return false
-    case x.kind:
-    of NVar: x.name == y.name
-    of NApp: equal(x.head, y.head) and args_equal(x.args, y.args)
+proc equal(x, y: Neu): bool =
+    if x.args.len != y.args.len or not equal(x.head, y.head):
+        return false
+    for (u, v) in zip(x.args, y.args):
+        if not equal(u, v):
+            return false
+    true
 
 proc equal*(x, y: Exp): bool =
     if x.kind != y.kind: return false
@@ -297,7 +258,36 @@ proc equal(x, y: FunTyp): bool =
         if not (a.name == b.name and equal(a.typ, b.typ)): return false
     true
 
+proc equal(x, y: Fun): bool =
+    x.name == y.name
+
+proc `==`*(x, y: RecTyp): bool =
+    if x.slots.len != y.slots.len: return false
+    let n = x.slots.len
+    let sx = x.slots.sorted_by_it(it.name)
+    let sy = y.slots.sorted_by_it(it.name)
+    for i in 0..<n:
+        if sx[i].name != sy[i].name or not equal(sx[i].typ, sy[i].typ): return false
+    return true
+
+proc `$`*(x: RecTyp): string =
+    var res: seq[string]
+    for s in x.slots:
+        var repr = ""
+        if s.name != "":
+            repr &= s.name & ": "
+        repr &= s.typ.str
+        s.default.if_some(default):
+            repr &= " = " & $default
+        res.add(repr)
+    "Record(" & res.join(", ") & ")"
+
 proc equal*(x, y: Val): bool =
+    #echo "{x.noun} {x} ?= {y.noun} {y}".fmt
+    if x.kind == SetTypeVal and y.kind == UnionTypeVal or
+       x.kind == UnionTypeVal and y.kind == SetTypeVal:
+        if x.values.len == 0 and y.values.len == 0:
+            return true
     if x.kind != y.kind: return false
     if x == y: return true
     case x.kind
@@ -311,23 +301,23 @@ proc equal*(x, y: Val): bool =
         sets_equal(x.values, y.values)
     of FunTypeVal:
         equal(x.fun_typ, y.fun_typ)
-    of OpaqueVal:
-        if not equal(x.opaque_fun.typ, y.opaque_fun.typ):
-            return false
-        for (x_name, x_val) in x.bindings:
-            var found = false
-            for (y_name, y_val) in y.bindings:
-                if x_name == y_name:
-                    if equal(x_val, y_val):
-                        found = true 
-                        break
-                    else:
-                        return false
-            if not found:
-                return false 
-        return true
+    #of OpaqueVal:
+    #    if x.disp_name != y.disp_name:
+    #        return false
+    #    for (x_name, x_val) in x.bindings:
+    #        var found = false
+    #        for (y_name, y_val) in y.bindings:
+    #            if x_name == y_name:
+    #                if equal(x_val, y_val):
+    #                    found = true 
+    #                    break
+    #                else:
+    #                    return false
+    #        if not found:
+    #            return false 
+    #    return true
     of FunVal:
-        x == y
+        equal(x.fun, y.fun)
     of RecVal:
         if x.fields.len != y.fields.len: return false
         for xf in x.fields:
@@ -344,47 +334,46 @@ proc equal*(x, y: Val): bool =
         return true
 
     of RecTypeVal:
-        if x.slots.len != y.slots.len: return false
-        let n = x.slots.len
-        let sx = x.slots.sorted_by_it(it.name)
-        let sy = y.slots.sorted_by_it(it.name)
-        for i in 0..<n:
-            if sx[i].name != sy[i].name or not equal(sx[i].typ, sy[i].typ): return false
-        return true
+        return x.rec_typ == y.rec_typ
     #of CastVal:
     #    return equal(x.val, y.val)
     of NumVal:
         return x.num == y.num
     of ExpVal:
         return x.exp == y.exp
+    of NeuVal:
+        equal(x.neu, y.neu)
     else:
-        raise error(term(), "Equality for {x} and {y} ({x.kind}) not implemented".fmt)
+        raise error(term(), "Equality for {x.noun} {x} and {y.noun} {y} not implemented".fmt)
 
 
 func str*(x: Arg): string =
     if not x.keyword: return x.value.str
     x.name & "=" & x.value.str
 
-func str*(x: Neutral): string =
-    case x.kind
-    of NVar:
-        x.name
-    of NApp:
-        x.head.str & "(" & x.args.map(str).join(", ") & ")"
+func str*(x: Neu): string =
+    let head = if x.head.kind == FunVal and x.head.fun.name != "":
+        x.head.fun.name
+    else:
+        x.head.str
+    head & "(" & x.args.map(str).join(", ") & ")"
 
 func str*(v: Val): string =
     case v.kind
-    of HoldVal, SymbolVal, SymbolTypeVal:
+    of SymbolVal, SymbolTypeVal:
         v.name
 
-    #of NeutralVal:
-    #    v.neu.str
+    of HoldVal:
+        v.name
+
+    of NeuVal:
+        v.neu.str
 
     of SetTypeVal:
         "Set(" & v.values.map(str).join(", ") & ")"
 
     of UniqueVal:
-        "Opaque(" & v.inner.str & ")"
+        "Unique(" & v.inner.str & ")"
 
     #of CastVal:
     #    v.typ.str & "(" & v.val.str & ")"
@@ -396,14 +385,16 @@ func str*(v: Val): string =
         "Memory(...)"
 
     of ExpVal:
-        case v.exp.kind:
-        of expAtom:
-            "Atom(" & v.exp.str & ")"
-        of expTerm:
-            "Term(" & v.exp.str & ")"
-
-    of BuiltinFunVal:
-        "[Builtin-Lambda " & v.builtin_name & "]"
+        "Expr(" & v.exp.str & ")"
+        #case v.exp.kind:
+        #of expAtom:
+        #    v.exp.str
+        #of expTerm:
+        #    let exprs = v.exp.exprs
+        #    if exprs.len == 0:
+        #        "()"
+        #    else:
+        #        exprs[0].str & "(" & v.exp.tail.map(str).join(", ") & ")"
 
     of TypeVal:
         if v.level == 0: "Type" else: "Type" & $v.level
@@ -415,14 +406,17 @@ func str*(v: Val): string =
         "(" & v.values.map(str).join(op) & ")"
 
     of FunVal:
-        "Lambda(...)"
+        if v.fun.name.len > 0:
+            v.fun.name
+        else:
+            "<lambda>"
 
-    of OpaqueVal:
-        var name = if v.disp_name != "": v.disp_name else: "Lambda(...)"
-        var args: seq[string]
-        for (key, val) in v.bindings:
-            args.add(val.str)
-        name & "(" & args.join(", ") & ")"
+    #of OpaqueVal:
+    #    var name = if v.disp_name != "": v.disp_name else: "Lambda(...)"
+    #    var args: seq[string]
+    #    for (key, val) in v.bindings:
+    #        args.add(val.str)
+    #    name & "(" & args.join(", ") & ")"
 
     of FunTypeVal:
         var prefix = ""
@@ -446,12 +440,4 @@ func str*(v: Val): string =
         "(" & res.join(", ") & ")"
 
     of RecTypeVal:
-        var res: seq[string]
-        for x in v.slots:
-            var repr = ""
-            if x.name != "": repr &= x.name & ": "
-            repr &= x.typ.str
-            x.default.if_some(default):
-                repr &= " = " & $default
-            res.add(repr)
-        "Record(" & res.join(", ") & ")"
+        $v.rec_typ

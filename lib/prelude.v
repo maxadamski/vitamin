@@ -5,7 +5,6 @@ Num-Literal : Type
 I64, U64, Str : Type
 Size = U64
 Int = I64
-Lazy : (x: Type) -> Type
 Quoted : (x: Type) -> Type
 Opaque : (x: Type) -> Type
 Expand : (x: Type) -> Type
@@ -18,35 +17,27 @@ Lambda : (params result: Quoted(Expr)) -> Type
 record-infer : (values: Expr) -> Type
 record : (values: Quoted(Expr)) -> record-infer(values)
 `Record` : (fields: Quoted(Expr)) -> Type
-`quote` : (expr: Quoted(Expr)) -> Expr
-gensym : () -> Atom
 type-of : (expr: Quoted(Expr)) -> Type
-level-of : (type: Type) -> Int
-Symbol-Type : Type
-Symbol : (atom: Quoted(Atom)) -> Symbol-Type
+level-of : (type: Quoted(Expr)) -> Int
+`as` : (x: Quoted(Expr), y: Type) -> y
+Bool = unique(Int)
+true = 1 as Bool
+false = 0 as Bool
+None = unique(Int)
+none = 0 as None
 Array : (type: Type) -> Type
 Any = Inter()
 Never = Union()
 Unit = Record()
-true = Symbol(true)
-false = Symbol(false)
-none = Symbol(none)
-Bool = Set(true, false)
-None = Set(none)
+eval : (e: Expr) -> type-of(e)
+Lazy : (a: Type) -> Type
 `test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
 `xtest` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
 `assert` : (cond: Quoted(Expr)) -> Unit
 `==` : (lhs rhs: Quoted(Expr)) -> Bool
 compare : (expr: Quoted(Expr)) -> Bool
+`quote` : (expr: Quoted(Expr)) -> Expr
+gensym : () -> Atom
 `and`(x y: Lazy(Bool)) -> Bool = case x of true y of false false
 `or`(x y: Lazy(Bool)) -> Bool = case x of true true of false y
 `not`(x: Bool) -> Bool = case x of true false of false true
-
-rdo = Symbol(rdo)
-wro = Symbol(wro)
-mut = Symbol(mut)
-imm = Symbol(imm)
-Cap = Set(rdo, wro, mut, imm)
-Ptr(cap: Cap, type: Type) -> Opaque(Type) = Size
-ref : (cap: Cap, type: Type, value: Quoted(Expr)) -> Ptr(cap, type)
-`:=` : (x y: Quoted(Expr)) -> Record()

@@ -6,22 +6,25 @@ Num  = (A: Type) -> (f: A -> A) -> (x: A) -> A
 
 zero = (A: Type) => (f: A -> A) => (x: A) => x
 
-test "zero"
+xtest "zero"
     assert type-of(zero(N)) == ((f: N -> N) -> (x: N) -> N)
     assert type-of(zero(N)(s)) == ((x: N) -> N)
     assert type-of(zero(N)(s)(z)) == N
     assert zero(N)(s)(z) == z
 
 one = (A: Type) => (f: A -> A) => (x: A) => f(x)
-test "one"
+
+xtest "one"
 	assert one(N)(s)(z) == s(z)
 
 two = (A: Type) => (f: A -> A) => (x: A) => f(f(x))
-test "two"
+
+xtest "two"
 	assert two(N)(s)(z) == s(s(z))
 
 three = (A: Type) => (f: A -> A) => (x: A) => f(f(f(x)))
-test "three"
+
+xtest "three"
 	assert three(N)(s)(z) == s(s(s(z)))
 
 xtest "add"
