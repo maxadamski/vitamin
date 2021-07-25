@@ -19,7 +19,7 @@ test)
 	shift
 	BIN=bin/vita-test
 	echo "BUILD $BIN"
-	nim c -o:$BIN $NIMFLAGS $MAIN
+	nim c -o:$BIN $NIMFLAGS $MAIN || exit $?
 	for f in test/standalone/[^X]*.v; do
 		echo "file $f (no prelude)"
 		$BIN -P $@ $f
