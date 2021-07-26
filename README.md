@@ -80,7 +80,7 @@ TODO
 
 ## How to run
 
-Vitamin expects the `VITAPATH` environmental variable to be set to the path containing the contents of `res/lib`.
+By default, Vitamin expects the contents of `res/lib` to be present in `~/.local/lib/vita` or `/usr/lib/vita`. You can also add other library paths to the `VITAPATH` environment variable (paths separated by a colon `:`).
 
 ```sh
 # assuming `vita` is in PATH

@@ -49,7 +49,14 @@ Optional arguments:
   --trace-mode=MODE     MODE := expr | code | code+expr (default=expr)""".fmt
 
 
-var inputs, libs, command_args: seq[string]
+var inputs, command_args: seq[string]
+
+when defined(posix):
+    let home = get_env("HOME")
+    var libs = @[home & "/.local/lib/vita", "/usr/lib/vita"]
+else:
+    var libs: seq[string]
+
 var debug: string
 var force_trace = false
 var code_in_trace = false
@@ -189,7 +196,7 @@ proc repl(ctx: Ctx, silent: bool = false) =
 
 proc main =
     let vpath = get_env("VITAPATH")
-    if vpath != "": libs = vpath.split(":")
+    if vpath != "": libs = vpath.split(":") & libs
     var prelude = none(string)
     var command = none(string)
     var no_greeting = false
