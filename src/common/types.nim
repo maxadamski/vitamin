@@ -1,6 +1,8 @@
 import options, tables
 import exp, utils
 
+{.warning[ProveInit]: off.}
+
 type
     Var* = object
         val*, typ*: Opt[Val]
@@ -35,11 +37,9 @@ type
         with_trace*: bool
 
     ValTag* = enum
-        HoldVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
-        TypeVal, NumVal, ExpVal, MemVal, FunVal,
-        FunTypeVal, UniqueVal,
-        SymbolVal, SymbolTypeVal, SetTypeVal, NeuVal,
-        #OpaqueVal
+        HoldVal, NeuVal, UniqueVal, RecVal, RecTypeVal,
+        UnionTypeVal, InterTypeVal,
+        TypeVal, NumVal, ExpVal, MemVal, FunVal, FunTypeVal
 
     RecTyp* = object
         slots*: seq[RecSlot]
@@ -63,7 +63,6 @@ type
         params*: seq[FunParam]
         result*: Exp
         #autoapply*: bool
-        is_opaque*: bool
         is_pure*: bool
         is_total*: bool
         is_macro*: bool
@@ -82,7 +81,7 @@ type
         of TypeVal:
             level*: int
 
-        of SetTypeVal, UnionTypeVal, InterTypeVal:
+        of UnionTypeVal, InterTypeVal:
             values*: seq[Val]
 
         of RecTypeVal:
@@ -100,12 +99,7 @@ type
         of UniqueVal:
             inner*: Val
 
-        #of OpaqueVal:
-        #    disp_name*: string
-        #    result*: Val
-        #    bindings*: seq[(string, Val)]
-
-        of HoldVal, SymbolVal, SymbolTypeVal:
+        of HoldVal:
             name*: string
 
         of NeuVal:
@@ -144,6 +138,8 @@ type
         name*: string
         val*, typ*: Val
 
+# Nim, why so much boilerplate :(
+
 func Unique*(inner: Val): Val =
     Val(kind: UniqueVal, inner: inner)
 
@@ -159,15 +155,42 @@ func Box*(x: Exp): Val =
 func Box*(x: Neu): Val =
     Val(kind: NeuVal, neu: x)
 
+func Number*(num: int): Val =
+    Val(kind: NumVal, num: num)
+
+func Hold*(name: string): Val =
+    Val(kind: HoldVal, name: name)
+
+func UnionType*(values: varargs[Val]): Val =
+    if values.len == 1: return values[0]
+    Val(kind: UnionTypeVal, values: @values)
+
+func InterType*(values: varargs[Val]): Val =
+    if values.len == 1: return values[0]
+    Val(kind: InterTypeVal, values: @values)
+
+func Record*(fields: varargs[RecField]): Val =
+    Val(kind: RecVal, fields: @fields)
+
+func RecordType*(slots: varargs[RecSlot], extensible = false, extension = None(Exp)): Val =
+    Val(kind: RecTypeVal, rec_typ: RecTyp(slots: @slots, extensible: extensible or extension.is_some, extension: extension))
+
+func LambdaType*(params: varargs[FunParam], ret: Exp): FunTyp =
+    FunTyp(params: @params, result: ret)
+
+func LambdaType*(typ: FunTyp): Val =
+    Val(kind: FunTypeVal, fun_typ: typ)
+
+proc Lambda*(typ: FunTyp, body: Exp, ctx: Ctx): Val =
+    Val(kind: FunVal, fun: Fun(typ: Some(typ), body: Left[Exp, BuiltinFunProc](body), ctx: Some(ctx)))
+
+# end of constructors
+
 func noun*(v: Val): string =
     case v.kind
-    of SymbolVal: "symbol"
-    of SymbolTypeVal: "type"
     of HoldVal: "variable"
     of NeuVal: "unevaluated call"
-    of SetTypeVal: "set type"
-    of UniqueVal: "value"
-    #of OpaqueVal: ""
+    of UniqueVal: "unique value"
     of NumVal: "number"
     of MemVal: "memory"
     of ExpVal: "expression"

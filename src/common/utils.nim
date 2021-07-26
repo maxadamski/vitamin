@@ -2,6 +2,10 @@ import options, tables, sequtils, strutils, strformat, algorithm, os
 export options, tables, sequtils, strutils, strformat, algorithm
 import patty
 
+# Pretty printing
+
+func bold*(x: string): string = "\e[1m" & x & "\e[0m"
+
 # Flatten seq of seqs into seq
 
 func flatten*[A](x: seq[seq[A]]) =

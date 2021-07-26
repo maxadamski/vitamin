@@ -3,7 +3,7 @@ import options, tables
 import noise
 
 import scan, parse, eval
-import common/[vm, exp, error, types]
+import common/[exp, error, types]
 from syntax import parser
 
 const (major_ver, minor_ver, patch_ver) = (0, 1, 0)
