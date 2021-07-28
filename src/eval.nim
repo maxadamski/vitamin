@@ -278,6 +278,24 @@ func `==`*(x, y: Val): bool =
     else:
         raise error(term(), "Equality for {x.noun} {x} and {y.noun} {y} not implemented".fmt)
 
+proc unify_sigma(ctx: Ctx, x, y: RecTyp): bool =
+    if x.slots.len != y.slots.len: return false
+    let n = x.slots.len
+    # FIXME: sort topologically by dependency order
+    let x_slots = x.slots
+    let y_slots = y.slots
+    let local = ctx.extend()
+    for (a, b) in zip(x_slots, y_slots):
+        if a.name != b.name: return false
+        let a_typ = local.eval(a.typ)
+        let b_typ = local.eval(b.typ)
+        a.value.if_some(value):
+            let a_val = local.eval(value)
+            let a_typ = local.eval(a.typ)
+            local.env.define(a.name, a_val, a_typ)
+        if a_typ != b_typ: return false
+    return true
+
 proc is_subtype*(ctx: Ctx, x, y: Val): bool =
     # is x a subtype of y
     if x.kind == y.kind:
@@ -286,6 +304,8 @@ proc is_subtype*(ctx: Ctx, x, y: Val): bool =
             return sets_inter(x.values, y.values).len > 0
         of InterTypeVal:
             return value_set(x.values & y.values).len > x.values.len
+        of RecTypeVal:
+            return ctx.unify_sigma(x.rec_typ, y.rec_typ)
         else:
             discard
     if y.kind == UnionTypeVal:
@@ -457,7 +477,8 @@ proc apply_lambda(ctx: Ctx, fun: Fun, exp: Exp, expand = true): Val =
     if args.len != typ.params.len:
         raise ctx.error(exp=exp, msg="Attempting to pass {args.len} arguments to an {typ.params.len} argument function. {exp.src}".fmt)
 
-    let local = fun.ctx ?? ctx.extend()
+    #let local = fun.ctx ?? ctx.extend()
+    let local = ctx.extend()
     var bindings: seq[Val]
     var hold = false
     for (par, arg_exp) in zip(typ.params, args):
@@ -508,6 +529,8 @@ proc eval_apply(ctx: Ctx, exp: Exp): Val =
     of HoldVal, NeuVal, UniqueVal:
         # can't evaluate, so normalize arguments and return the term
         Box(Neu(head: head, args: exp.tail.map_it(ctx.eval(it))))
+    of RecTypeVal:
+        raise ctx.error(exp=exp, msg="[eval_apply] Record constructors not implemented. {exp.src}".fmt)
     else:
         let head_typ = ctx.dynamic_type(head)
         raise ctx.error(exp=exp, msg="Can't evaluate, because {head.noun} {head.bold} of type {head_typ.bold} is not callable.\n\nexpanded from {head_exp.bold}. {head_exp.src}".fmt)
@@ -561,7 +584,9 @@ proc eval_record_type(ctx: Ctx, arg: Exp): RecTyp =
     var slots: seq[RecSlot]
     var extensible = false
     var extension: Opt[Exp]
+    let local = ctx.extend()
     for group in arg.exprs:
+        # FIXME: correct ordering inside param list
         for list in group.exprs: 
             var list_type = None(Exp)
             for x in list.exprs.reverse_iter:
@@ -587,18 +612,22 @@ proc eval_record_type(ctx: Ctx, arg: Exp): RecTyp =
                         name_typ = x[1]
                         slot_default = Some(x[2])
                     if not name_typ[0].is_token(":"):
-                        raise ctx.error(exp=x, msg="Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
+                        raise local.error(exp=x, msg="Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
                     if name_typ[1].kind != expAtom:
-                        raise ctx.error(exp=x, msg="Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
+                        raise local.error(exp=x, msg="Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
                     slot_name = name_typ[1].value
-                    slot_typ = ctx.norm(name_typ[2])
+                    let slot_typ_val = local.eval(name_typ[2])
+                    slot_typ = local.reify(slot_typ_val)
                     list_type = Some(slot_typ)
+                    local.env.assume(slot_name, slot_typ_val)
 
                 slots.add(RecSlot(name: slot_name, typ: slot_typ, default: slot_default))
+
     return MakeRecTyp(slots, extensible, extension)
 
 proc eval_record(ctx: Ctx, arg: Exp): Rec =
     var fields: seq[RecField]
+    let local = ctx.extend()
     for exp in arg.exprs:
         let (name_exp, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
         let name = name_exp.value
@@ -609,21 +638,22 @@ proc eval_record(ctx: Ctx, arg: Exp): Rec =
             if not ctx.is_subtype(typ, exp_typ):
                 raise ctx.error(exp=exp, msg="Expected value of {exp_typ}, but found {val} of {typ}. {exp.src}".fmt)
             typ = exp_typ
-        ctx.env.define(name, val, typ, Some(exp))
+        local.env.define(name, val, typ, Some(exp))
         fields.add(RecField(name: name, val: val, typ: typ))
     return MakeRec(fields)
 
-proc eval_record_result(ctx: Ctx, arg: Exp): RecTyp =
+proc record_infer(ctx: Ctx, arg: Exp): RecTyp =
     var slots: seq[RecSlot]
+    let local = ctx.extend()
     for exp in arg.exprs:
-        let (name, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
-        let typ = if not typ_exp.is_nil:
-            typ_exp
-            #if not ctx.is_subtype(typ, exp_typ):
-            #    raise error(exp, "Expected value of {exp_typ}, but found {val} of {typ}. {exp.src}".fmt)
+        let (name_exp, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
+        let name = name_exp.value
+        let typ_val = if not typ_exp.is_nil:
+            local.eval(typ_exp)
         else:
-            ctx.reify(ctx.infer_type(val_exp))
-        slots.add(RecSlot(name: name.value, typ: typ))
+            local.infer_type(val_exp)
+        local.env.assume(name, typ_val)
+        slots.add(RecSlot(name: name, typ: local.reify(typ_val), value: Some(val_exp)))
     return MakeRecTyp(slots)
 
 #
@@ -738,7 +768,7 @@ proc eval_define(ctx: Ctx, args: seq[Val]): Val =
     var rhs_typ = ctx.infer_type(rhs)
     lhs_typ.if_some(lhs_typ):
         if not ctx.is_subtype(rhs_typ, lhs_typ):
-            raise ctx.error(exp=rhs, msg="Can't coerce {rhs} of type {rhs_typ} to type {lhs_typ}. {rhs.src}".fmt)
+            raise ctx.error(exp=rhs, msg="Can't coerce {rhs} of type {rhs_typ.bold} to type {lhs_typ.bold}. {rhs.src}".fmt)
 
     let typ = lhs_typ ?? rhs_typ
     var rhs_val = ctx.eval(rhs)
@@ -886,7 +916,6 @@ proc eval_assert(ctx: Ctx, arg: Exp) =
         let lhs_val = ctx.eval(lhs)
         let rhs_val = ctx.eval(rhs)
         if not ctx.is_subtype(lhs_val, rhs_val) xor negate:
-            echo ctx.is_subtype(lhs_val, rhs_val)
             raise error(exp, "Expected {lhs_val.bold} to {neg}be a subtype of {rhs_val.bold}. {exp.src}".fmt)
     elif cond.has_prefix("error"):
         var cond = cond[1]
@@ -1123,13 +1152,13 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
             else:
                 discard
         if exp.len >= 1:
-            let callee = ctx.expand(exp[0])
-            let callee_typ = ctx.infer_type(callee)
+            let head_exp = ctx.expand(exp[0])
+            let head_typ = ctx.infer_type(head_exp)
             ctx.push_call(exp, infer=true)
             defer: ctx.pop_call()
-            case callee_typ.kind
+            case head_typ.kind
             of FunTypeVal:
-                let fun_typ = callee_typ.fun_typ
+                let fun_typ = head_typ.fun_typ
                 let local = ctx.extend()
                 # TODO: skip defining parameters if not a dependent type
                 for (par, arg) in zip(fun_typ.params, exp.tail):
@@ -1138,8 +1167,15 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
                     local.env.define(par.name, arg_val, par_typ)
                 let res_typ = local.eval(fun_typ.result)
                 return res_typ
+            of TypeVal:
+                let head = ctx.eval(head_exp)
+                case head.kind
+                of RecTypeVal:
+                    return head
+                else:
+                    raise ctx.error(exp=exp, msg="Can't use function call syntax to construct a value of type {head}. {ctx.src}".fmt)
             else:
-                raise ctx.error(exp=exp, msg="Can't infer type of expression, because {callee.bold} of {callee_typ.noun} {callee_typ.bold} is not callable. {exp.src}".fmt)
+                raise ctx.error(exp=exp, msg="Can't infer type of expression, because {head_exp.bold} of {head_typ.noun} {head_typ.bold} is not callable. {exp.src}".fmt)
     raise ctx.error(trace=true, msg="infer-type not implemented for expression {exp}. {exp.src}".fmt)
 
 proc eval*(ctx: Ctx, exp: Exp, unwrap = false): Val =
@@ -1295,7 +1331,7 @@ root_ctx.set_builtin_fun_inline "record":
     Box(eval_record(ctx, args[0].exp))
 
 root_ctx.set_builtin_fun_inline "record-infer":
-    Box(eval_record_result(ctx, args[0].exp))
+    Box(record_infer(ctx, args[0].exp))
 
 root_ctx.set_builtin_fun_inline "Record":
     if args.len == 0: return unit_type

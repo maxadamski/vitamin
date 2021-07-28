@@ -246,38 +246,12 @@ test "integer literals"
     assert type-of(forty-two) == I64
 
 #
-# Records
-#
-
-test "record field types are normalized"
-    Also-Type = Type
-    assert Record(x: Type) == Record(x: Also-Type)
-
-test "single row records"
-    Single = Record(x: Type)
-    assert type-of(Single) == Type
-    assert type-of((x=Unit)) == Single
-
-test "unit records"
-    assert Unit == Record()
-    assert type-of(Unit) == Type
-    assert type-of(()) == Unit
-    assert type-of((x=Unit)) == Record(x: Type)
-    assert type-of((x=())) == Record(x: Unit)
-
-test "record row shorthand syntax"
-    A, B, C : Type
-    R1 = Record(a: A, b: B, c: B, d: C)
-    R2 = Record(a: A, b c: B, d: C)
-    assert R1 == R2
-
-test "row order doesn't affect record type equality"
-    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
-    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
-
-#
 # Syntax sugar
 #
+
+test "parenthesised expression"
+    A : Type
+    assert (A) == A
 
 test "label-less function parameter"
     A = Type -> Type
@@ -353,6 +327,53 @@ test "bool operators"
     assert (false or true) == true
     assert (true or false) == true
     assert (false or false) == false
+
+#
+# Records
+#
+
+test "record field types are normalized"
+    Also-Type = Type
+    assert Record(x: Type) == Record(x: Also-Type)
+
+test "single row records"
+    Single = Record(x: Type)
+    assert type-of(Single) == Type
+    assert type-of((x=Unit)) == Single
+
+test "unit records"
+    assert Unit == Record()
+    assert type-of(Unit) == Type
+    assert type-of(()) == Unit
+    assert type-of((x=Unit)) == Record(x: Type)
+    assert type-of((x=())) == Record(x: Unit)
+
+test "dependent records models a disjoint union"
+    L, R : Type
+    r : R
+    l : L
+    Data = (x: Bool) => case x of true R of false L
+    assert Data(true) == R
+    assert Data(false) == L
+    Either = Record(t: Bool, data: Data(t))
+    either-r : Either = (t=true, data=r)
+    either-l : Either = (t=false, data=l)
+    assert error(either-l : Either = (t=false, data=r))
+    assert error(either-r : Either = (t=true, data=l))
+
+xtest "record constructor"
+    R = Record()
+    assert R() == constructor-of(R)()
+
+test "record row shorthand syntax"
+    A, B, C : Type
+    R1 = Record(a: A, b: B, c: B, d: C)
+    R2 = Record(a: A, b c: B, d: C)
+    assert R1 == R2
+
+test "row order doesn't affect record type equality"
+    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
+    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
 
 #
 # Sets

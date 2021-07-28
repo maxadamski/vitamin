@@ -46,6 +46,7 @@ type
         name*: string
         typ*: Exp
         default*: Opt[Exp]
+        value*: Opt[Exp]
         typ_inferred_from_default*: bool
         typ_inferred_from_position*: bool
 
