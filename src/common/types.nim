@@ -41,6 +41,18 @@ type
         UnionTypeVal, InterTypeVal,
         TypeVal, NumVal, ExpVal, MemVal, FunVal, FunTypeVal
 
+
+    RecSlot* = object
+        name*: string
+        typ*: Exp
+        default*: Opt[Exp]
+        typ_inferred_from_default*: bool
+        typ_inferred_from_position*: bool
+
+    RecField* = object
+        name*: string
+        val*, typ*: Val
+
     Rec* = object
         fields*: seq[RecField]
 
@@ -129,17 +141,6 @@ type
         name*: string
         value*: Val
         keyword*: bool
-
-    RecSlot* = object
-        name*: string
-        typ*: Exp
-        default*: Opt[Exp]
-        typ_inferred_from_default*: bool
-        typ_inferred_from_position*: bool
-
-    RecField* = object
-        name*: string
-        val*, typ*: Val
 
 # Nim, why so much boilerplate :(
 
@@ -255,7 +256,7 @@ func str*(x: Neu): string =
 
 func str*(v: Val): string =
     case v.kind
-    of HoldVal: v.name
+    of HoldVal: "?" & v.name
     of NeuVal: v.neu.str
     of UniqueVal: "Unique(" & v.inner.str & ")"
     of NumVal: $v.num

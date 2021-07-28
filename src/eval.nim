@@ -219,7 +219,8 @@ func `==`(x, y: Neu): bool =
 func `==`*(x, y: Exp): bool =
     if x.kind != y.kind: return false
     case x.kind
-    of expAtom: x.value == y.value
+    of expAtom:
+        x.value == y.value
     of expTerm:
         if x.len != y.len: return false
         for (a, b) in zip(x.exprs, y.exprs):
@@ -254,10 +255,10 @@ func `==`(x, y: Rec): bool =
 func `==`(x, y: RecTyp): bool =
     if x.slots.len != y.slots.len: return false
     let n = x.slots.len
-    let sx = x.slots.sorted_by_it(it.name)
-    let sy = y.slots.sorted_by_it(it.name)
-    for i in 0..<n:
-        if sx[i].name != sy[i].name or sx[i].typ != sy[i].typ: return false
+    let x_slots = x.slots.sorted_by_it(it.name)
+    let y_slots = y.slots.sorted_by_it(it.name)
+    for (a, b) in zip(x_slots, y_slots):
+        if a.name != b.name or a.typ != b.typ: return false
     return true
 
 func `==`*(x, y: Val): bool =
@@ -590,7 +591,7 @@ proc eval_record_type(ctx: Ctx, arg: Exp): RecTyp =
                     if name_typ[1].kind != expAtom:
                         raise ctx.error(exp=x, msg="Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
                     slot_name = name_typ[1].value
-                    slot_typ = name_typ[2]
+                    slot_typ = ctx.norm(name_typ[2])
                     list_type = Some(slot_typ)
 
                 slots.add(RecSlot(name: slot_name, typ: slot_typ, default: slot_default))
@@ -599,7 +600,8 @@ proc eval_record_type(ctx: Ctx, arg: Exp): RecTyp =
 proc eval_record(ctx: Ctx, arg: Exp): Rec =
     var fields: seq[RecField]
     for exp in arg.exprs:
-        let (name, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
+        let (name_exp, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
+        let name = name_exp.value
         let val = ctx.eval(val_exp)
         var typ = ctx.infer_type(val_exp)
         if not typ_exp.is_nil:
@@ -607,7 +609,8 @@ proc eval_record(ctx: Ctx, arg: Exp): Rec =
             if not ctx.is_subtype(typ, exp_typ):
                 raise ctx.error(exp=exp, msg="Expected value of {exp_typ}, but found {val} of {typ}. {exp.src}".fmt)
             typ = exp_typ
-        fields.add(RecField(name: name.value, val: val, typ: typ))
+        ctx.env.define(name, val, typ, Some(exp))
+        fields.add(RecField(name: name, val: val, typ: typ))
     return MakeRec(fields)
 
 proc eval_record_result(ctx: Ctx, arg: Exp): RecTyp =
@@ -1133,7 +1136,8 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
                     let arg_val = if par.quoted: Box(arg) else: local.eval(arg)
                     let par_typ = local.eval(par.typ)
                     local.env.define(par.name, arg_val, par_typ)
-                return local.eval(fun_typ.result)
+                let res_typ = local.eval(fun_typ.result)
+                return res_typ
             else:
                 raise ctx.error(exp=exp, msg="Can't infer type of expression, because {callee.bold} of {callee_typ.noun} {callee_typ.bold} is not callable. {exp.src}".fmt)
     raise ctx.error(trace=true, msg="infer-type not implemented for expression {exp}. {exp.src}".fmt)

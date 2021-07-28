@@ -191,10 +191,6 @@ test "unique functions"
 # Type coertions
 #
 
-test "row order doesn't affect record type equality"
-    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
-    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
-
 test "type upcast to Any"
     assert type-of(Type as Any) == Any
 
@@ -253,25 +249,31 @@ test "integer literals"
 # Records
 #
 
-xtest "unit records"
-    unit = ()
-    assert Unit == Record()
-    assert type-of(Unit) == Type
-    assert type-of(unit) == Unit
-    assert type-of((x=Unit)) == Record(x: Type)
-    assert type-of((x=unit)) == Record(x: Unit)
+test "record field types are normalized"
+    Also-Type = Type
+    assert Record(x: Type) == Record(x: Also-Type)
 
 test "single row records"
     Single = Record(x: Type)
     assert type-of(Single) == Type
-    assert Single == Record(x: Type)
     assert type-of((x=Unit)) == Single
+
+test "unit records"
+    assert Unit == Record()
+    assert type-of(Unit) == Type
+    assert type-of(()) == Unit
+    assert type-of((x=Unit)) == Record(x: Type)
+    assert type-of((x=())) == Record(x: Unit)
 
 test "record row shorthand syntax"
     A, B, C : Type
     R1 = Record(a: A, b: B, c: B, d: C)
     R2 = Record(a: A, b c: B, d: C)
     assert R1 == R2
+
+test "row order doesn't affect record type equality"
+    assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
+    assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
 
 #
 # Syntax sugar
