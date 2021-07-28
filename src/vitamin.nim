@@ -242,13 +242,13 @@ proc main =
             path = found.get
             
         if not file_exists(path): panic fmt"ERROR: prelude file {path} doesn't exist!"
-        global_ctx.eval_file(path)
+        root_ctx.eval_file(path)
 
     libs = libs.filterIt(dir_exists(it))
 
     for path in inputs:
         if not file_exists(path): panic fmt"ERROR: input file {path} doesn't exist!"
-        var local = global_ctx.extend()
+        var local = root_ctx.extend()
         local.eval_file(path)
 
     if command.is_some:
@@ -256,10 +256,10 @@ proc main =
         for i, arg in command_args:
             echo fmt"args[{i}] = {arg}"
         #echo command.get
-        global_ctx.eval_string(command.get)
+        root_ctx.eval_string(command.get)
 
     if ((inputs.len == 0 and command.is_none) or force_interactive) and not force_batch:
-        global_ctx.repl(no_greeting)
+        root_ctx.repl(no_greeting)
 
 when is_main_module:
     main()

@@ -41,6 +41,9 @@ type
         UnionTypeVal, InterTypeVal,
         TypeVal, NumVal, ExpVal, MemVal, FunVal, FunTypeVal
 
+    Rec* = object
+        fields*: seq[RecField]
+
     RecTyp* = object
         slots*: seq[RecSlot]
         extensible*: bool
@@ -88,7 +91,7 @@ type
             rec_typ*: RecTyp
 
         of RecVal:
-            fields*: seq[RecField]
+            rec*: Rec
 
         of FunTypeVal:
             fun_typ*: FunTyp
@@ -140,26 +143,19 @@ type
 
 # Nim, why so much boilerplate :(
 
+func Box*(x: Exp): Val = Val(kind: ExpVal, exp: x)
+func Box*(x: Neu): Val = Val(kind: NeuVal, neu: x)
+func Box*(x: int): Val = Val(kind: NumVal, num: x)
+func Box*(x: Fun): Val = Val(kind: FunVal, fun: x)
+func Box*(x: FunTyp): Val = Val(kind: FunTypeVal, fun_typ: x)
+func Box*(x: Rec): Val = Val(kind: RecVal, rec: x)
+func Box*(x: RecTyp): Val = Val(kind: RecTypeVal, rec_typ: x)
+
 func Unique*(inner: Val): Val =
     Val(kind: UniqueVal, inner: inner)
 
 func Universe*(level: int): Val =
     Val(kind: TypeVal, level: 0)
-
-func Box*(x: Fun): Val =
-    Val(kind: FunVal, fun: x)
-
-func Box*(x: Exp): Val =
-    Val(kind: ExpVal, exp: x)
-
-func Box*(x: Neu): Val =
-    Val(kind: NeuVal, neu: x)
-
-func Number*(num: int): Val =
-    Val(kind: NumVal, num: num)
-
-func Hold*(name: string): Val =
-    Val(kind: HoldVal, name: name)
 
 func UnionType*(values: varargs[Val]): Val =
     if values.len == 1: return values[0]
@@ -169,20 +165,20 @@ func InterType*(values: varargs[Val]): Val =
     if values.len == 1: return values[0]
     Val(kind: InterTypeVal, values: @values)
 
-func Record*(fields: varargs[RecField]): Val =
-    Val(kind: RecVal, fields: @fields)
+func Hold*(name: string): Val =
+    Val(kind: HoldVal, name: name)
 
-func RecordType*(slots: varargs[RecSlot], extensible = false, extension = None(Exp)): Val =
-    Val(kind: RecTypeVal, rec_typ: RecTyp(slots: @slots, extensible: extensible or extension.is_some, extension: extension))
+func MakeRec*(fields: varargs[RecField]): Rec =
+    Rec(fields: @fields)
 
-func LambdaType*(params: varargs[FunParam], ret: Exp): FunTyp =
+func MakeRecTyp*(slots: varargs[RecSlot], extensible = false, extension = None(Exp)): RecTyp =
+    RecTyp(slots: @slots, extensible: extensible or extension.is_some, extension: extension)
+
+func MakeFun*(typ: FunTyp, body: Exp, ctx: Ctx): Fun =
+    Fun(typ: Some(typ), body: Left[Exp, BuiltinFunProc](body), ctx: Some(ctx))
+
+func MakeFunTyp*(params: varargs[FunParam], ret: Exp): FunTyp =
     FunTyp(params: @params, result: ret)
-
-func LambdaType*(typ: FunTyp): Val =
-    Val(kind: FunTypeVal, fun_typ: typ)
-
-proc Lambda*(typ: FunTyp, body: Exp, ctx: Ctx): Val =
-    Val(kind: FunVal, fun: Fun(typ: Some(typ), body: Left[Exp, BuiltinFunProc](body), ctx: Some(ctx)))
 
 # end of constructors
 
@@ -201,3 +197,82 @@ func noun*(v: Val): string =
     of FunTypeVal: "function type"
     of RecVal: "record"
     of RecTypeVal: "record type"
+
+#
+# Pretty-printing
+#
+
+func str*(v: Val): string
+
+func `$`*(x: Val): string = x.str
+
+func bold*(x: Exp): string = x.str.bold
+
+func bold*(x: Val): string = x.str.bold
+
+func str*(x: RecTyp): string =
+    var res: seq[string]
+    for s in x.slots:
+        var repr = ""
+        if s.name != "":
+            repr &= s.name & ": "
+        repr &= s.typ.str
+        s.default.if_some(default):
+            repr &= " = " & default.str
+        res.add(repr)
+    "Record(" & res.join(", ") & ")"
+
+func str*(x: FunTyp): string =
+    var prefix = ""
+    if x.is_pure: prefix &= "pure "
+    if x.is_macro: prefix &= "macro "
+    var params: seq[string]
+    for param in x.params:
+        var s = param.name
+        if not param.did_infer_typ: s &= ": " & param.typ.str
+        param.default.if_some(default):
+            s &= " = " & $default
+        params.add(s)
+    prefix & "(" & params.join(", ") & ") -> " & x.result.str
+
+func str*(x: Rec): string =
+    var res: seq[string]
+    for f in x.fields:
+        let prefix = if f.name == "": "" else: f.name & "="
+        res.add(prefix & f.val.str)
+    "(" & res.join(", ") & ")"
+
+func str*(x: Arg): string =
+    if not x.keyword: return x.value.str
+    x.name & "=" & x.value.str
+
+func str*(x: Neu): string =
+    let head = if x.head.kind == FunVal and x.head.fun.name != "":
+        x.head.fun.name
+    else:
+        x.head.str
+    head & "(" & x.args.map(str).join(", ") & ")"
+
+func str*(v: Val): string =
+    case v.kind
+    of HoldVal: v.name
+    of NeuVal: v.neu.str
+    of UniqueVal: "Unique(" & v.inner.str & ")"
+    of NumVal: $v.num
+    of MemVal: "Memory(...)"
+    of ExpVal: "Expr(" & v.exp.str & ")"
+    of TypeVal:
+        if v.level == 0: "Type" else: "Type" & $v.level
+    of UnionTypeVal, InterTypeVal:
+        let op = if v.kind == UnionTypeVal: " | " else: " & "
+        if v.values.len == 0:
+            return if v.kind == UnionTypeVal: "Never" else: "Any"
+        "(" & v.values.map(str).join(op) & ")"
+    of FunVal:
+        if v.fun.name.len > 0:
+            v.fun.name
+        else:
+            "<lambda>"
+    of FunTypeVal: v.fun_typ.str
+    of RecVal: v.rec.str
+    of RecTypeVal: v.rec_typ.str

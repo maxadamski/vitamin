@@ -4,6 +4,9 @@ import types, utils
 
 var stdin_history* = ""
 
+proc type_rule*(goal: string, given: varargs[string]): string =
+    given.join("\n") & "\n-------------------------\n" & goal
+
 func error*(node: Exp, msg: string): ref VitaminError =
     var error = new_exception(VitaminError, msg)
     error.node = node

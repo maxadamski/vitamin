@@ -2,6 +2,11 @@ import options, tables, sequtils, strutils, strformat, algorithm, os
 export options, tables, sequtils, strutils, strformat, algorithm
 import patty
 
+# "Optional unwrapping" for strings
+
+func `??`*(s: string, default: string): string =
+    if s.len > 0: s else: default
+
 # Pretty printing
 
 func bold*(x: string): string = "\e[1m" & x & "\e[0m"
