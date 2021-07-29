@@ -411,6 +411,15 @@ test "row order doesn't affect record type equality"
     assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
     assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
 
+test "dependent function"
+    A, B : Type
+    a : A
+    b : B
+    h = (x: Bool) => case x of true A of false B
+    f : (x: Bool) -> h(x)
+    assert type-of(f(true)) == A
+    assert type-of(f(false)) == B
+
 test "dependent record"
     L, R : Type
     r : R
