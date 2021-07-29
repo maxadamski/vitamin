@@ -36,12 +36,6 @@ type
         ctx*: Ctx
         with_trace*: bool
 
-    ValTag* = enum
-        HoldVal, NeuVal, UniqueVal, RecVal, RecTypeVal,
-        UnionTypeVal, InterTypeVal,
-        TypeVal, NumVal, ExpVal, MemVal, FunVal, FunTypeVal
-
-
     RecSlot* = object
         name*: string
         typ*: Exp
@@ -90,45 +84,48 @@ type
         ctx*: Opt[Ctx] # closure context
         builtin*: bool
 
+    Mem* = object
+        buf*: pointer
+
+    ValTag* = enum
+        HoldVal, NeuVal, UniqueVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
+        TypeVal, ExpVal, MemVal, FunVal, FunTypeVal,
+        NumVal, StrVal, I8, U8, I64, U64
+
     ValObj* = object
         typ*: Opt[Val]
 
         case kind*: ValTag
+        of I8:
+            i8*: int8
+        of U8:
+            u8*: uint8
+        of I64:
+            i64*: int64
+        of U64:
+            u64*: uint64
         of TypeVal:
             level*: int
-
         of UnionTypeVal, InterTypeVal:
             values*: seq[Val]
-
         of RecTypeVal:
             rec_typ*: RecTyp
-
         of RecVal:
             rec*: Rec
-
         of FunTypeVal:
             fun_typ*: FunTyp
-
         of FunVal:
             fun*: Fun
-
         of UniqueVal:
             inner*: Val
-
         of HoldVal:
             name*: string
-
         of NeuVal:
             neu*: Neu
-
-        of NumVal:
-            num*: int
-
+        of NumVal, StrVal:
+            lit*: string
         of MemVal:
-            mem_ptr*: Val
-            mem_typ*: Val
-            wr*, rd*, imm*: bool
-
+            mem*: Mem
         of ExpVal:
             exp*: Exp 
 
@@ -147,7 +144,6 @@ type
 
 func Box*(x: Exp): Val = Val(kind: ExpVal, exp: x)
 func Box*(x: Neu): Val = Val(kind: NeuVal, neu: x)
-func Box*(x: int): Val = Val(kind: NumVal, num: x)
 func Box*(x: Fun): Val = Val(kind: FunVal, fun: x)
 func Box*(x: FunTyp): Val = Val(kind: FunTypeVal, fun_typ: x)
 func Box*(x: Rec): Val = Val(kind: RecVal, rec: x)
@@ -186,10 +182,13 @@ func MakeFunTyp*(params: varargs[FunParam], ret: Exp): FunTyp =
 
 func noun*(v: Val): string =
     case v.kind
+    of I8, I64: "integer"
+    of U8, U64: "unsigned integer"
     of HoldVal: "variable"
     of NeuVal: "unevaluated call"
     of UniqueVal: "unique value"
-    of NumVal: "number"
+    of NumVal: "number literal"
+    of StrVal: "string literal"
     of MemVal: "memory"
     of ExpVal: "expression"
     of TypeVal: "type"
@@ -259,8 +258,12 @@ func str*(v: Val): string =
     case v.kind
     of HoldVal: "?" & v.name
     of NeuVal: v.neu.str
+    of I8: $v.i8
+    of U8: $v.u8
+    of I64: $v.i64
+    of U64: $v.u64
     of UniqueVal: "Unique(" & v.inner.str & ")"
-    of NumVal: $v.num
+    of NumVal, StrVal: v.lit
     of MemVal: "Memory(...)"
     of ExpVal: "Expr(" & v.exp.str & ")"
     of TypeVal:

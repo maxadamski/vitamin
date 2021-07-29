@@ -273,8 +273,12 @@ func `==`*(x, y: Val): bool =
     of FunVal: x.fun == y.fun
     of RecVal: x.rec == y.rec
     of RecTypeVal: x.rec_typ == y.rec_typ
-    of NumVal: x.num == y.num
+    of NumVal, StrVal: x.lit == y.lit
     of ExpVal: x.exp == y.exp
+    of I8: x.i8 == y.i8
+    of U8: x.u8 == y.u8
+    of I64: x.i64 == y.i64
+    of U64: x.u64 == y.u64
     else:
         raise error(term(), "Equality for {x.noun} {x} and {y.noun} {y} not implemented".fmt)
 
@@ -339,12 +343,12 @@ proc make_lambda_param(ctx: Ctx, param: Exp): FunParam =
 
     if not typ_exp.is_nil:
         var typ_exp = norm(ctx, typ_exp)
-        while typ_exp.has_prefix_any(["Quoted", "Args", "Lazy"]):
+        while typ_exp.has_prefix_any(["Quoted", "Varargs", "Lazy"]):
             case typ_exp[0].value
             of "Quoted":
                 typ_exp = typ_exp[1]
                 quoted = true
-            of "Args":
+            of "Varargs":
                 typ_exp = typ_exp[1]
                 variadic = true
             of "Lazy":
@@ -736,22 +740,6 @@ proc eval_equals(ctx: Ctx, lhs, rhs: Exp): bool =
         raise error(exp, "Can't compare arguments of different types {lhs_val} of {lhs_typ} and {rhs_val} of {rhs_typ}. {exp.src}".fmt)
     lhs_val == rhs_val
 
-proc eval_match(ctx: Ctx, lhs, rhs: Exp): bool =
-    if lhs.is_token("_"): return true
-    let lhs = ctx.eval(lhs)
-    let rhs = ctx.eval(rhs)
-    return equal(lhs, rhs)
-
-proc eval_case(ctx: Ctx, args: seq[Val]): Val =
-    let switch = args[0].exp
-    let branches = args[1 .. ^1].map_it(it.exp)
-    let typ = ctx.infer_type(switch)
-    for branch in branches:
-        let local = ctx.extend()
-        if eval_match(local, branch[0], switch):
-            return local.eval(branch[1])
-    raise error(switch, "Not all cases covered for value {switch} of {typ}. {switch.src}".fmt)
-
 proc eval_define(ctx: Ctx, args: seq[Val]): Val =
     var (lhs, rhs) = (args[0].exp, args[1].exp)
     var lhs_typ = None(Val)
@@ -856,6 +844,28 @@ proc v_unwrap(ctx: Ctx, val: Val): Val =
     if val.kind != UniqueVal:
         raise ctx.error("Can't unwrap, because expression does not evaluate to a unique value. {ctx.src}".fmt)
     return val.inner
+
+proc eval_match(ctx: Ctx, lhs_exp: Exp, rhs_val: Val): bool =
+    if lhs_exp.is_token("_"): return true
+    let lhs_val = ctx.eval(lhs_exp)
+    return lhs_val == rhs_val
+
+proc infer_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
+    #let branches = exp.exprs[2 .. ^1]
+    var types: seq[Val]
+    for x in cases:
+        let (pattern, body) = (x[0], x[1])
+        types.add(ctx.infer_type(body))
+    eval_union(ctx, types)
+
+proc eval_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
+    let switch = ctx.eval(switch_exp)
+    let typ = ctx.infer_type(switch_exp)
+    for branch in cases:
+        let local = ctx.extend()
+        if local.eval_match(branch[0], switch):
+            return local.eval(branch[1])
+    raise ctx.error("Not all cases covered for {switch.noun} {switch.bold} of type {typ.bold}. {switch_exp.src}".fmt)
 
 #
 # Assert & Tests
@@ -1031,7 +1041,9 @@ proc reify*(ctx: Ctx, val: Val): Exp =
     of ExpVal:
         val.exp
     of NumVal:
-        atom($val.num, tag=aNum)
+        atom(val.str, tag=aNum)
+    of StrVal:
+        atom(val.str, tag=aStr)
     of HoldVal:
         atom(val.name)
     of NeuVal:
@@ -1077,10 +1089,13 @@ proc dynamic_type*(ctx: Ctx, val: Val): Val =
         Box(MakeRecTyp(slots))
     of FunVal:
         Val(kind: FunTypeVal, fun_typ: get_typ(ctx, val.fun))
-    of MemVal:
-        Hold("Size")
-    of NumVal:
-        Hold("I64")
+    of I8: Hold("I8")
+    of U8: Hold("U8")
+    of I64: Hold("I64")
+    of U64: Hold("U64")
+    of MemVal: Hold("Size")
+    of NumVal: Hold("Num-Literal")
+    of StrVal: Hold("Str-Literal")
     of ExpVal:
         case val.exp.kind
         of expAtom: Hold("Atom")
@@ -1134,17 +1149,13 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
                 var typ = ctx.infer_type(exp[2])
                 ctx.env.assume(name, typ, exp)
                 return typ
-            of "case":
-                let branches = exp.exprs[2 .. ^1]
-                var types: seq[Val]
-                for branch in branches:
-                    types.add(ctx.infer_type(branch[1]))
-                return eval_union(ctx, types)
             of "block":
                 var typ = unit_type
                 for stat in exp.tail:
                     typ = ctx.infer_type(stat)
                 return typ
+            of "case":
+                return ctx.infer_case(exp[1], exp.exprs[2 .. ^1])
             of "Union", "Inter":
                 return type0
             of ":", "print":
@@ -1186,7 +1197,8 @@ proc eval*(ctx: Ctx, exp: Exp, unwrap = false): Val =
     of expAtom:
         case exp.tag
         of aSym, aLit: return eval_name(ctx, exp)
-        of aNum: return Val(kind: NumVal, num: exp.value.parse_int)
+        of aNum: return Val(kind: NumVal, lit: exp.value)
+        of aStr: return Val(kind: StrVal, lit: exp.value)
         else: raise ctx.error(exp=exp, msg="I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
     of expTerm:
         if exp.len == 0:
@@ -1201,11 +1213,12 @@ proc eval*(ctx: Ctx, exp: Exp, unwrap = false): Val =
             of "print":
                 echo exp.tail.map_it(eval(ctx, it)).join(" ")
                 return unit
+            of "case":
+                return ctx.eval_case(exp[1], exp.exprs[2 .. ^1])
             of "unique": return Unique(ctx.eval(exp[1]))
             of "unwrap": return ctx.v_unwrap(ctx.eval(exp[1]))
             of ":": return eval_assume(ctx, exp.tail.map_it(Box(it)))
             of "define": return eval_define(ctx, exp.tail.map_it(Box(it)))
-            of "case": return eval_case(ctx, exp.tail.map_it(Box(it)))
             of "Union": return eval_union(ctx, exp.tail.map_it(eval(ctx, it)))
             of "Inter": return eval_inter(ctx, exp.tail.map_it(eval(ctx, it)))
         if exp.len >= 1:
@@ -1341,7 +1354,7 @@ root_ctx.set_builtin_fun_inline "type-of":
     ctx.infer_type(args[0].exp)
 
 root_ctx.set_builtin_fun_inline "level-of":
-    Box(ctx.infer_level(args[0].exp))
+    Val(kind: U64, u64: uint64(ctx.infer_level(args[0].exp)))
 
 # non-essential definitions:
 
@@ -1378,3 +1391,33 @@ root_ctx.set_builtin_fun_inline "as":
     
 root_ctx.set_builtin_fun_inline "eval":
     ctx.eval(args[0].exp)
+
+root_ctx.set_builtin_fun_inline "i8":
+    let num = parse_int(args[0].lit)
+    if not (-128 <= num and num <= 127):
+        raise ctx.error("Number literal {args[0]} does not fit in the range of type I8. {ctx.src}".fmt)
+    Val(kind: I8, i8: int8(num))
+
+root_ctx.set_builtin_fun_inline "u8":
+    let num = parse_int(args[0].lit)
+    if not (0 <= num and num <= 255):
+        raise ctx.error("Number literal {args[0]} does not fit in the range of type U8. {ctx.src}".fmt)
+    Val(kind: U8, u8: uint8(num))
+
+root_ctx.set_builtin_fun_inline "i64":
+    try:
+        Val(kind: I64, i64: int64(parse_int(args[0].lit)))
+    except ValueError:
+        raise ctx.error("Number literal {args[0]} does not fit in the range of type I64. {ctx.src}".fmt)
+
+root_ctx.set_builtin_fun_inline "u64":
+    try:
+        let num = parse_uint(args[0].lit)
+        Val(kind: U64, u64: uint64(num))
+    except ValueError:
+        raise ctx.error("Number literal {args[0]} does not fit in the range of type U64. {ctx.src}".fmt)
+
+root_ctx.set_builtin_fun_inline "inv":
+    var lit = args[0].lit
+    if lit[0] == '-': lit = lit[1 .. ^1] else: lit = "-" & lit
+    Val(kind: NumVal, lit: lit)

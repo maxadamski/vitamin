@@ -1,12 +1,15 @@
 ## Tests of core language functionality
 
-Num-Literal : Type
-I64, U64, Str : Type
+Num-Literal, Str-Literal : Type
+U8, I8, U64, I64 : Type
+inv : (x: Num-Literal) -> Num-Literal
+u8 : (x: Num-Literal) -> U8
+i8 : (x: Num-Literal) -> I8
+u64 : (x: Num-Literal) -> U64
+i64 : (x: Num-Literal) -> I64
 Size = U64
 Int = I64
-Quoted : (x: Type) -> Type
-Opaque : (x: Type) -> Type
-Expand : (x: Type) -> Type
+Quoted, Expand, Varargs : (x: Type) -> Type
 `=` : (pattern value: Quoted(Expr)) -> Expand(Expr)
 `->` : (params result: Quoted(Expr)) -> Expand(Expr)
 `=>` : (head body: Quoted(Expr)) -> Expand(Expr)
@@ -36,6 +39,60 @@ compare : (expr: Quoted(Expr)) -> Bool
 gensym : () -> Atom
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
+
+#
+# Literals
+#
+
+test "number literals"
+    forty-two = 42
+    assert type-of(42) == Num-Literal
+    assert type-of(forty-two) == Num-Literal
+
+test "string literals"
+    hello = 'hello'
+    assert type-of(hello) == Str-Literal
+    assert type-of("hello") == Str-Literal
+
+#
+# Integers
+#
+
+test "number literal converts to 8-bit signed integer"
+    i8(0)
+    i8(127)
+    i8(-128)
+    assert error(i8(128))
+    assert error(i8(-129))
+
+test "number literal converts to 8-bit unsigned integer"
+    u8(0)
+    u8(255)
+    assert error(u8(256))
+    assert error(u8(-1))
+
+test "number literal converts to 64-bit signed integer"
+    i64(0)
+    i64(9223372036854775807)
+    i64(-9223372036854775808)
+    assert error(i64(9223372036854775808))
+    assert error(i64(-9223372036854775809))
+
+test "number literal converts to 64-bit unsigned integer"
+    u64(0)
+    u64(18446744073709551615)
+    assert error(u64(18446744073709551616))
+    assert error(u64(-1))
+
+test "integer comparison"
+    assert u8(0) == u8(0)
+    assert u8(0) != u8(1)
+    assert i8(0) == i8(0)
+    assert i8(0) != i8(1)
+    assert i64(0) == i64(0)
+    assert i64(0) != i64(1)
+    assert u64(0) == u64(0)
+    assert u64(0) != u64(1)
 
 #
 # Variables
@@ -176,7 +233,7 @@ test "unique value unwrapping"
 test "unique functions"
     x = 1
     y = 2
-    Ptr = (a: Int) -> Type => Size
+    Ptr = (a: Num-Literal) -> Type => Size
     P = unique(Ptr)
     assert P(x) != Size
     assert P(y) != Size
@@ -235,15 +292,6 @@ test "type intersection laws"
 
 test "gensym produces unique Atoms"
     assert gensym() != gensym()
-
-#
-# Literals
-#
-
-test "integer literals"
-    forty-two = 42
-    assert type-of(42) == I64
-    assert type-of(forty-two) == I64
 
 #
 # Syntax sugar
@@ -328,6 +376,7 @@ test "bool operators"
     assert (true or false) == true
     assert (false or false) == false
 
+
 #
 # Records
 #
@@ -348,19 +397,6 @@ test "unit records"
     assert type-of((x=Unit)) == Record(x: Type)
     assert type-of((x=())) == Record(x: Unit)
 
-test "dependent records models a disjoint union"
-    L, R : Type
-    r : R
-    l : L
-    Data = (x: Bool) => case x of true R of false L
-    assert Data(true) == R
-    assert Data(false) == L
-    Either = Record(t: Bool, data: Data(t))
-    either-r : Either = (t=true, data=r)
-    either-l : Either = (t=false, data=l)
-    assert error(either-l : Either = (t=false, data=r))
-    assert error(either-r : Either = (t=true, data=l))
-
 xtest "record constructor"
     R = Record()
     assert R() == constructor-of(R)()
@@ -374,6 +410,19 @@ test "record row shorthand syntax"
 test "row order doesn't affect record type equality"
     assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
     assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
+
+test "dependent record"
+    L, R : Type
+    r : R
+    l : L
+    Data = (x: Bool) => case x of true R of false L
+    assert Data(true) == R
+    assert Data(false) == L
+    Either = Record(t: Bool, data: Data(t))
+    either-r : Either = (t=true, data=r)
+    either-l : Either = (t=false, data=l)
+    assert error(either-l : Either = (t=false, data=r))
+    assert error(either-r : Either = (t=true, data=l))
 
 #
 # Sets
