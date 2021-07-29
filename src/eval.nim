@@ -814,15 +814,12 @@ proc v_cast(ctx: Ctx, val: Val, dst_typ: Val, exp: Exp = term()): Val =
     var src_typ = ctx.dynamic_type(val)
     let dst_typ = if dst_typ.kind == UniqueVal: dst_typ.inner else: dst_typ
     # check if can cast to subtype
-    if ctx.is_subtype(src_typ, dst_typ):
-        let res = val.deep_copy
-        res.typ = Some(dst_typ)
-        return res
-    else:
+    if not ctx.is_subtype(src_typ, dst_typ):
         write_stack_trace()
         raise error(exp, "You can't cast {val.bold} of {src_typ.bold} to type {dst_typ.bold}.\n\n".fmt &
         "Can't upcast, because type {src_typ.bold} is not a subtype of {dst_typ.bold}.\n\n".fmt &
         "Can't downcast, because there is no evidence, that {val.bold} was upcast from type {dst_typ.bold}. {exp.src}".fmt)
+    return val
 
 proc eval_union*(ctx: Ctx, args: seq[Val]): Val =
     if args.len == 0: return UnionType()
@@ -909,8 +906,8 @@ proc eval_assert(ctx: Ctx, arg: Exp) =
         let actual_typ = ctx.infer_type(lhs)
         let expected_typ = ctx.infer_type(rhs)
         let (actual, expected) = (ctx.eval(lhs), ctx.eval(rhs))
-        if actual.typ.is_some and not equal(actual_typ, expected_typ):
-            raise error(exp, "can't compare {lhs.str} of type {actual_typ.str}".fmt &
+        if not ctx.is_subtype(actual_typ, expected_typ):
+            raise error(exp, "can't compare {lhs.str} of type {actual_typ.str} ".fmt &
                 "with {rhs.str} of type {expected_typ.str}. {exp.src}".fmt)
         case op
         of "==":
@@ -1076,9 +1073,6 @@ proc reify*(ctx: Ctx, val: Val): Exp =
         raise ctx.error("Can't reify {val.noun} {val.bold}. {ctx.src}".fmt)
 
 proc dynamic_type*(ctx: Ctx, val: Val): Val =
-    val.typ.if_some(typ):
-        return typ
-
     case val.kind
     of TypeVal, RecTypeVal, FunTypeVal, UnionTypeVal, InterTypeVal:
         Universe(ctx.dynamic_level(val))

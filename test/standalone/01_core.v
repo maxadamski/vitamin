@@ -116,12 +116,12 @@ test "variables with different names are not syntactically equal"
     y : T
     assert x != y
 
-test "variables with different names and incompatible types are not syntactically or definitionally equal"
+test "variables with incompatible types are not comparable"
     A : Type
     B : Type
     x : A
     y : B
-    assert x != y
+    assert error(x == y)
 
 test "definitional equality of variable types"
     A : Type

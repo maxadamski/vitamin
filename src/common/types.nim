@@ -93,8 +93,6 @@ type
         NumVal, StrVal, I8, U8, I64, U64
 
     ValObj* = object
-        typ*: Opt[Val]
-
         case kind*: ValTag
         of I8:
             i8*: int8
