@@ -15,6 +15,10 @@ run)
 	shift
 	nim r $NIMFLAGS $MAIN $@
 ;;
+profile)
+	shift
+	nim r -d:profile --profiler:on --stacktrace:on $NIMFLAGS $MAIN $@
+;;
 test)
 	shift
 	BIN=bin/vita-test
@@ -32,12 +36,11 @@ test)
 ;;
 release)
 	shift
-	mkdir -p bin
+	mkdir -p `dirname $BIN`
 	nim c -o:$BIN -d:release --opt:speed --passC:"-Ofast" $NIMFLAGS $MAIN
 ;;
 *)
-	mkdir -p bin
+	mkdir -p `dirname $BIN`
 	nim c -o:$BIN -d:release --opt:speed --passC:"-Ofast -march=native" $NIMFLAGS $MAIN
 ;;
 esac
-

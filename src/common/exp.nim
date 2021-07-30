@@ -53,6 +53,9 @@ func is_literal*(x: Exp): bool =
 func is_whitespace*(x: Exp): bool =
     x.kind == expAtom and x.tag in {aWs, aNl, aInd, aDed, aCnt, aCom}
 
+func is_comment*(x: Exp): bool =
+    x.kind == expAtom and x.tag == aCom
+
 func is_token*(x: Exp, value: string): bool =
     x.kind == expAtom and x.value == value
 

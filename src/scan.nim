@@ -1,13 +1,13 @@
 import options, tables, strutils
 import common/[exp, error]
 
-const open_comp = {")": "(", "]": "[", "}": "{", "|)": "(|", "|]": "[|", "|}": "{|"}.to_table
-const name_head = {'a'..'z', 'A'..'Z', '_'}
-const name_tail = name_head + {'0'..'9', '-'}
-const numb_head = {'0'..'9'}
-const numb_tail = numb_head + {'a'..'z', 'A'..'Z', '_'}
-const symb_head = {'%','$','&','=','*','+','!','?','^','/','>','<',':','.','~','-'}
-const symb_tail = symb_head + {'@','|'}
+const open_comp* = {")": "(", "]": "[", "}": "{", "|)": "(|", "|]": "[|", "|}": "{|"}.to_table
+const name_head* = {'a'..'z', 'A'..'Z', '_'}
+const name_tail* = name_head + {'0'..'9', '-'}
+const numb_head* = {'0'..'9'}
+const numb_tail* = numb_head + {'a'..'z', 'A'..'Z', '_'}
+const symb_head* = {'%','$','&','=','*','+','!','?','^','/','>','<',':','.','~','-'}
+const symb_tail* = symb_head + {'@','|'}
 
 func tos(c: char): string =
     var s = ""
@@ -89,16 +89,19 @@ proc scan*(text: string, file: Option[string] = none(string), start_line: int = 
             atoms.add(atom(buf, aNum, s.get_range))
         of {'\'', '"', '`'}:
             let tag = if curr == '`': aLit else: aStr
-            buf = ""
+            if tag == aLit:
+                buf = ""
             while not s.eof and s.top_unsafe != curr:
-                if s.top == '\\':
+                if tag == aStr and s.top == '\\':
                     buf.add(s.eat)
                     if s.eof:
                         raise unclosed_string_error(atom(buf, tag, s.get_range))
                 buf.add(s.eat)
             if s.eof:
                 raise unclosed_string_error(atom(buf, tag, s.get_range))
-            discard s.eat
+            let close_tag = s.eat
+            if tag == aStr:
+                buf.add(close_tag)
             atoms.add(atom(buf, tag, s.get_range))
         of {',',';'}:
             atoms.add(atom(buf, aSym, s.get_range))
@@ -132,7 +135,7 @@ proc scan*(text: string, file: Option[string] = none(string), start_line: int = 
                 # is single line comment
                 while not s.eof and s.top != '\n': buf.add(s.eat)
             # TODO: do not discard comments
-            #atoms.add(atom(buf, aCom, s.get_range))
+            atoms.add(atom(buf, aCom, s.get_range))
         of '|':
             if s.top in {')',']','}'}:
                 buf.add(s.eat)

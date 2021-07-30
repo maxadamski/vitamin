@@ -2,7 +2,10 @@ import os, strformat, strutils, sequtils
 import options, tables
 import noise
 
-import scan, parse, eval
+when defined(profile):
+    import nimprof
+
+import scan, parse, eval, format
 import common/[exp, error, types]
 from syntax import parser
 
@@ -90,7 +93,7 @@ proc find_source(name: string, search: seq[string]): Option[string] =
 
 proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), start_line = 1, print = false) =
     try:
-        let tokens = scan(str, file, start_line=start_line).indent()
+        let tokens = scan(str, file, start_line=start_line).filter_it(not it.is_comment).indent()
         if debug == "scan":
             for x in tokens: echo x.str
             quit(0)
@@ -194,7 +197,8 @@ proc repl(ctx: Ctx, silent: bool = false) =
             stdin_history &= exp & "\n"
             eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
 
-proc main =
+
+proc main() =
     let vpath = get_env("VITAPATH")
     if vpath != "": libs = vpath.split(":") & libs
     var prelude = none(string)
@@ -203,19 +207,22 @@ proc main =
     var no_prelude = false
     var force_interactive = false
     var force_batch = false
-    var i = 1
-    while i <= param_count():
-        case param_str(i)
+    var only_format = false
+
+    var arg = 1
+    while arg <= param_count():
+        case param_str(arg)
         of "-h", "--help": print_help()
         of "-V", "--version": print_version()
-        of "-L", "--library": i += 1; libs.add(param_str(i))
-        of "-p", "--prelude": i += 1; prelude = some(param_str(i)); no_prelude = false
+        of "-L", "--library": arg += 1; libs.add(param_str(arg))
+        of "-p", "--prelude": arg += 1; prelude = some(param_str(arg)); no_prelude = false
         of "-P", "--no-prelude": no_prelude = true
         of "-S", "--no-greeting": no_greeting = true
         of "-i", "--interative": force_interactive = true
         of "-I", "--no-interactive": force_batch = true
+        of "--format": only_format = true
         of "--trace": force_trace = true
-        of "-d", "--debug": i += 1; debug = param_str(i)
+        of "-d", "--debug": arg += 1; debug = param_str(arg)
         of "--trace-mode=code":
             code_in_trace = true; expr_in_trace = false
         of "--trace-mode=expr":
@@ -223,14 +230,24 @@ proc main =
         of "--trace-mode=code+expr", "--trace-mode=expr+code":
             code_in_trace = true; expr_in_trace = true
         of "-c", "--command":
-            i += 1; command = some(param_str(i)); i += 1
-            while i <= param_count():
-                command_args.add(param_str(i)); i += 1
-        else: inputs.add(param_str(i))
-        i += 1
+            arg += 1; command = some(param_str(arg)); arg += 1
+            while arg <= param_count():
+                command_args.add(param_str(arg)); arg += 1
+        else: inputs.add(param_str(arg))
+        arg += 1
 
     #echo fmt"DEBUG: library paths = {libs}"
     #echo fmt"DEBUG: input paths   = {inputs}"
+
+    for path in inputs:
+        if not file_exists(path): panic fmt"ERROR: input file {path} doesn't exist!"
+
+    if only_format:
+        for path in inputs:
+            stdout.write format_file(path)
+        return
+
+    libs = libs.filter_it(dir_exists(it))
 
     if not no_prelude:
         var path: string
@@ -244,12 +261,9 @@ proc main =
         if not file_exists(path): panic fmt"ERROR: prelude file {path} doesn't exist!"
         root_ctx.eval_file(path)
 
-    libs = libs.filterIt(dir_exists(it))
-
     for path in inputs:
-        if not file_exists(path): panic fmt"ERROR: input file {path} doesn't exist!"
-        var local = root_ctx.extend()
-        local.eval_file(path)
+        var file_ctx = root_ctx.extend()
+        file_ctx.eval_file(path)
 
     if command.is_some:
         # TODO: pass command_args
