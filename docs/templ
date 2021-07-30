@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+import sys, os, os.path, re
+import subprocess as proc
+
+depth_limit = 100
+
+def find_with_prefix(string, sub, prefix):
+    i = string.find(sub)
+    j = i
+    while j > 0 and string[j-1] in prefix:
+        j -= 1
+    return i, string[j:i]
+
+def expand_template(text, subs):
+    sub_count = 0
+    for k, v in subs.items():
+        i, prefix = find_with_prefix(text, k, ' \t')
+        if i == -1: continue
+        sub = '\n'.join(prefix+l for l in v.split('\n'))
+        text = text.replace(prefix+k, sub)
+        sub_count += 1
+    while True:
+        res = re.search('{{!.*}}', text)
+        if res is None: break
+        a, b, match = (res.start(), res.end(), res.group(0))
+        cmd = match[3:-2]
+        out = str(proc.check_output(cmd, shell=True, universal_newlines=True))
+        text = text[:a] + out + text[b:]
+        sub_count += 1
+    return sub_count, text
+
+if __name__ == '__main__':
+    # template file path
+    path = sys.argv[1]
+    if not os.path.isfile(path):
+        print('not a file:', path, file=sys.stderr)
+        exit(1)
+
+    # read substitutions from command line arguments
+    subs = dict()
+    for arg in sys.argv[2:]:
+        k, v = arg.split("=", 1)
+        subs['{{'+k+'}}'] = v
+
+    # read substitution from environment variables
+    prefix = 'templ_'
+    prefix_len = len(prefix)
+    for k, v in os.environ.items():
+        if k.startswith(prefix):
+            subs['{{'+k[prefix_len:]+'}}'] = v
+
+    with open(path, 'r') as f:
+        text = f.read()
+
+    for _ in range(depth_limit):
+        count, text = expand_template(text, subs)
+        if count == 0: break
+    else:
+        print('expansion depth limit reached!', file=sys.stderr)
+        exit(1)
+
+    print(text, end='') 
+    exit(0)
+

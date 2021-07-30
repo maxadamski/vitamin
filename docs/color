@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+import sys, os, os.path, re
+from subprocess import Popen, PIPE
+import tempfile
+from time import time
+
+if __name__ == '__main__':
+    path = sys.argv[1]
+    if not os.path.isfile(path):
+        print('not a file:', path, file=sys.stderr)
+        exit(1)
+    with open(path, 'r') as f:
+        text = f.read()
+
+    results = list(re.finditer(r'(?<=<code class="vita">)(.+?)(?=</code>)', text, re.S))
+    with open(path, 'w') as f:
+        last_idx = 0
+        for res in results:
+            a, b, code = res.start(), res.end(), res.group(0)
+            with tempfile.NamedTemporaryFile('w') as tmp:
+                code = re.sub('&lt;', '<', code)
+                code = re.sub('&gt;', '>', code)
+                code = re.sub('&amp;', '&', code)
+                code = re.sub('&quot;', '"', code)
+                tmp.write(code)
+                tmp.flush()
+                cmd = Popen(['vita', '--format', tmp.name], stdout=PIPE, stderr=PIPE)
+                out, err = cmd.communicate()
+                if err: print(err.decode('utf-8'))
+                new_code = out.decode('utf-8')
+
+            f.write(text[last_idx:a])
+            f.write(new_code)
+            last_idx = b
+        f.write(text[last_idx:])
+    exit(0)
+

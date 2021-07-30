@@ -18,41 +18,42 @@ Vitamin grants you great power you need it, and doesn't get in your way, when yo
 
 Get to know Vitamin with some example programs.
 
-For a complete description see the [language reference manual](docs/manual.md).
+For a complete description see the [language reference manual](https://maxadamski.com/vitamin/manual.html).
 
 Documentation and more examples are also mirrored on the [Vitamin language website](https://maxadamski.com/vitamin). Code excerpts on the website are easier to read, because they have syntax highligting!
 
 **Simple Fizz Buzz**
 
-```vitamin
+```vita
 fizzbuzz(i: Int) =
 	case
 	of i mod 15 == 0 'FizzBuzz'
 	of i mod  3 == 0 'Fizz'
 	of i mod  5 == 0 'Buzz'
-	of _ to-string(i)
+	of _ Str(i)
 
-for i in irange(1, 100)
+for i in range(100)
 	print(fizzbuzz(i))
 ```
 
 
 **Type-safe sized vectors**
 
-```vitamin
-# Vectors of length `n` and element type `a` are pointers to mutable `a` 
-opaque Vector(n: Size, a: Type) = &mut a
+```vita
+# Vectors of length `n` and element type `a` are pointers to mutable values of type `a`
+unique Vector(n: Size, a: Type) = Record(items: &mut a)
 
 # Parameters `n`, `m` and `a` will be computed and passed implicitly
-concat(x: Vector($n, $a), y: Vector($m, a)) -> Vector(n+m, a) =
-	items = new(mut a, count=n+m)
-	copy(from=x.items, to=items, count=n)
-	copy(from=y.items, to=offset(items, n), count=m)
-	items as Vector(n+m, a)
+concat(x: Vector($n, $a), y: Vector($m, a)) =
+  items = new(mut, a, count=n + m)
+  copy(from=x.items, to=items, count=n)
+  copy(from=y.items, to=offset(items, n), count=m)
+  (items=items) as Vector(n + m, a)
 
-result = concat([1 1 2], [3 5])
-assert type-of(result) == Vector(5, Int)
-assert result == [1 1 2 3 5]
+# Assume these vectors are defined somewhere else
+a : Vector(3, Int)
+b : Vector(2, Int)
+assert type-of(concat(a, b)) == Vector(5, Int)
 ```
 
 ## How to compile

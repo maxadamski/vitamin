@@ -1,224 +1,87 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The Vitamin Programming Language</title>
-  <link rel="shortcut icon" type="image/png" href="favicon.png"/>
+	<meta charset="utf-8">
+	<title>Vitamin Lang</title>
+	<meta name="description" content="Official website of the Vitamin programming language">
+	<meta name="author" content="{{author}}">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="static/style.css">
+	<link rel="icon" href="static/favicon.png">
 </head>
-<style>
-.logo {
-  height: 28px;
-  padding-bottom: 5px;
-}
 
-body {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 8px;
-  display: grid;
-  grid-template: auto auto 1fr auto / minmax(0, 1fr);
-  font-family: Helvetica, sans-serif;
-  min-height: 100vh;
-  font-size: 18px;
-}
-
-hr {
-  width: 100%;
-  border: none;
-  border-top: 1px solid #DBDBDB;
-  margin: 0;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-weight: normal;
-}
-
-p {
-  line-height: 1.618;
-  max-width: 70ch;
-}
-
-header {
-  display: flex;
-  justify-content: space-between;
-  margin: 15px 0;
-}
-
-footer {
-  font-size: 12px;
-  color: gray;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  margin-top: 30px;
-}
-
-#copyright {
-  margin: 20px 0;
-  font-size: 12px;
-}
-
-section {
-  display: grid;
-  grid-template-columns: auto minmax(80px, 400px);
-  grid-gap: 20px;
-  align-items: start;
-}
-
-nav a {
-  font-size: 16px;
-  color: black;
-  text-decoration: none;
-}
-
-a:hover {
-  color: #444;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.header-left, .header-right {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-}
-
-.header-right {
-  justify-self: end;
-  overflow-x: auto;
-}
-
-.header-middle {
-  justify-self: center;
-}
-
-.header-left > a {
-  margin-right: 1.5ch;
-}
-
-.header-right > a {
-  margin-left: 1.5ch;
-}
-
-.mt-0 {margin-top: 0}
-
-pre {
-  border-radius: 3px;
-  border: 1px solid #DBDBDB;
-  background: whitesmoke;
-  color: #222222;
-  font-size: 12px;
-  padding: 10px;
-  overflow-x: auto;
-  word-wrap: normal;
-}
-
-code .k  { color: purple }
-code .kt { color: green }
-code .c  { color: gray }
-code .mi { color: darkorange }
-code .fc { color: blue }
-</style>
 <body>
-  <header>
-    <a class="header-left" href="/">
-      <img class="logo" src="logo.svg" alt="Vitamin logo">
-    </a>
-    <nav class="header-right">
-      <a href="https://github.com/maxadamski/vitamin/tags">Download</a>
-      <a href="https://github.com/maxadamski/vitamin/blob/master/docs/manual.md">Documentation</a>
-      <a href="https://github.com/maxadamski/vitamin/blob/master/docs/tutorial.v">Learn</a>
-      <a href="https://github.com/maxadamski/vitamin">Source</a>
-    </nav>
-  </header>
+<header>
+	<a class="header-left" href="https://maxadamski.com/vitamin/index.html">
+		<img class="logo" src="static/logo.svg" alt="Vitamin logo">
+	</a>
+	<nav class="header-right">
+		<a href="https://github.com/maxadamski/vitamin/tags">Download</a>
+		<a href="https://maxadamski.com/vitamin/manual.html">Documentation</a>
+		<a href="https://maxadamski.com/vitamin/tutorial.html">Learn</a>
+		<a href="https://github.com/maxadamski/vitamin">Source</a>
+	</nav>
+</header>
 
-  <hr>
+<hr>
 
-  <main>
-    <h2>The Vitamin Programming Language</h2>
-    <section>
-    <p class="mt-0">Vitamin is a general-purpose programming language with a rich type system, clear semantics, and great flexibility. Vitamin will give you ultimate power when you need it, and won't get in your way when you don't.</p>
-    <pre class="mt-0"><code>main = () =>
-  for i in 0..100
-    var x := ''
-    if i mod 3 == 0 x += 'Fizz'
-    if i mod 5 == 0 x += 'Buzz'
-    if x == '' x = to-string(i)
-    print(x)</code></pre>
-    </section>
+<main>
 
+<h2>The Vitamin Programming Language</h2>
+<p>Vitamin is a general-purpose programming language with a rich type system, clear semantics, and great flexibility. Vitamin will give you ultimate power when you need it, and won't get in your way when you don't.</p>
+<p><b>NOTE:</b> The language is currently a work-in-progress (pre-alpha), so expect most things not to work!</p>
 
-    <h2>Feature Showcase</h2>
-    <h3>Dependent Types</h3>
-    <pre><code><span class="c"># Vectors of length `n` and element type `a` are pointers to mutable values of type `a`</span>
-Vector <span class="k">=</span> <span class="k">opaque</span> (n: <span class="kt">Size</span>, a: <span class="kt">Type</span>) <span class="k">=></span> <span class="kt">Record</span>(items: <span class="kt">&mut</span> a)
+<h2>Feature Showcase</h2>
 
-<span class="c"># Parameters `n`, `m` and `a` will be computed and passed implicitly</span>
-concat <span class="k">=</span> (x: <span class="kt">Vector</span>(n, a), y: <span class="kt">Vector</span>(m, a)) <span class="k">=></span>
-  items <span class="k">=</span> <span class="fc">new</span>(a, count<span class="k">=</span>n <span class="k">+</span> m)
-  <span class="fc">copy</span>(from<span class="k">=</span>x.items, to<span class="k">=</span>items, count<span class="k">=</span>n)
-  <span class="fc">copy</span>(from<span class="k">=</span>y.items, to<span class="k">=</span><span class="fc">offset</span>(items, n), count<span class="k">=</span>m)
-  (items<span class="k">=</span>items) <span class="k">as</span> <span class="kt">Vector</span>(n <span class="k">+</span> m, a) 
+<h3>Dependent Types</h3>
+<pre><code class="vita"><span class="com"># Vectors of length `n` and element type `a` are pointers to mutable values of type `a`</span>
+<span class="sp">unique</span> <span class="ty">Vector</span>(n<span class="op">:</span> <span class="ty">Size</span>, a<span class="op">:</span> <span class="ty">Type</span>) <span class="op">=</span> <span class="ty">Record</span>(items<span class="op">:</span> <span class="op">&</span><span class="op">mut</span> a)
 
-result <span class="k">=</span> <span class="fc">concat</span>([<span class="mi">1 1 2</span>], [<span class="mi">3 5</span>])
-<span class="k">assert</span> result <span class="k">is</span> <span class="kt">Vector</span>(<span class="mi">5</span>, <span class="kt">Int</span>)
-<span class="k">assert</span> result <span class="k">==</span> [<span class="mi">1 1 2 3 5</span>]</code></pre>
+<span class="com"># Parameters `n`, `m` and `a` will be computed and passed implicitly</span>
+concat(x<span class="op">:</span> <span class="ty">Vector</span>(<span class="sp">$</span>n, <span class="sp">$</span>a), y<span class="op">:</span> <span class="ty">Vector</span>(<span class="sp">$</span>m, a)) <span class="op">-></span> <span class="ty">Vector</span>(n <span class="op">+</span> m, a) <span class="op">=</span>
+  items <span class="op">=</span> new(<span class="op">mut</span>, a, count<span class="op">=</span>n <span class="op">+</span> m)
+  copy(from<span class="op">=</span>x<span class="op">.</span>items, to<span class="op">=</span>items, count<span class="op">=</span>n)
+  copy(from<span class="op">=</span>y<span class="op">.</span>items, to<span class="op">=</span>offset(items, n), count<span class="op">=</span>m)
+  (items<span class="op">=</span>items) <span class="kw">as</span> <span class="ty">Vector</span>(n <span class="op">+</span> m, a)
 
+<span class="com"># Assume these vectors are defined somewhere else</span>
+a <span class="op">:</span> <span class="ty">Vector</span>(<span class="num">3</span>, <span class="ty">Int</span>)
+b <span class="op">:</span> <span class="ty">Vector</span>(<span class="num">2</span>, <span class="ty">Int</span>)
+<span class="kw">assert</span> <span class="bu">type-of</span>(concat(a, b)) <span class="op">==</span> <span class="ty">Vector</span>(<span class="num">5</span>, <span class="ty">Int</span>)
+</code></pre>
 
-    <h3>Metaprogramming</h3>
-
-    <pre><code>my-assert = macro (expr: Term) =>
-  gensym op, x, y
-  quote
-    case $expr
-    of Term($op, $x, $y)
-      if not eval($expr)
-        case $op
-        of '==' print('Assertion failed: expected \($x) to equal \(eval($y)), but it was equal to \(eval($x))')
-        of 'is  print('Assertion failed: expected \($x) to have type \(eval($y)), but it had type \(type-of(eval($x)))')
-        of _    print('Unsupported assertion relation \($op)')
-    of _
-      print('Error: unsupported assertion \($expr)')
+<h3>Metaprogramming</h3>
+<pre><code class="vita">dump(expr<span class="op">:</span> <span class="sp">Quoted</span>(<span class="ty">Expr</span>)) <span class="op">-></span> <span class="sp">Expand</span>(<span class="ty">Expr</span>) <span class="op">=</span>
+	<span class="kw">quote</span> print(<span class="kw">quote</span> <span class="sp">$</span>expr, <span class="str">' = '</span>, <span class="sp">$</span>expr)
     
-<span class="c"># Use macros just like regular functions</span>
-my-assert(2 == 2)</code></pre>
+dump(<span class="num">1</span> <span class="op">+</span> <span class="num">2</span>) <span class="com"># will print `1 + 2 = 3`</span></code></pre>
 
-    <h3>Custom Syntax</h3>
+<h3>Custom Syntax</h3>
+<pre><code class="vita">cmp(class<span class="op">:</span> <span class="ty">Comparable</span>(a) <span class="op">=</span> <span class="sp">_</span>, x y<span class="op">:</span> a) <span class="op">-></span> <span class="ty">Int</span> <span class="op">=</span>
+  <span class="kw">if</span> x <span class="op">&lt;</span> y <span class="kw">return</span> <span class="op">+</span><span class="num">1</span>
+  <span class="kw">if</span> x <span class="op">></span> y <span class="kw">return</span> <span class="op">-</span><span class="num">1</span>
+  <span class="kw">return</span> <span class="num">0</span>
 
-    <pre><code>three-way-compare = (class: Comparable(a) = _, x y: a) -> Int =>
-  if x &lt; y return +1
-  if x > y return -1
-  return 0
-
-three-way-compare-syntax = Syntax(
-  <span class="c"># Grammar of this syntax rule</span>
-  grammar  = 'x "&lt;=>" y'
-  <span class="c"># Each syntax rule belongs to a precedence group</span>
-  group    = 'three-way-compare'
-  <span class="c"># Specify priority relations to existing syntax precedence groups</span>
-  priority = 'three-way-compare > definition'
-  <span class="c"># argument names of this function must match the names in the grammar string</span>
-  function = three-way-compare
+cmp-syntax <span class="op">=</span> <span class="ty">Syntax</span>(
+  <span class="com"># Grammar of this syntax rule</span>
+  grammar  <span class="op">=</span> <span class="str">'x "&lt;=>" y'</span>
+  <span class="com"># Each syntax rule belongs to a precedence group</span>
+  group    <span class="op">=</span> <span class="str">'cmp'</span>
+  <span class="com"># Specify priority relations to existing syntax precedence groups</span>
+  priority <span class="op">=</span> <span class="str">'cmp > definition'</span>
+  <span class="com"># argument names of this function must match the names in the grammar string</span>
+  function <span class="op">=</span> cmp
 )
 
-<span class="c"># To use custom syntax you must call the `use-syntax` macro</span>
-use-syntax three-way-compare-syntax
+<span class="com"># To use custom syntax you must call the `use-syntax` macro</span>
+<span class="kw">use-syntax</span> cmp-syntax
 
-a = 0 <=> 1
-b = 1 <=> 1
-assert a == 1 and b == 0</code></pre>
+a <span class="op">=</span> <span class="num">0</span> <span class="op">&lt;=></span> <span class="num">1</span>
+b <span class="op">=</span> <span class="num">1</span> <span class="op">&lt;=></span> <span class="num">1</span>
+<span class="kw">assert</span> a <span class="op">==</span> <span class="num">1</span> <span class="kw">and</span> b <span class="op">==</span> <span class="num">0</span></code></pre>
+</main>
 
-  </main>
-
-  <footer>
-    <hr>
-    <small id="copyright">&copy; Copyright 2018-2021 Max Adamski</small>
-  </footer>
+<footer>
+</footer>
 </body>
-
-<script>
-document.getElementById('copyright').innerHTML = '&copy; Copyright 2018-' + new Date().getFullYear().toString() + ' Max Adamski';
-</script>
 </html>

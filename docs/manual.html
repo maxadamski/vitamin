@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Vitamin Manual</title>
+	<meta name="description" content="The Vitamin Programming Language User Manual">
+	<meta name="author" content="{{author}}">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="static/style.css">
+	<link rel="stylesheet" href="static/doc-style.css">
+	<link rel="icon" href="static/favicon.png">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</head>
+
+<body>
+<header>
+	<a class="header-left" href="https://maxadamski.com/vitamin/index.html">
+		<img class="logo" src="static/logo.svg" alt="Vitamin logo">
+	</a>
+	<nav class="header-right">
+		<a href="https://github.com/maxadamski/vitamin/tags">Download</a>
+		<a href="https://maxadamski.com/vitamin/manual.html">Documentation</a>
+		<a href="https://maxadamski.com/vitamin/tutorial.html">Learn</a>
+		<a href="https://github.com/maxadamski/vitamin">Source</a>
+	</nav>
+</header>
+
+<hr>
+
+<main>
+	<div class="title">The Vitamin Programming Language User Manual</div>
+	<div class="contents">
+<div class="TOC">
+
+<ul>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#lexicalstructure">Lexical structure</a>
+<ul>
+<li><a href="#atoms">Atoms</a>
+<ul>
+</ul>
+</li>
+<li><a href="#indentation">Indentation</a></li>
+<li><a href="#groups">Groups</a></li>
+</ul>
+</li>
+<li><a href="#variables">Variables</a>
+<ul>
+<li><a href="#definitions">Definitions</a></li>
+<li><a href="#declarations">Declarations</a></li>
+<li><a href="#scope">Scope</a></li>
+</ul>
+</li>
+<li><a href="#valuesandtypes">Values and Types</a>
+<ul>
+<li><a href="#universes">Universes</a></li>
+<li><a href="#functions">Functions</a></li>
+<li><a href="#records">Records</a></li>
+<li><a href="#tuples">Tuples</a></li>
+<li><a href="#variants">Variants</a></li>
+<li><a href="#unions">Unions</a></li>
+<li><a href="#intersections">Intersections</a></li>
+<li><a href="#numberliterals">Number Literals</a>
+<ul>
+</ul>
+</li>
+<li><a href="#stringliterals">String Literals</a>
+<ul>
+</ul>
+</li>
+<li><a href="#pointers">Pointers</a>
+<ul>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#advancedtopics">Advanced Topics</a>
+<ul>
+<li><a href="#overloadresolution">Overload Resolution</a></li>
+<li><a href="#implicitconversions">Implicit Conversions</a></li>
+</ul>
+</li>
+<li><a href="#expressions">Expressions</a>
+<ul>
+<li><a href="#"><code>=</code></a>
+<ul>
+</ul>
+</li>
+<li><a href="#"><code>=&gt;</code></a></li>
+<li><a href="#case"><code>case</code></a></li>
+<li><a href="#if"><code>if</code></a></li>
+<li><a href="#while"><code>while</code></a></li>
+<li><a href="#for"><code>for</code></a></li>
+<li><a href="#.memberaccess"><code>.</code> (member access)</a></li>
+<li><a href="#macros">Macros</a></li>
+<li><a href="#shortlambda"><code>$</code> (short lambda)</a></li>
+<li><a href="#functionparameter"><code>$</code> (function parameter)</a></li>
+<li><a href="#quote"><code>quote</code></a></li>
+<li><a href="#unquote"><code>$</code> (unquote)</a></li>
+<li><a href="#unquotesplicing"><code>$$</code> (unquote splicing)</a></li>
+<li><a href="#defer"><code>defer</code></a></li>
+<li><a href="#use"><code>use</code></a></li>
+<li><a href="#import"><code>import</code></a></li>
+<li><a href="#with"><code>with</code></a></li>
+<li><a href="#undefined"><code>undefined</code></a></li>
+<li><a href="#unreachable"><code>unreachable</code></a></li>
+</ul>
+</li>
+<li><a href="#lessismore">Less is more</a></li>
+<li><a href="#credits">Credits</a></li>
+</ul>
+</div>
+
+<article>
+
+<h1 id="overview">Overview</h1>
+
+<p>In Vitamin types are values.</p>
+
+<p>The type system is based on the Martin-Löf dependent type theory.</p>
+
+<h1 id="lexicalstructure">Lexical structure</h1>
+
+<p>A Vitamin file is a series of atoms.</p>
+
+<h2 id="atoms">Atoms</h2>
+
+<h3 id="name">Name</h3>
+
+<p>A name is an identifier composed of one or more alphanumeric characters, where the first character is a letter or underscore. Next characters can also be digits or dashes.</p>
+
+<p><strong>Warning</strong></p>
+
+<p>Because dashes are valid name characters, the following sequence is scanned as one identifier.</p>
+
+<pre><code class="vita">x-y
+</code></pre>
+
+<p>To use the common subtraction operator, you have to add whitespace between the <code>-</code> character.</p>
+
+<pre><code class="vita">x <span class="op">-</span> y
+</code></pre>
+
+<h3 id="symbols">Symbols</h3>
+
+<p>A symbol is an identifier composed of one or more non-alphanumeric characters.</p>
+
+<p><strong>Exception</strong></p>
+
+<p>If a dash <code>-</code> is preceded by symbol characters and is immediately followed by a digit, it is not added to the previous symbol, but created as a separate atom. As a consequence, you do not need to add whitespace before dashes which follow symbols, but precede number literals.</p>
+
+<pre><code class="vita">arr[<span class="num">5</span><span class="op">:</span><span class="op">-</span><span class="num">2</span>] <span class="com"># tokenized as arr [ 5 : - 2 ]</span>
+</code></pre>
+
+<h3 id="separators">Separators</h3>
+
+<p>A separator is a particular sequence of characters, which are greedily combined into atoms. Example separators include commas <code>,</code>, semicolons <code>;</code> and many kinds of parentheses <code>(</code> and <code>)</code>, <code>[</code> and <code>]</code>, <code>{</code> and <code>}</code>. If a bar <code>|</code> follows an opening brace, or precedes a closing brace, it is added to the atom. This results in the following two-character separators: <code>(|</code> and <code>|)</code>, <code>[|</code> and <code>|]</code>, <code>{|</code> and <code>|}</code>.</p>
+
+<h2 id="indentation">Indentation</h2>
+
+<p>Vitamin keeps track of the indentation level.</p>
+
+<p>If the first atom on a new line is preceded by some number of tabs and spaces, a special atom is added to the token list.</p>
+
+<ul>
+<li>If the sequence of tabs and spaces is identical to the previous line a <code>$CNT</code> atom is emitted.</li>
+<li>If the prefix of the sequence fully matches the sequence at top of the indentation stack, the new sequence is pushed onto the stack and an <code>$IND</code> atom is emitted.</li>
+<li>If the prefix of the sequence fully matches a sequence on the stack, then values are popped from the stack until this sequence is at the top. For each popped value a <code>$DED</code> atom is emitted.</li>
+<li>Otherwise the indentation is inconsistent at this line and an error is raised.</li>
+</ul>
+
+<h2 id="groups">Groups</h2>
+
+<p>Characters between opening and closing parentheses form a group. A group is also formed between the <code>$IND</code> and <code>$DED</code> atoms.</p>
+
+<p>Characters inside a group are lexically analyzed and parsed on-demand, so a syntax macro can receive the raw character stream, instead of the token or expression stream, if you desire. This bypasses the Vitamin lexer and parser, so you can perform completely custom analysis.</p>
+
+<h1 id="variables">Variables</h1>
+
+<h2 id="definitions">Definitions</h2>
+
+<p>Here is how you define a variable <code>x</code> of type <code>A</code> with expression <code>e</code>.</p>
+
+<pre><code class="vita">x <span class="op">:</span> <span class="ty">A</span> <span class="op">=</span> e
+</code></pre>
+
+<p>The type may be omitted.</p>
+
+<pre><code class="vita">x <span class="op">=</span> e
+</code></pre>
+
+<p>Variables cannot be redefined.</p>
+
+<h2 id="declarations">Declarations</h2>
+
+<p>You can declare a type of a variable, before defining it. Variables cannot be used before definition.</p>
+
+<pre><code class="vita">x <span class="op">:</span> <span class="ty">A</span>
+</code></pre>
+
+<p>When defining an already declared variable, the type must exactly match the type at declaration.</p>
+
+<p><em>Example</em></p>
+
+<p>Let&#8217;s declare that there exists an external procedure <code>write</code>. To call it, we need to provide information about it&#8217;s type. In the future this will be automatically synthesized from <code>.h</code> files.</p>
+
+<pre><code class="vita">write <span class="op">:</span> (handle<span class="op">:</span> <span class="ty">I32</span>, buffer<span class="op">:</span> <span class="op">&</span><span class="ty">U8</span>, length<span class="op">:</span> <span class="ty">Size</span>) <span class="op">-></span> <span class="ty">Size</span>
+</code></pre>
+
+<h2 id="scope">Scope</h2>
+
+<p>Names of variables may be reused in an inner scope. In this situation, the variable in the outer scope is said to be shadowed and cannot be accessed.</p>
+
+<pre><code class="vita">x <span class="op">=</span> <span class="num">2</span>
+<span class="kw">if</span> condition
+	x <span class="op">=</span> <span class="num">4</span>
+	<span class="kw">assert</span> x <span class="op">==</span> <span class="num">4</span>
+<span class="kw">assert</span> x <span class="op">==</span> <span class="num">2</span>
+</code></pre>
+
+<h1 id="valuesandtypes">Values and Types</h1>
+
+<h2 id="universes">Universes</h2>
+
+<p>The type of <code>Universe(n)</code> is <code>Universe(n + 1)</code>, where <code>n &gt;= 0 and n : Natural</code>.</p>
+
+<p>Type <code>Universe(n)</code> is a subtype of <code>Universe(n + 1)</code>.</p>
+
+<p>Also, for convenience <code>Type = Universe(0)</code>.</p>
+
+<h2 id="functions">Functions</h2>
+
+<p>Function types are types of lambda expressions.</p>
+
+<p>A function has two parameter lists: positional and keyword. Either or both parameter list may be absent. If there is only the keyword parameter list, it must begin with a semicolon.</p>
+
+<p>In contrast to many functional languages, the whole parameter list is part of the function type, and not merely syntactic sugar for curried functions.</p>
+
+<p>The general form of a function type is:</p>
+
+<pre><code class="vita">(x1<span class="op">:</span> <span class="ty">X1</span>, <span class="op">...</span>, <span class="ty">Xn</span>; y1<span class="op">:</span> <span class="ty">Y1</span>, <span class="op">...</span>, yn<span class="op">:</span> <span class="ty">Yn</span>) <span class="op">-></span> <span class="ty">Z</span>
+</code></pre>
+
+<p>Where <span class="math">\((x_i, X_i)\)</span> and <span class="math">\((y_i, Y_i)\)</span> are the i-th positional and keyword parameter-type pairs name, and <span class="math">\(Z\)</span> is the function return type. <span class="math">\(X_i\)</span> and <span class="math">\(Y_i\)</span> are expressions, which evaluate to types and may depend on the value of the previous parameters.</p>
+
+<p>A default value may be provided for each parameter.</p>
+
+<pre><code class="vita">(x<span class="op">:</span> <span class="ty">A</span> <span class="op">=</span> a) <span class="op">-></span> <span class="op">...</span>
+</code></pre>
+
+<p>In which case, the type may be inferred.</p>
+
+<pre><code class="vita">(x <span class="op">=</span> a) <span class="op">-></span> <span class="op">...</span>
+</code></pre>
+
+<p>If no default values are given, there is a shorthand for subsequent values of the same type.</p>
+
+<pre><code class="vita">(x<span class="op">:</span> <span class="ty">Float</span>, y z<span class="op">:</span> <span class="ty">Int</span>) <span class="op">-></span> <span class="op">...</span> <span class="op">==</span> (x<span class="op">:</span> <span class="ty">Float</span>, y<span class="op">:</span> <span class="ty">Int</span>, z<span class="op">:</span> <span class="ty">Int</span>) <span class="op">-></span> <span class="op">...</span>
+</code></pre>
+
+<p>The type may also be inferred if another parameter depends on the value.</p>
+
+<pre><code class="vita">(<span class="ty">A</span><span class="op">:</span> <span class="sp">_</span>, x<span class="op">:</span> <span class="ty">A</span>) <span class="op">-></span> <span class="op">...</span> <span class="op">==</span> (<span class="ty">A</span><span class="op">:</span> <span class="ty">Type</span>, x<span class="op">:</span> <span class="ty">A</span>) <span class="op">-></span> <span class="op">...</span>
+</code></pre>
+
+<p>A parameter may even be omitted.</p>
+
+<pre><code class="vita">(x<span class="op">:</span> <span class="sp">$</span><span class="ty">A</span>, y<span class="op">:</span> <span class="sp">$</span><span class="ty">B</span>) <span class="op">-></span> <span class="op">...</span> <span class="op">==</span> (<span class="ty">A</span><span class="op">:</span> <span class="ty">Type</span>, <span class="ty">B</span><span class="op">:</span> <span class="ty">Type</span>, x<span class="op">:</span> <span class="ty">A</span>, y<span class="op">:</span> <span class="ty">B</span>) <span class="op">-></span> <span class="op">...</span>
+</code></pre>
+
+<p>Function with an empty parameter list.</p>
+
+<pre><code class="vita">f <span class="op">:</span> () <span class="op">-></span> <span class="ty">A</span>
+x <span class="op">=</span> f() <span class="com"># called (x : A)</span>
+y <span class="op">=</span> f   <span class="com"># not called (f : () -> A)</span>
+</code></pre>
+
+<p>An implicit parameter is a parameter with a default value <code>_</code>. If not passed, it will be derived or if it fails, the scope will be searched bottom-up for a value of a compatible type (must be marked by <code>@implicit</code> and be unambiguous).</p>
+
+<pre><code class="vita"><span class="ty">Repr</span> <span class="op">=</span> (<span class="ty">A</span><span class="op">:</span> <span class="ty">Type</span>) <span class="op">=></span> <span class="ty">Record</span>(repr<span class="op">:</span> (x<span class="op">:</span> <span class="ty">A</span>) <span class="op">-></span> <span class="ty">Str</span>)
+<span class="com"># evidence that I64 can be transformed to Str</span>
+repr-I64 <span class="op">:</span> <span class="ty">Repr</span>(<span class="ty">I64</span>)(repr<span class="op">=...</span>)
+<span class="com"># evidence that Foo can be transformed to Str</span>
+repr-Foo <span class="op">:</span> <span class="ty">Repr</span>(<span class="ty">Foo</span>) <span class="op">=</span> (repr<span class="op">=...</span>)
+<span class="com"># generic function, which searches for evidence of Repr(A) for a given A</span>
+repr <span class="op">=</span> (<span class="ty">A</span><span class="op">:</span> <span class="ty">Type</span> <span class="op">=</span> <span class="sp">_</span>, ev<span class="op">:</span> <span class="ty">Repr</span>(<span class="ty">A</span>) <span class="op">=</span> <span class="sp">_</span>, x<span class="op">:</span> <span class="ty">A</span>) <span class="op">=></span> ev<span class="op">.</span>repr(x) 
+<span class="com"># shorter</span>
+repr <span class="op">=</span> (<span class="op">?</span><span class="ty">A</span><span class="op">:</span> <span class="ty">Type</span>, <span class="op">?</span>ev<span class="op">:</span> <span class="ty">Repr</span>(<span class="ty">A</span>), x<span class="op">:</span> <span class="ty">A</span>) <span class="op">=></span> ev<span class="op">.</span>repr(x)
+<span class="com"># even shorter</span>
+repr <span class="op">=</span> (<span class="op">?</span><span class="ty">A</span>, <span class="op">?</span>ev<span class="op">:</span> <span class="ty">Repr</span>(<span class="ty">A</span>), x<span class="op">:</span> <span class="ty">A</span>) <span class="op">=></span> ev<span class="op">.</span>repr(x)
+<span class="com"># the shortest!</span>
+repr <span class="op">=</span> (<span class="op">?</span>ev<span class="op">:</span> <span class="ty">Repr</span>(<span class="ty">A</span>), x<span class="op">:</span> <span class="ty">A</span>) <span class="op">=></span> ev<span class="op">.</span>repr(x)
+</code></pre>
+
+<p><strong>TODO:</strong> Make a macro for automatic synthesis of protocols.</p>
+
+<p>Missing parameters, which are depended upon, are added automatically in order of appearance.</p>
+
+<pre><code class="vita">show <span class="op">:</span> (<span class="op">?</span>ev<span class="op">:</span> <span class="ty">Show</span>(<span class="ty">A</span>)) <span class="op">-></span> <span class="ty">Str</span>
+</code></pre>
+
+<p>The last parameter of the positional parameter list may be variadic.</p>
+
+<pre><code class="vita">print <span class="op">:</span> (strings<span class="op">:</span> <span class="op">..</span><span class="ty">Str</span>; sep <span class="op">=</span> <span class="str">' '</span>, end <span class="op">=</span> <span class="str">'\n'</span>)
+print(<span class="str">'hello'</span>, <span class="str">'world'</span>, sep<span class="op">=</span><span class="str">', '</span>, end<span class="op">=</span><span class="str">'!\n'</span>) <span class="com"># prints 'hello, world!'</span>
+</code></pre>
+
+<p><em>Rules for the function parameter lists:</em></p>
+
+<ul>
+<li>positional and keyword parameter lists must be separated by a semicolon at defition</li>
+<li>parameter names must be unique</li>
+<li>keyword parameters must be passed with a keyword</li>
+<li>positional parameters may be passed with a keyword</li>
+<li>parameters passed with a keyword may be passed in any order</li>
+<li>positional parameters not passed with a keyword must be passed in order</li>
+<li>parameters may specify a default value</li>
+<li>parameters with a default value may not be passed</li>
+<li>the <code>@derive</code> default value derives the argument based on compile-time information</li>
+<li>the <code>@search</code> default value searches for compatible values in the implicit scope</li>
+</ul>
+
+<h2 id="records">Records</h2>
+
+<p>The record type represents an unordered collection of <em>rows</em> - labels paired with dependent types. It is extensible, because unspecified additional rows may be given as a polymorphic parameter.</p>
+
+<p>The general form of the record type, or rather an extensible dependent product type is:</p>
+
+<pre><code class="vita"><span class="ty">Record</span>(x1<span class="op">:</span> <span class="ty">A1</span>, <span class="op">...</span>, xn<span class="op">:</span> <span class="ty">An</span>, <span class="ty">R</span>)
+</code></pre>
+
+<p>Where <span class="math">\(x_i\)</span> is a row label and <span class="math">\(A_i\)</span> is the row type, which may be an expression using the value of any other row, provided the dependencies form a DAG. We say that a record type is extensible if may contain other rows <span class="math">\(R\)</span>.</p>
+
+<p>The type of a record type is:</p>
+
+<pre><code class="vita"><span class="ty">Universe</span>(max(<span class="bu">level-of</span>(<span class="ty">A1</span>), <span class="op">...</span>, <span class="bu">level-of</span>(<span class="ty">An</span>), <span class="bu">level-of</span>(<span class="ty">R</span>)))
+</code></pre>
+
+<p>If a record is extensible, but the extra rows are discarded, the extra rows don&#8217;t need to be named.</p>
+
+<pre><code class="vita">discard-rows <span class="op">:</span> <span class="ty">Record</span>(x y<span class="op">:</span> <span class="ty">F64</span>, <span class="op">...</span>) <span class="op">-></span> record(x y <span class="op">:</span> <span class="ty">F64</span>)
+</code></pre>
+
+<p>Otherwise, extra rows may be used polymorphically.</p>
+
+<pre><code class="vita">preserve-rows <span class="op">:</span> <span class="ty">Record</span>(x y<span class="op">:</span> <span class="ty">F64</span>, <span class="ty">R</span>) <span class="op">-></span> <span class="ty">Record</span>(x y <span class="op">:</span> <span class="ty">F64</span>; <span class="ty">R</span>)
+</code></pre>
+
+<p>A default value may be provided for each field.</p>
+
+<pre><code class="vita"><span class="ty">Record</span>(x<span class="op">:</span> <span class="ty">A</span> <span class="op">=</span> a)
+</code></pre>
+
+<p>In which case, the type may be inferred.</p>
+
+<pre><code class="vita"><span class="kw">assert</span> <span class="ty">Record</span>(x <span class="op">=</span> a) <span class="op">==</span> <span class="ty">Record</span>(x<span class="op">:</span> <span class="bu">type-of</span>(a) <span class="op">=</span> a)
+</code></pre>
+
+<p>If no default values are given, there you can use a shorthand for subsequent values of the same type.</p>
+
+<pre><code class="vita"><span class="kw">assert</span> <span class="ty">Record</span>(x<span class="op">:</span> <span class="ty">Float</span>, y z<span class="op">:</span> <span class="ty">Int</span>) <span class="op">==</span> <span class="ty">Record</span>(x<span class="op">:</span> <span class="ty">Float</span>, y<span class="op">:</span> <span class="ty">Int</span>, z<span class="op">:</span> <span class="ty">Int</span>)
+</code></pre>
+
+<p>To construct a value of a record type use round parentheses.</p>
+
+<pre><code class="vita">x <span class="op">=</span> (name<span class="op">=</span><span class="str">'John Smith'</span>, age<span class="op">=</span><span class="num">35</span>)
+<span class="kw">assert</span> <span class="bu">type-of</span>(x) <span class="op">==</span> <span class="ty">Record</span>(name<span class="op">:</span> <span class="ty">Str</span>, age<span class="op">:</span> <span class="ty">I64</span>)
+</code></pre>
+
+<p>To make use of default values, the record must be constructed <em>as if</em> it was a function call.</p>
+
+<pre><code class="vita"><span class="ty">Default-Struct</span> <span class="op">=</span> <span class="ty">Record</span>(length <span class="op">=</span> <span class="num">0</span>, color <span class="op">=</span> <span class="str">'blue'</span>)
+x <span class="op">=</span> <span class="ty">Default-Struct</span>()
+<span class="kw">assert</span> x<span class="op">.</span>length <span class="op">==</span> <span class="num">0</span>
+<span class="kw">assert</span> x<span class="op">.</span>color <span class="op">==</span> <span class="str">'blue'</span>
+</code></pre>
+
+<p>If a record is a superset of another record, use the <code>use</code> operator to &#8220;inherit&#8221; all the fields.</p>
+
+<pre><code class="vita"><span class="ty">Point-2D</span> <span class="op">=</span> <span class="ty">Record</span>(x<span class="op">:</span> <span class="ty">Float</span>, y<span class="op">:</span> <span class="ty">Float</span>)
+<span class="ty">Point-3D</span> <span class="op">=</span> <span class="ty">Record</span>(<span class="kw">use</span> <span class="ty">Point-2D</span>, z<span class="op">:</span> <span class="ty">Float</span>)
+<span class="kw">assert</span> <span class="ty">Point-3D</span> <span class="op">==</span> <span class="ty">Record</span>(x<span class="op">:</span> <span class="ty">Float</span>, y<span class="op">:</span> <span class="ty">Float</span>, z<span class="op">:</span> <span class="ty">Float</span>)
+</code></pre>
+
+<h2 id="tuples">Tuples</h2>
+
+<p>The tuple type represents an ordered sequence of non-dependent types:</p>
+
+<pre><code class="vita"><span class="ty">Tuple</span>(<span class="ty">A1</span>, <span class="op">...</span>, <span class="ty">An</span>)
+</code></pre>
+
+<p>The type of the tuple type is:</p>
+
+<pre><code class="vita"><span class="ty">Universe</span>(max(<span class="bu">level-of</span>(<span class="ty">A1</span>), <span class="op">...</span>, <span class="bu">level-of</span>(<span class="ty">An</span>)))
+</code></pre>
+
+<p><strong>TODO</strong> Should I make tuples extensible?</p>
+
+<h2 id="variants">Variants</h2>
+
+<p>The enum type represents a dependent generalized abstract data type (GADT). This is a type which allows you to specify all of its possible values.</p>
+
+<p>It&#8217;s general form is:</p>
+
+<pre><code class="vita"><span class="ty">Variant</span>(x1<span class="op">:</span> <span class="ty">A1</span>, <span class="op">...</span>, xn<span class="op">:</span> <span class="ty">An</span>)
+</code></pre>
+
+<p>Where <span class="math">\(x_i\)</span> is the constructor of the i-th alternative, and <span class="math">\(A_i\)</span> is the type of the value.</p>
+
+<p>The constructor may be a value or a function.</p>
+
+<pre><code class="vita"><span class="ty">Bool</span> <span class="op">=</span> <span class="ty">Variant</span>(<span class="co">true</span> <span class="op">:</span> <span class="ty">Bool</span>, <span class="co">false</span> <span class="op">:</span> <span class="ty">Bool</span>)
+
+<span class="ty">Maybe</span> <span class="op">=</span> (<span class="ty">A</span> <span class="op">:</span> <span class="ty">Type</span>) <span class="op">=></span> <span class="ty">Variant</span>(
+	some <span class="op">:</span> (value<span class="op">:</span> <span class="ty">A</span>) <span class="op">-></span> <span class="ty">Maybe</span>(<span class="ty">A</span>)
+	<span class="co">none</span> <span class="op">:</span> <span class="ty">Maybe</span>(<span class="ty">A</span>)
+)
+</code></pre>
+
+<p>If the type of the constructor is omitted, the type of it&#8217;s value is the type itself.</p>
+
+<pre><code class="vita"><span class="ty">Bool</span> <span class="op">=</span> <span class="ty">Variant</span>(<span class="co">true</span>, <span class="co">false</span>)
+<span class="kw">assert</span> <span class="bu">type-of</span>(<span class="ty">Bool</span><span class="op">.</span><span class="co">true</span>) <span class="op">==</span> <span class="ty">Bool</span>
+
+<span class="ty">Maybe</span> <span class="op">=</span> (<span class="ty">A</span> <span class="op">:</span> <span class="ty">Type</span>) <span class="op">=></span> <span class="ty">Variant</span>(some <span class="op">:</span> (value <span class="op">:</span> <span class="ty">A</span>), <span class="co">none</span>)
+<span class="kw">assert</span> <span class="bu">type-of</span>(<span class="ty">Maybe</span><span class="op">.</span>some(<span class="co">true</span>)) <span class="op">==</span> <span class="ty">Maybe</span>(<span class="ty">Bool</span>)
+</code></pre>
+
+<p><strong>TODO</strong> should I make enums extensible?</p>
+
+<h2 id="unions">Unions</h2>
+
+<p>The union represents a type whose values may be of any of the alternative non-dependent types.</p>
+
+<pre><code class="vita"><span class="ty">A1</span> | <span class="op">...</span> | <span class="ty">An</span>
+</code></pre>
+
+<p>The type of a union type is:</p>
+
+<pre><code class="vita"><span class="ty">Universe</span>(max(<span class="bu">level-of</span>(<span class="ty">A1</span>), <span class="op">...</span>, <span class="bu">level-of</span>(<span class="ty">An</span>)))
+</code></pre>
+
+<p>The union of no types is <code>|</code>, and is used to define <code>Never</code>, a type representing an impossible value. Such a value is useful to represent an infinite loop or a function that never returns (for example <code>Basic.exit</code>), since they will <em>never</em> produce a value. Some languages call this type <code>noreturn</code> or a bottom type.</p>
+
+<p>The following laws apply for unions.</p>
+
+<pre><code class="vita"><span class="ty">A</span>|<span class="ty">B</span>     <span class="op">==</span> <span class="ty">B</span>|<span class="ty">A</span>      <span class="com"># commutativity</span>
+<span class="ty">A</span>|(<span class="ty">B</span>|<span class="ty">C</span>) <span class="op">==</span> (<span class="ty">A</span>|<span class="ty">B</span>)|<span class="ty">C</span>  <span class="com"># associativity</span>
+
+is-subtype(<span class="ty">A</span>, <span class="ty">A</span>|<span class="ty">B</span>)
+<span class="kw">if</span> is-subtype(<span class="ty">A</span>, <span class="ty">C</span>) <span class="kw">and</span> is-subtype(<span class="ty">B</span>, <span class="ty">C</span>)<span class="op">:</span> is-subtype(<span class="ty">A</span>|<span class="ty">B</span>, <span class="ty">C</span>)
+</code></pre>
+
+<p>The following reductions follow.</p>
+
+<pre><code class="vita"><span class="ty">A</span>|<span class="ty">Any</span>   <span class="op">==</span> <span class="ty">Any</span>
+<span class="ty">A</span>|<span class="ty">Never</span> <span class="op">==</span> <span class="ty">A</span>
+<span class="ty">A</span>|<span class="ty">A</span>     <span class="op">==</span> <span class="ty">A</span>
+</code></pre>
+
+<h2 id="intersections">Intersections</h2>
+
+<p>The union represents a type whose values must be of all of the enumerated types.</p>
+
+<pre><code class="vita"><span class="ty">A1</span> <span class="op">&</span> <span class="op">...</span> <span class="op">&</span> <span class="ty">An</span>
+</code></pre>
+
+<p>The type of an intersection type is:</p>
+
+<pre><code class="vita"><span class="ty">Universe</span>(max(<span class="bu">level-of</span>(<span class="ty">A1</span>), <span class="op">...</span>, <span class="bu">level-of</span>(<span class="ty">An</span>)))
+</code></pre>
+
+<p>The intersection of no types is <code>&amp;</code>, and is used to define <code>Any</code>. All types are subtypes of <code>Any</code>. Some languages call this a top type.</p>
+
+<p>The following laws apply for intersections.</p>
+
+<pre><code class="vita"><span class="ty">A</span><span class="op">&</span><span class="ty">B</span>     <span class="op">==</span> <span class="ty">B</span><span class="op">&</span><span class="ty">A</span>      <span class="com"># commutativity</span>
+<span class="ty">A</span><span class="op">&</span>(<span class="ty">B</span><span class="op">&</span><span class="ty">C</span>) <span class="op">==</span> (<span class="ty">A</span><span class="op">&</span><span class="ty">B</span>)<span class="op">&</span><span class="ty">C</span>  <span class="com"># associativity</span>
+<span class="ty">A</span><span class="op">&</span><span class="ty">B</span>     <span class="op">==</span> <span class="ty">A</span>        <span class="com"># simplification (if B is subtype of A)</span>
+is-subtype(<span class="ty">A</span><span class="op">&</span><span class="ty">B</span>, <span class="ty">A</span>)
+<span class="kw">if</span> <span class="ty">A</span> <span class="kw">and</span> <span class="ty">B</span> are supertypes <span class="kw">of</span> <span class="ty">C</span>, then <span class="ty">A</span><span class="op">&</span><span class="ty">B</span> is a supertype <span class="kw">of</span> <span class="ty">C</span>
+</code></pre>
+
+<p>The following reductions follow.</p>
+
+<pre><code class="vita"><span class="ty">A</span><span class="op">&</span><span class="ty">Any</span>   <span class="op">==</span> <span class="ty">A</span>
+<span class="ty">A</span><span class="op">&</span><span class="ty">Never</span> <span class="op">==</span> <span class="ty">Never</span>
+<span class="ty">A</span><span class="op">&</span><span class="ty">A</span>     <span class="op">==</span> <span class="ty">A</span>
+</code></pre>
+
+<h2 id="numberliterals">Number Literals</h2>
+
+<p>Number literals are textual representations of numbers.</p>
+
+<pre><code class="vita"><span class="num">42</span> <span class="op">:</span> <span class="ty">Num-Literal</span>
+<span class="num">2</span><span class="op">.</span><span class="num">71828</span> <span class="op">:</span> <span class="ty">Num-Literal</span>
+</code></pre>
+
+<p>There is no loss of precision</p>
+
+<pre><code class="vita"><span class="num">3</span><span class="op">.</span><span class="num">1415926535897932384626433</span> <span class="op">:</span> <span class="ty">Num-Literal</span>
+<span class="num">100_000_000_000_000_000_000</span> <span class="op">:</span> <span class="ty">Num-Literal</span>
+</code></pre>
+
+<h3 id="units">Units</h3>
+
+<p>Decimal number literals can be processed at compile-time by a macro <code>@unit-x</code>, where <code>x</code> is a unit - a token following the literal (without whitespace).</p>
+
+<pre><code>@unit-km = (x: Number-Literal) =&gt; ...
+assert 18km == @unit-km(18)
+</code></pre>
+
+<h3 id="bases">Bases</h3>
+
+<p>Binary, octal and hexadecimal number literals are provided for convenience,
+with the limitation, that they cannot be followed by a unit.</p>
+
+<pre><code>0xdead_beef : Number-Literal
+0o766 : Number-Literal
+0b0010_1010 : Number-Literal
+</code></pre>
+
+<p>For other number bases use a string with a custom sigil.</p>
+
+<h3 id="evaluation">Evaluation</h3>
+
+<p>At variable definition, number literals evaluate to the highest signed or floating point number type available, or according to implicit conversions, if required.</p>
+
+<h2 id="stringliterals">String Literals</h2>
+
+<p>String literals begin and end with single or double quotes.</p>
+
+<p>They can also span multiple lines.</p>
+
+<pre><code class="vita"><span class="str">'hello, world'</span> <span class="op">:</span> <span class="ty">Str-Literal</span>
+</code></pre>
+
+<h3 id="sigils">Sigils</h3>
+
+<p>String literals are processed at compile-time by a function <code>@sigil-x</code>, where <code>x</code> is a sigil - the token that precedes (without whitespace) the literal.</p>
+
+<pre><code>@sigil-v = (x: String-Literal) =&gt; ...
+v'0.0.1' == @sigil-v('0.0.1')
+</code></pre>
+
+<p>By default, if no sigil is specified, strings are processed by <code>@sigil-f</code>, which processes escaped characters and interpolates expressions inside escaped parentheses.</p>
+
+<pre><code class="vita"><span class="str">'2 + 2 = \(2 + 2)'</span> <span class="op">==</span> <span class="str">'2 + 2 = 4'</span>
+</code></pre>
+
+<h2 id="pointers">Pointers</h2>
+
+<p>Although you can&#8217;t redefine variables, if a variable holds a writable pointer, you can change the value it points to with the assignment operator <code>:=</code>.</p>
+
+<pre><code class="vita">a <span class="op">:</span> <span class="op">&</span><span class="op">mut</span> <span class="ty">Int</span>
+a <span class="op">:=</span> <span class="num">42</span>
+<span class="kw">assert</span> a <span class="op">==</span> <span class="num">0</span>
+</code></pre>
+
+<h3 id="capabilites">Capabilites</h3>
+
+<p>Each pointer carries capabilities in its type. Pointer capabilites mark what can be done with the pointer and to the value a pointer points to. Using more constraining capabilities, makes code safer and enables additional optimizations.</p>
+
+<p>Pointers with all capability sets can be compared for identity. Additionally, the following rules apply.</p>
+
+<ul>
+<li>Pointers with the <code>tag</code> capability set can only be compared for identity</li>
+<li>Pointers with the <code>rdo</code> capability set can only be read from</li>
+<li>Pointers with the <code>wro</code> capability set can only be written from</li>
+<li>Pointers with the <code>mut</code> capability set can both be read from and written to.</li>
+<li>Pointers with the <code>imm</code> capability set can only be read from. The pointee value is guaranteed to never (observably) change.</li>
+</ul>
+
+<p>For convenience, the capabilites are shown in the table below.</p>
+
+<table>
+<colgroup>
+<col style="text-align:left;"/>
+<col style="text-align:center;"/>
+<col style="text-align:center;"/>
+<col style="text-align:center;"/>
+<col style="text-align:center;"/>
+</colgroup>
+
+<thead>
+<tr>
+	<th style="text-align:left;"> cap </th>
+	<th style="text-align:center;"> cmp </th>
+	<th style="text-align:center;"> read </th>
+	<th style="text-align:center;"> write </th>
+	<th style="text-align:center;"> const </th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+	<td style="text-align:left;"><code>tag</code></td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;">  </td>
+	<td style="text-align:center;">  </td>
+	<td style="text-align:center;">  </td>
+</tr>
+<tr>
+	<td style="text-align:left;"><code>rdo</code></td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;">  </td>
+	<td style="text-align:center;">  </td>
+</tr>
+<tr>
+	<td style="text-align:left;"><code>wro</code></td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;">  </td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;">  </td>
+</tr>
+<tr>
+	<td style="text-align:left;"><code>mut</code></td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;">  </td>
+</tr>
+<tr>
+	<td style="text-align:left;"><code>imm</code></td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;"> x </td>
+	<td style="text-align:center;">  </td>
+	<td style="text-align:center;"> x </td>
+</tr>
+</tbody>
+</table>
+
+<p>Pointers with the <code>cmp</code> capability can be compared for identity with the identity comparison <code>===</code> operator.</p>
+
+<p>Pointers with the <code>read</code> capability can be read from with the dereference <code>*</code> operator.</p>
+
+<p>Pointers with the <code>write</code> capability can written to with the assignment <code>:=</code> operator.</p>
+
+<p>In the stadard library, capability sets are symbols. All capability sets are enumerated in the set type <code>Cap</code>. There are additional types enumerating capability sets with common capabilities, such as <code>Cap-Readable</code> and <code>Cap-Writable</code>.</p>
+
+<h3 id="covertions">Covertions</h3>
+
+<p>The standard library defines implicit convertions between pointers to values of the same type, but of different capability sets.</p>
+
+<p>A pointer to type <code>a</code> with capability set <code>cap1</code> can be converted to a pointer to type <code>a</code> with capability set <code>cap2</code> iff the capabilites of <code>cap2</code> are a subset of capabilites of <code>cap1</code>.</p>
+
+<p>The following conversions follow:</p>
+
+<ul>
+<li><code>mut</code> -&gt; <code>rdo</code> or <code>wro</code> or <code>tag</code></li>
+<li><code>imm</code> -&gt; <code>rdo</code> or <code>tag</code></li>
+<li><code>wro</code> -&gt; <code>tag</code></li>
+<li><code>rdo</code> -&gt; <code>tag</code></li>
+</ul>
+
+<p>Additionaly, a pointer of type <code>a</code> with capability <code>read</code> can be converted (automatically dereferenced) to value of of type <code>a</code>.</p>
+
+<h3 id="aliasing">Aliasing</h3>
+
+<ol>
+<li>Pointers to memory of different types do not alias.</li>
+</ol>
+
+<p><strong>IF</strong> <code>x: Ptr(_, a)</code> and <code>y: Ptr(_, b)</code> and <code>a != b</code> <strong>THEN</strong> writing to <code>x</code> will not affect the result of reading from <code>y</code>.</p>
+
+<ol>
+<li>Pointers to mutable memory of the same type may alias.</li>
+</ol>
+
+<p><strong>IF</strong> <code>x: Ptr(c1, a)</code> and <code>y: Ptr(c2, a)</code> and <code>c1 : Set(mut, wro)</code> and <code>c2 : Set(mut, rdo)</code> <strong>THEN</strong> writing to <code>x</code> may change the result of reading <code>y</code>.</p>
+
+<ol>
+<li>Pointers to immutable memory do not alias</li>
+</ol>
+
+<p><strong>IF</strong> <code>x: Ptr(imm, a)</code> <strong>THEN</strong> writing to any other pointer <code>y</code> will not change the value when reading from <code>x</code>.</p>
+
+<h3 id="compatibilitywithc">Compatibility with C</h3>
+
+<p>When manually declaring a foreign C function type in Vitamin, use the table below for translating the parameter types.</p>
+
+<p><strong>Note</strong>: The first <code>const</code> from the right is in square brackets, because it doesn&#8217;t matter, as C parameters are passed by value.</p>
+
+<table>
+<colgroup>
+<col />
+<col />
+</colgroup>
+
+<thead>
+<tr>
+	<th>C parameter type  </th>
+	<th> Vitamin parameter type</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+	<td><code>A [const] x</code>   </td>
+	<td> <code>A</code></td>
+</tr>
+<tr>
+	<td><code>A * [const] x</code>  </td>
+	<td> <code>Ptr(mut, A)</code></td>
+</tr>
+<tr>
+	<td><code>A const * [const] x</code> </td>
+	<td> <code>Ptr(rdo, A)</code></td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="allocation">Allocation</h3>
+
+<p>To obtain a pointer, you must first allocate memory. This is done with an allocator and the <code>new</code> and <code>ref</code> funcitons.</p>
+
+<p>Memory allocated with unmanaged allocators needs to be freed with <code>del</code>. Double-free is undefined.</p>
+
+<p>Supported managed allocators: <code>stack</code>, <code>temp</code>, <code>rc</code>.</p>
+
+<p>Supported unmanaged allocators: <code>heap</code>.</p>
+
+<pre><code class="vita">heap, stack, temp, rc <span class="op">:</span> <span class="ty">Allocator</span>
+
+new <span class="op">:</span> (alloc<span class="op">:</span> <span class="ty">Allocator</span> <span class="op">=</span> <span class="sp">_</span>, cap<span class="op">:</span> <span class="ty">Cap</span> <span class="op">=</span> <span class="sp">_</span>, a<span class="op">:</span> <span class="ty">Type</span>) <span class="op">-></span> <span class="ty">Ptr</span>(cap, a)
+ref <span class="op">:</span> (alloc<span class="op">:</span> <span class="ty">Allocator</span> <span class="op">=</span> <span class="sp">_</span>, cap<span class="op">:</span> <span class="ty">Cap</span> <span class="op">=</span> <span class="sp">_</span>, a<span class="op">:</span> <span class="ty">Type</span> <span class="op">=</span> <span class="sp">_</span>, x<span class="op">:</span> a) <span class="op">-></span> <span class="ty">Ptr</span>(cap, a)
+del <span class="op">:</span> (alloc<span class="op">:</span> <span class="ty">Allocator</span> <span class="op">=</span> <span class="sp">_</span>, cap<span class="op">:</span> <span class="ty">Cap</span> <span class="op">=</span> <span class="sp">_</span>, a<span class="op">:</span> <span class="ty">Type</span> <span class="op">=</span> <span class="sp">_</span>, x<span class="op">:</span> <span class="ty">Ptr</span>(cap, a)) <span class="op">-></span> <span class="ty">Unit</span>
+</code></pre>
+
+<p><em>Example: Explicitly allocating on the heap</em></p>
+
+<pre><code class="vita"><span class="com"># allocate memory for one string</span>
+x <span class="op">:</span> <span class="op">&</span><span class="op">mut</span> <span class="ty">A</span> <span class="op">=</span> new(heap, <span class="op">mut</span>, <span class="ty">Str</span>)
+<span class="kw">defer</span> del(x)
+</code></pre>
+
+<p><em>Example: Stack allocated integer</em></p>
+
+<pre><code class="vita">i <span class="op">=</span> ref(stack, <span class="op">mut</span>, <span class="ty">Int</span>, <span class="num">0</span>)
+</code></pre>
+
+<p>the same thing, but with syntactic sugar:</p>
+
+<pre><code class="vita"><span class="kw">var</span> i <span class="op">:=</span> <span class="num">0</span>
+</code></pre>
+
+<h1 id="advancedtopics">Advanced Topics</h1>
+
+<h2 id="overloadresolution">Overload Resolution</h2>
+
+<h2 id="implicitconversions">Implicit Conversions</h2>
+
+<p>If an expression does not match the expected type at definition or function call,
+then <em>at most one</em> implicit conversion is applied.</p>
+
+<p>Implicit conversions are defined like this</p>
+
+<pre><code class="vita">implicit <span class="ty">I64-from-NumLiteral</span> <span class="op">:</span> <span class="ty">NumLiteral</span> <span class="op">-></span> <span class="ty">I64</span> <span class="op">=</span> <span class="op">...</span>
+</code></pre>
+
+<h1 id="expressions">Expressions</h1>
+
+<h2 id=""><code>=</code></h2>
+
+<h3 id="usage1:variabledefinitionwithinferredtype">Usage 1: Variable definition with inferred type</h3>
+
+<p><code>&lt;atom&gt; = &lt;expr&gt;</code></p>
+
+<h3 id="usage2:variabledefinitionwithexplicittype">Usage 2: Variable definition with explicit type</h3>
+
+<p><code>&lt;atom&gt;: &lt;type&gt; = &lt;expr&gt;</code></p>
+
+<h3 id="usage3:shortfunctiondefinition">Usage 3: Short function definition</h3>
+
+<ol>
+<li><code>&lt;atom&gt;() = &lt;body&gt;</code></li>
+<li><code>&lt;atom&gt;() -&gt; &lt;type&gt; = &lt;body&gt;</code></li>
+<li><code>&lt;atom&gt;(&lt;param-list&gt;) = &lt;body&gt;</code></li>
+<li><code>&lt;atom&gt;(&lt;param-list&gt;) -&gt; &lt;type&gt; = &lt;body&gt;</code></li>
+</ol>
+
+<h2 id=""><code>=&gt;</code></h2>
+
+<p>Same as function type.</p>
+
+<pre><code class="vita">(x1 <span class="op">:</span> <span class="ty">X1</span>, <span class="op">...</span>, xn <span class="op">:</span> <span class="ty">Xn</span>; y1 <span class="op">:</span> <span class="ty">Y1</span>, <span class="op">...</span>, yn <span class="op">:</span> <span class="ty">Yn</span>) <span class="op">-></span> <span class="ty">Z</span> <span class="op">=></span> e
+</code></pre>
+
+<p>Result can always be inferred. Parameter types are not always inferred at the moment.</p>
+
+<pre><code class="vita">(p1, <span class="op">...</span>, pn) <span class="op">=></span> e
+</code></pre>
+
+<p><strong>TODO:</strong> Infer parameter types from body, without context (hard).</p>
+
+<h2 id="case"><code>case</code></h2>
+
+<p><strong>TODO:</strong> Document this</p>
+
+<p>Syntax:</p>
+
+<p><code>pattern = constructor(pattern, ..., pattern) | name (':' type)? | _</code></p>
+
+<p>Structural pattern matching:</p>
+
+<pre><code class="vita"><span class="kw">case</span> <span class="op">&lt;</span>value<span class="op">></span>
+<span class="kw">of</span> <span class="op">&lt;</span>pattern-1<span class="op">></span> <span class="op">&lt;</span>expression-1<span class="op">></span>
+<span class="kw">of</span> <span class="op">&lt;</span>pattern-2<span class="op">></span> <span class="op">&lt;</span>expression-2<span class="op">></span>
+<span class="op">...</span>
+<span class="kw">of</span> <span class="op">&lt;</span>pattern-n<span class="op">></span> <span class="op">&lt;</span>expression-n<span class="op">></span> 
+</code></pre>
+
+<p>If-else alternative:</p>
+
+<pre><code class="vita"><span class="kw">case</span>
+<span class="kw">of</span> <span class="op">&lt;</span>condition-1<span class="op">></span> <span class="op">&lt;</span>expression-1<span class="op">></span>
+<span class="kw">of</span> <span class="op">&lt;</span>condition-2<span class="op">></span> <span class="op">&lt;</span>expression-2<span class="op">></span>
+<span class="op">...</span>
+<span class="kw">of</span> <span class="op">&lt;</span>condition-n<span class="op">></span> <span class="op">&lt;</span>expression-n<span class="op">></span>
+</code></pre>
+
+<h2 id="if"><code>if</code></h2>
+
+<p><code>if</code> expressions branch to one of code blocks depending on a given condition, which evaluates to <code>Bool</code>.</p>
+
+<pre><code class="vita"><span class="kw">if</span> <span class="op">&lt;</span>condition-1<span class="op">></span> <span class="op">&lt;</span>expression-1<span class="op">></span>
+<span class="kw">elif</span> <span class="op">&lt;</span>condition-2<span class="op">></span> <span class="op">&lt;</span>expression-2<span class="op">></span>
+<span class="op">...</span>
+<span class="kw">else</span> <span class="op">&lt;</span>expression-n<span class="op">></span>
+</code></pre>
+
+<p>The type of an <code>if</code> expression is <code>type(e1) | ... | type(en)</code></p>
+
+<h2 id="while"><code>while</code></h2>
+
+<p>While loop opens a new scope and evaluates a block while a condition evaluates to <code>true</code>.</p>
+
+<p>Type of a <code>while</code> expression is <code>Unit</code>. If the loop is infinite its type is <code>Never</code>.</p>
+
+<pre><code class="vita"><span class="kw">var</span> i <span class="op">:=</span> <span class="num">0</span>
+<span class="kw">while</span> i <span class="op">&lt;</span> <span class="num">10</span>
+	print(i)
+	i <span class="op">+=</span> <span class="num">1</span>
+</code></pre>
+
+<h2 id="for"><code>for</code></h2>
+
+<p>For loop iterates over a value of type <code>A</code> if there is evidence of <code>Iterable(A)</code>.</p>
+
+<p>Type of the <code>for</code> expression is <code>Unit</code>.</p>
+
+<pre><code class="vita"><span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">0</span>, <span class="num">10</span>)
+	print(i)
+</code></pre>
+
+<p>This loop is equivalent to:</p>
+
+<pre><code class="vita">iter <span class="op">=</span> iterate(range(<span class="num">0</span>, <span class="num">10</span>))
+<span class="kw">while</span> <span class="kw">not</span> empty(iter)
+	i <span class="op">=</span> next(iter)
+	print(i)
+</code></pre>
+
+<p><strong>TODO:</strong> Implement iterator protocol</p>
+
+<h2 id=".memberaccess"><code>.</code> (member access)</h2>
+
+<p>Vitamin features the familiar dot <code>.</code> operator known mostly from object-oriented languages.</p>
+
+<p>There are three main uses of the dot operator.
+Firstly, you can access member values of data types. Secondly, you can mutate the value of a member value.
+Accessing the member value of a data type with the dot operator is equivalent to doing so with the builtin <code>member</code> macro.
+Also, pleaso note, that there is no separate macro for mutating the member value. This use emerges from the combination of the <code>member</code> macro and the <code>:=</code> mutatation operator.</p>
+
+<p>Lastly, you can use the dot operator to pass the left operand as the first argument to function application on the right hand side.
+The ability to pass arguments in this way is sometimes known as Uniform Function Call Syntax (UFCS).</p>
+
+<p>Here are examples of common <code>.</code> macro usage:</p>
+
+<p>Getting a member value</p>
+
+<pre><code class="vita"><span class="kw">use</span> <span class="ty">Core</span>
+person <span class="op">:</span> {name<span class="op">:</span> <span class="ty">Str</span>}
+<span class="kw">assert</span> (person<span class="op">.</span>name) is-the-same-as (member(person, <span class="str">'name'</span>))
+</code></pre>
+
+<p>Setting a member value</p>
+
+<pre><code class="vita">person <span class="op">:</span> {name<span class="op">:</span> <span class="op">mut</span> <span class="ty">Str</span>}
+new-name <span class="op">:</span> <span class="ty">Str</span>
+<span class="kw">assert</span> (person<span class="op">.</span>name <span class="op">:=</span> new-name) is-the-same-as (member(person, <span class="str">'name'</span>) <span class="op">:=</span> new-name)
+</code></pre>
+
+<p>Passing value as the first function argument (UFCS)</p>
+
+<pre><code class="vita">add <span class="op">:</span> (x y<span class="op">:</span> <span class="ty">Int</span>) <span class="op">-></span> <span class="ty">Int</span>
+a, b <span class="op">:</span> <span class="ty">Int</span>
+<span class="kw">assert</span> a<span class="op">.</span>add(b) is-the-same-as add(a, b)
+</code></pre>
+
+<h2 id="macros">Macros</h2>
+
+<pre><code class="vita"><span class="sp">`+`</span>(x y<span class="op">:</span> <span class="ty">Expr</span>) <span class="op">-></span> <span class="sp">Expand</span>(<span class="ty">Expr</span>) <span class="op">=</span>
+	<span class="kw">quote</span> add(<span class="sp">$</span>x, <span class="sp">$</span>y)
+
+<span class="sp">`for-2`</span>(name vals body<span class="op">:</span> <span class="ty">Expr</span>) <span class="op">-></span> <span class="sp">Expand</span>(<span class="ty">Expr</span>) <span class="op">=</span>
+	x <span class="op">=</span> <span class="kw">gensym</span>()
+	<span class="kw">quote</span>
+		<span class="sp">$</span>x <span class="op">=</span> iterate(<span class="sp">$</span>vals)
+		<span class="kw">while</span> <span class="kw">not</span> empty(<span class="sp">$</span>x)
+			<span class="sp">$</span>body
+			<span class="sp">$</span>x <span class="op">=</span> next(<span class="sp">$</span>x)
+</code></pre>
+
+<h2 id="shortlambda"><code>$</code> (short lambda)</h2>
+
+<p><strong>NOT IMPLEMENTED</strong></p>
+
+<p>If an expression uses variables starting with a dollar sign it&#8217;s automatically wrapped in a lambda. This operation works top-down on the syntax tree and is not transitive.</p>
+
+<pre><code class="vita"><span class="kw">assert</span> foo(<span class="sp">$</span><span class="num">1</span> <span class="op">+</span> <span class="sp">$</span><span class="num">2</span>) is-the-same-as foo((<span class="sp">$</span><span class="num">1</span>, <span class="sp">$</span><span class="num">2</span>) <span class="op">=></span> <span class="sp">$</span><span class="num">1</span> <span class="op">+</span> <span class="sp">$</span><span class="num">2</span>)
+</code></pre>
+
+<h2 id="functionparameter"><code>$</code> (function parameter)</h2>
+
+<p><strong>NOT IMPLEMENTED</strong></p>
+
+<p>Add an entry to the function paramer list.</p>
+
+<p>Names prefixed with <code>$</code>, used in function parameter types will be added to the function parameter list as implicit parameters. Only the first occurence of a name <em>should</em> be prefixed wih <code>$</code>. The type of the dollar parameter will be inferred.</p>
+
+<pre><code class="vita">id <span class="op">:</span> (x<span class="op">:</span> <span class="sp">$</span>a) <span class="op">-></span> a
+</code></pre>
+
+<p>Desugars to:</p>
+
+<pre><code class="vita">id <span class="op">:</span> (a <span class="op">=</span> <span class="sp">_</span>, x<span class="op">:</span> a) <span class="op">-></span> a
+</code></pre>
+
+<h2 id="quote"><code>quote</code></h2>
+
+<p>Get the representation of the abstract syntax tree of a given expression.</p>
+
+<pre><code class="vita">x<span class="op">:</span> <span class="ty">Expr</span> <span class="op">=</span> <span class="kw">quote</span> <span class="num">2</span> <span class="op">+</span> <span class="num">3</span> <span class="op">*</span> <span class="num">4</span>
+</code></pre>
+
+<h2 id="unquote"><code>$</code> (unquote)</h2>
+
+<p>Insert the result of an expression into the syntax tree of the quoted expression.</p>
+
+<p>The argument of <code>$</code> must be of type <code>Expr</code> (either <code>Atom</code> or <code>Term</code>).</p>
+
+<p><em>Example</em></p>
+
+<pre><code class="vita">a <span class="op">=</span> <span class="kw">quote</span> <span class="num">2</span> <span class="op">+</span> <span class="num">2</span>
+b <span class="op">=</span> <span class="kw">quote</span> <span class="kw">assert</span> <span class="sp">$</span>a <span class="op">==</span> <span class="num">4</span>
+eval(b)
+</code></pre>
+
+<p><strong>Warning</strong></p>
+
+<p>Inside <code>quote</code>, other uses of the dollar <code>$</code> operator will be interpreted as unquote.</p>
+
+<h2 id="unquotesplicing"><code>$$</code> (unquote splicing)</h2>
+
+<p>Insert <em>all subexpressions</em> of the result of an expression into the syntax tree of the quoted expression.</p>
+
+<p>The argument of <code>$$</code> must be a value of type <code>Term</code> .</p>
+
+<p><strong>Warning</strong></p>
+
+<p>Other uses of the double dollar <code>$$</code> operator will be interpreted as unquote splicing.</p>
+
+<h2 id="defer"><code>defer</code></h2>
+
+<p>Defer postpones the evaluation of an expression to the end of a block.</p>
+
+<p><strong>Example</strong></p>
+
+<p>Ensure a file handle is closed when exiting scope.</p>
+
+<pre><code class="vita">file <span class="op">=</span> open(<span class="str">'foobar.txt'</span>)
+<span class="kw">defer</span> close(file)
+<span class="com"># do other stuff</span>
+</code></pre>
+
+<h2 id="use"><code>use</code></h2>
+
+<p>Imports all names into current scope.</p>
+
+<pre><code class="vita">point <span class="op">=</span> (x<span class="op">=</span><span class="num">2</span>, y<span class="op">=</span><span class="num">3</span>)
+<span class="kw">use</span> point
+print(x) <span class="com"># prints 2</span>
+</code></pre>
+
+<p>Useful in processing evidence and objects.</p>
+
+<pre><code class="vita"><span class="ty">Point</span> <span class="op">=</span> <span class="ty">Record</span>(x y<span class="op">:</span> <span class="ty">F64</span>)
+magnitude <span class="op">=</span> (self<span class="op">:</span> <span class="ty">Point</span>) <span class="op">=></span> <span class="kw">use</span> self; sqrt(x<span class="op">*</span>x <span class="op">+</span> y<span class="op">*</span>y)
+<span class="com"># or shorter</span>
+magnitude <span class="op">=</span> (<span class="kw">use</span> self<span class="op">:</span> <span class="ty">Point</span>) <span class="op">=></span> sqrt(x<span class="op">*</span>x <span class="op">+</span> y<span class="op">*</span>y)
+</code></pre>
+
+<p>Import some names into current scope:</p>
+
+<pre><code class="vita">point <span class="op">=</span> (x<span class="op">=</span><span class="num">2</span>, y<span class="op">=</span><span class="num">3</span>, z<span class="op">=</span><span class="num">4</span>)
+<span class="kw">use</span> point<span class="op">.</span>(x, y)
+
+<span class="com"># assertions</span>
+<span class="kw">assert</span> is-defined(x)
+<span class="kw">assert</span> is-defined(y)
+<span class="kw">assert</span> <span class="kw">not</span> is-defined(z)
+</code></pre>
+
+<h2 id="import"><code>import</code></h2>
+
+<p><strong>NOT IMPLEMENTED</strong></p>
+
+<p>Import module and bring all members into scope:</p>
+
+<pre><code class="vita"><span class="kw">import</span> tensor <span class="kw">as</span> t
+<span class="com"># above is equivalent to:</span>
+tensor <span class="op">=</span> <span class="ty">Core</span><span class="op">.</span><span class="kw">import</span>(<span class="str">'tensor'</span>)
+<span class="kw">use</span> tensor
+</code></pre>
+
+<p>Import module and bring some members into scope:</p>
+
+<pre><code class="vita"><span class="kw">import</span> tensor<span class="op">.</span>(<span class="ty">Tensor</span>, <span class="sp">`*`</span>, <span class="sp">`+`</span>)
+<span class="com"># above is equivalent to:</span>
+tensor <span class="op">=</span> <span class="ty">Core</span><span class="op">.</span><span class="kw">import</span>(<span class="str">'tensor'</span>)
+<span class="kw">use</span> tensor<span class="op">.</span>(<span class="ty">Tensor</span>, <span class="sp">`*`</span>, <span class="sp">`+`</span>)
+</code></pre>
+
+<p>Import module without changing scope:</p>
+
+<pre><code class="vita"><span class="kw">import</span> tensor<span class="op">.</span>()
+<span class="com"># above is equivalent to</span>
+tensor <span class="op">=</span> <span class="ty">Core</span><span class="op">.</span><span class="kw">import</span>(<span class="str">'tensor'</span>)
+</code></pre>
+
+<h2 id="with"><code>with</code></h2>
+
+<p><strong>NOT IMPLEMENTED</strong></p>
+
+<p>Alternative arguments passing style:</p>
+
+<pre><code class="vita">request(<span class="str">'get'</span>, <span class="str">'someurl'</span>) <span class="kw">with</span>
+	on-success <span class="op">=</span> res <span class="op">=></span>
+		<span class="num">2</span> <span class="op">+</span> <span class="num">2</span>
+		print(res)
+	
+	on-error <span class="op">=</span> () <span class="op">=></span>
+		print(<span class="str">"couldn't get someurl"</span>)
+		exit(<span class="num">1</span>)
+</code></pre>
+
+<p>Desugars to:</p>
+
+<pre><code class="vita">request(<span class="str">'get'</span>, <span class="str">'someurl'</span>,
+	on-success <span class="op">=</span> res <span class="op">=></span> (<span class="num">2</span> <span class="op">+</span> <span class="num">2</span>; print(res)),
+	on-error <span class="op">=</span> () <span class="op">=></span> (print(<span class="op">...</span>); exit(<span class="num">1</span>)))
+</code></pre>
+
+<h2 id="undefined"><code>undefined</code></h2>
+
+<pre><code class="vita">undefined <span class="op">:</span> <span class="ty">Never</span>
+</code></pre>
+
+<p>Defining or declaring a variable with the special value <code>undefined</code> will not actually define or declare that variable. For example, the following expressions will do absolutely nothing.</p>
+
+<pre><code class="vita">x <span class="op">=</span> undefined
+y <span class="op">:</span> undefined
+</code></pre>
+
+<p>In conjunction with <code>if</code> and <code>case</code> expressions, <code>undefined</code> can be used for conditional definitions. For example, if you wanted to declare a 64-bit signed integer type, but only if the target architecture supports them, you could write the definition as follows.</p>
+
+<pre><code class="vita"><span class="ty">I64</span> <span class="op">:</span> <span class="kw">if</span> (target-bit-width <span class="op">==</span> <span class="num">64</span>) <span class="ty">Type</span> <span class="kw">else</span> undefined
+</code></pre>
+
+<h2 id="unreachable"><code>unreachable</code></h2>
+
+<pre><code class="vita">unreachable <span class="op">:</span> <span class="ty">Never</span>
+</code></pre>
+
+<p>Evaluating the special value <code>unreachable</code> at compile-time will result in a compilation error. When <code>unreachable</code> is encountered at runtime the program will crash.</p>
+
+<h1 id="lessismore">Less is more</h1>
+
+<p>When designing Vitamin I avoided features, which needlesly bloated the core language.</p>
+
+<p>That&#8217;s why you will find some common language features in the standard library instead!</p>
+
+<ul>
+<li>Mutablitiy of values is specified at the type level.</li>
+<li>No constants and variables - just definitions, which cannot change.</li>
+<li>No distinction between type, function and value definitons.</li>
+<li>No distinction between named and anonymous functions.</li>
+<li>No generic types - just functions returning a type.</li>
+<li>No generic functions - just functions accepting types as the first arguments.</li>
+<li>No modules - just constant structures and first-class scope.</li>
+<li>No traits - just implicit parameters searching for evidence.</li>
+</ul>
+
+<h1 id="credits">Credits</h1>
+
+<p>Helpful papers and websites:</p>
+
+<ul>
+<li>post on pratt parsing (<a href="https://www.engr.mun.ca/~theo/Misc/pratt_parsing.htm">link</a>)</li>
+<li>post on intransitive operator precedence (<a href="https://blog.adamant-lang.org/2019/operator-precedence/">link</a>)</li>
+<li>agda mixfix operator paper (<a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.157.7899">link</a>)</li>
+<li>row-polymorphic data types paper (<a href="https://www.microsoft.com/en-us/research/publication/first-class-labels-for-extensible-rows">link</a>)</li>
+<li>post on implementing dependent type theory (<a href="http://math.andrej.com/2012/11/08/how-to-implement-dependent-type-theory-i/">link</a>)</li>
+</ul>
+
+<p>Major inspirations:</p>
+
+<ul>
+<li>C - speed and (relative) simplicity</li>
+<li>Python - syntax</li>
+<li>Nim - incredible features, identifiers, lexer trick for indentation</li>
+<li>D - UFCS, transitive mutability information</li>
+<li>Elm - row-polymorphic records, helpful compiler</li>
+<li>OCaml - polymorphic variants</li>
+<li>Scala, Agda, Idris - type system, implicits</li>
+<li>Ceylon - unions and intersections</li>
+<li>Lisp - macros, extensibility, kebab-case ;)</li>
+<li>ATS, Rust - linear types</li>
+</ul>
+
+<p>Minor inspirations:</p>
+
+<ul>
+<li>Julia - macros, number units, keyword parameters</li>
+<li>Elixir - macros, string sigils, immutability</li>
+<li>Swift - operator groups</li>
+<li>Nemerle - macros with custom lexing and parsing</li>
+</ul>
+
+</article>
+	</div>
+</main>
+
+<footer>
+</footer>
+</body>
+</html

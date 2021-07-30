@@ -1,0 +1,47 @@
+#!/bin/bash
+
+markdown() {
+	multimarkdown $@
+}
+
+export templ_root='https://maxadamski.com/vitamin'
+
+while [[ $# -ne 0 ]]; do
+	case $1 in
+	--devel)
+		shift
+		export templ_root=$PWD
+	;;
+	-h|--help)
+		echo 'usage: ./build [--devel]'
+		exit 0
+	;;
+	*) 
+		shift
+	;;
+	esac
+done
+
+./templ src/page.html \
+	main="$(./templ src/index.html)" \
+	title="Vitamin Lang" \
+	descr="Official website of the Vitamin programming language" \
+	> index.html
+
+./templ src/doc.html \
+	main="$(markdown src/manual.md)" \
+	title="Vitamin Manual" \
+	doc_title="The Vitamin Programming Language User Manual" \
+	descr="The Vitamin Programming Language User Manual" \
+	> manual.html
+
+./templ src/doc.html \
+	main="$(markdown src/tutorial.md)" \
+	title="Learn Vitamin" \
+	doc_title="Learn Vitamin in Y Minutes" \
+	descr="A quick start guide / tutorial for the Vitamin programming language" \
+	> tutorial.html
+
+./color index.html
+./color manual.html
+./color tutorial.html

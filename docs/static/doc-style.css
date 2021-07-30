@@ -1,0 +1,49 @@
+
+main {
+  max-width: 1100px;
+}
+
+.TOC {
+  padding: 0 20px 0 0;
+  overflow-y: auto;
+}
+
+.TOC a {
+  font-size: 0.8rem;
+  text-decoration: none;
+  color: black;
+  display: block;
+  padding: 4px 8px;
+  transition-property: background-color, color;
+  transition: .2s;
+}
+
+.TOC a:hover {
+  background: rgba(0, 162, 255, 0.2);
+  color: rgb(0, 140, 255);
+  border-radius: 5px;
+}
+
+.TOC ul ul, .TOC ol ol {
+  margin-bottom: 0;
+}
+
+.TOC > ul > li, .TOC > ol > li {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed gray;
+}
+
+.TOC > ul > li > a {
+  color: black;
+  font-weight: bold;
+}
+
+.TOC > ul > li > ul > li > ul > li {
+  margin-left: 1em;
+}
+
+.TOC > ul > li > ul > li > ul > li a {
+  color: gray;
+  font-size: 0.7em;
+}

@@ -26,7 +26,7 @@ const operator_tokens = [
 ]
 
 const builtins = [
-    "type-of", "level-of", "Record", "Variant"
+    "type-of", "level-of"
 ]
 
 const constants = [
@@ -65,6 +65,7 @@ proc format_file*(path: string, small=true): string =
             else: ""
 
         if class.len > 0:
-            result &= "<span class=\"" & class & "\">" & token.value & "</span>"
+            let value = token.value.replace("<", "&lt;")
+            result &= "<span class=\"" & class & "\">" & value & "</span>"
         else:
             result &= token.value
