@@ -1,6 +1,8 @@
 
 main {
   max-width: 1100px;
+  display: flex;
+  flex-direction: column;
 }
 
 .TOC {
@@ -46,4 +48,36 @@ main {
 .TOC > ul > li > ul > li > ul > li a {
   color: gray;
   font-size: 0.7em;
+}
+
+.title {
+  font-size: 2em;
+  font-weight: bold;
+  line-height: 1.6;
+  text-align: center;
+  align-self: center;
+  margin: 0.5em 0 1em 0;
+  max-width: 30ch;
+}
+
+.contents {
+  display: grid;
+  grid-template: 1fr / 210px minmax(0, 1fr);
+}
+
+@media screen and (max-width: 1000px) {
+  .TOC {
+    display: none;
+  }
+
+  .contents {
+    display: block;
+  }
+}
+
+@media screen and (max-width: 700px) {
+  .title {
+    text-align: left;
+    align-self: auto;
+  }
 }
