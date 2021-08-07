@@ -5,6 +5,7 @@ markdown() {
 }
 
 export templ_root='https://maxadamski.com/vitamin'
+export templ_author='Max Adamski'
 
 while [[ $# -ne 0 ]]; do
 	case $1 in
@@ -28,20 +29,34 @@ done
 	descr="Official website of the Vitamin programming language" \
 	> index.html
 
+./templ src/page.html \
+	main="$(./templ src/docs.html)" \
+	title="Documentation" \
+	descr="Language and standard library documentation, and other resources for learning Vitamin." \
+	> docs.html
+
 ./templ src/doc.html \
 	main="$(markdown src/manual.md)" \
-	title="Vitamin Manual" \
+	title="Manual" \
 	doc_title="The Vitamin Programming Language User Manual" \
 	descr="The Vitamin Programming Language User Manual" \
 	> manual.html
 
 ./templ src/doc.html \
-	main="$(markdown src/tutorial.md)" \
-	title="Learn Vitamin" \
+	main="$(markdown src/tour.md)" \
+	title="Learn Vitamin in Y Minutes" \
 	doc_title="Learn Vitamin in Y Minutes" \
-	descr="A quick start guide / tutorial for the Vitamin programming language" \
-	> tutorial.html
+	descr="Short tour for the Vitamin programming language." \
+	> tour.html
+
+./templ src/doc.html \
+	main="$(markdown src/quick-start.md)" \
+	title="Quick start" \
+	doc_title="Get Started with Vitamin" \
+	descr="Quick start guide on how to install Vitamin, compile code, run programs, debug programs and other tips for beginners." \
+	> quick-start.html
 
 ./color index.html
 ./color manual.html
-./color tutorial.html
+./color tour.html
+./color quick-start.html
