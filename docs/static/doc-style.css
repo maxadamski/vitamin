@@ -1,6 +1,9 @@
 
-main {
+main, header > nav {
   max-width: 1100px;
+}
+
+main {
   display: flex;
   flex-direction: column;
 }

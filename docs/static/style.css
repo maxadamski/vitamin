@@ -1,8 +1,10 @@
 :root {
+  --global-pad-h: 8px;
   --font-size: 18px;
   --line-height: 1.5;
   --leading: calc(var(--line-height) * 1rem);
   --scale: 1.414;
+  --color-vita-bg: #1F1534;
   --color-hr   : #DBDBDB;
   --code-frame : 1px solid #e0e0e0;
   --code-fg    : #333333;
@@ -129,31 +131,41 @@ body {
 }
 
 main {
-  padding: 0 8px;
-  max-width: 900px;
   justify-self: safe center;
 }
 
 .logo {
-  height: 28px;
-  min-width: 140px;
+  max-width: 200px;
 }
 
 header {
   border-bottom: 1px solid var(--color-hr);
   overflow-x: auto;
+  background: var(--color-vita-bg);
 }
 
 header > nav {
+  margin: 0 auto;
   display: flex;
-  padding: 8px 16px;
   justify-content: space-between;
   align-items: center;
   white-space: nowrap;
 }
 
-.nav-right a {
-  margin-left: 1em;
+main {
+  padding: 0 var(--global-pad-h);
+}
+
+a {
+  display: inline-block;
+}
+
+a img {
+  display: block;
+}
+
+main, header > nav {
+  max-width: 900px;
 }
 
 header > nav > * {
@@ -161,12 +173,12 @@ header > nav > * {
 }
 
 header > nav a {
-  color: black;
+  margin: 0 var(--global-pad-h);
+  color: white;
   text-decoration: none;
 }
 
 header > nav a:hover {
-  color: #444;
   text-decoration: underline;
   cursor: pointer;
 }
