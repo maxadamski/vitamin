@@ -1,8 +1,4 @@
 
-main, header > nav {
-  max-width: 1100px;
-}
-
 main {
   display: flex;
   flex-direction: column;
@@ -10,47 +6,40 @@ main {
 
 .TOC {
   padding: 0 20px 0 0;
-  overflow-y: auto;
+}
+
+.TOC ul {
+  counter-reset: item;
+}
+
+.TOC li {
+  display: block;
+  font-size: 0.8rem;
 }
 
 .TOC a {
-  font-size: 0.8rem;
-  text-decoration: none;
-  color: black;
   display: block;
-  padding: 4px 8px;
+  color: var(--color-text);
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 5px;
   transition-property: background-color, color;
-  transition: .2s;
+  transition-duration: .2s;
 }
 
 .TOC a:hover {
-  background: rgba(0, 162, 255, 0.2);
-  color: rgb(0, 140, 255);
-  border-radius: 5px;
+  color: var(--color-link);
+  background: rgba(var(--color-vita-fg-rgb), 0.2);
 }
 
-.TOC ul ul, .TOC ol ol {
-  margin-bottom: 0;
-}
-
-.TOC > ul > li, .TOC > ol > li {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px dashed gray;
+.TOC a:before {
+  counter-increment: item;
+  content: counters(item, ".")". ";
 }
 
 .TOC > ul > li > a {
-  color: black;
   font-weight: bold;
-}
-
-.TOC > ul > li > ul > li > ul > li {
-  margin-left: 1em;
-}
-
-.TOC > ul > li > ul > li > ul > li a {
-  color: gray;
-  font-size: 0.7em;
+  color: var(--vita-color-bg);
 }
 
 .title {
@@ -65,7 +54,7 @@ main {
 
 .contents {
   display: grid;
-  grid-template: 1fr / 210px minmax(0, 1fr);
+  grid-template: 1fr / 220px minmax(0, 1fr);
 }
 
 @media screen and (max-width: 1000px) {

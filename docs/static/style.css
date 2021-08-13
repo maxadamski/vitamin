@@ -4,7 +4,13 @@
   --line-height: 1.5;
   --leading: calc(var(--line-height) * 1rem);
   --scale: 1.414;
-  --color-vita-bg: #1F1534;
+  --color-vita-bg-rgb: 31, 21, 52;
+  --color-vita-bg: rgb(var(--color-vita-bg-rgb));
+  --color-vita-fg-rgb: 75, 238, 140;
+  --color-vita-fg: rgb(var(--color-vita-fg-rgb));
+  --color-link: #37A362;
+  --color-link-hover: #234732;
+  --color-text : #333;
   --color-hr   : #DBDBDB;
   --code-frame : 1px solid #e0e0e0;
   --code-fg    : #333333;
@@ -27,14 +33,15 @@ blockquote, figure, fieldset, legend, textarea, pre, iframe  {
   margin: 0;
   padding: 0;
 }
- 
+
 h1, h2, h3, h4, h5, h6 {
   font-size: 100%;
   font-weight: bold;
 } 
 
 ul, ol {
-  list-style: none;
+  list-style: disc;
+  list-style-position: inside;
 }
 
 button, input, select {
@@ -65,9 +72,16 @@ td, th {
 
 /* typography */
 
+
+.title, h1, h2, h3, h4, h5 { color: var(--color-vita-bg) }
+p { color: var(--color-text); }
+a { color: var(--color-link); text-decoration: none; }
+a:hover { color: var(--color-link-hover); text-decoration: underline; }
 p, h1, h2, h3, article ul, article ol { margin-bottom: 0.9rem; }
+article h1:first-of-type { margin-top: 0; }
+article li { margin-bottom: 0.2rem; }
 p, li { font-size: 1.00rem; margin-top:   0; line-height: 1.70; }
-h1 { font-size: 1.50rem; margin-top:      0; line-height: 1.25; }
+h1 { font-size: 1.50rem; margin-top: 1.4rem; line-height: 1.25; }
 h2 { font-size: 1.25rem; margin-top: 1.4rem; line-height: 1.25; }
 h3 { font-size: 1.15rem; margin-top: 1.4rem; line-height: 1.25; }
 pre { margin-bottom: 16px; }
@@ -75,11 +89,6 @@ pre { margin-bottom: 16px; }
 article h1, article h2 {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--color-hr) 
-}
-
-article ul {
-  list-style: disc;
-  margin-left: 1em;
 }
 
 /* tables */
@@ -136,6 +145,7 @@ main {
 
 .logo {
   max-width: 200px;
+  height: 50px;
 }
 
 header {
@@ -165,22 +175,17 @@ a img {
 }
 
 main, header > nav {
-  max-width: 900px;
-}
-
-header > nav > * {
-  display: inline-block;
+  max-width: 1200px;
 }
 
 header > nav a {
   margin: 0 var(--global-pad-h);
   color: white;
-  text-decoration: none;
 }
 
 header > nav a:hover {
-  text-decoration: underline;
   cursor: pointer;
+  color: white;
 }
 
 footer {
@@ -190,6 +195,11 @@ footer {
   justify-content: center;
   align-items: center;
   margin-top: 30px;
+}
+
+blockquote {
+  border-left: 4px solid var(--color-hr);
+  padding-left: 16px;
 }
 
 pre {
@@ -218,7 +228,7 @@ code {
   color: var(--code-fg);
 }
 
-@media screen and (max-width: 900px) {
+@media screen and (max-width: 1100px) {
   main {
     justify-self: unset;
   }

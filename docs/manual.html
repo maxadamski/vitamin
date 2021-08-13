@@ -11,7 +11,6 @@
 <link rel="icon" href="static/favicon.png">
 
 <link rel="stylesheet" href="static/doc-style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 </head>
 
 <body>
@@ -114,6 +113,7 @@
 </div>
 
 <article>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 
 <h1 id="overview">Overview</h1>
 
@@ -1067,23 +1067,23 @@ tensor <span class="op">=</span> <span class="ty">Core</span><span class="op">.<
 
 <h2 id="undefined"><code>undefined</code></h2>
 
-<pre><code class="vita">undefined <span class="op">:</span> <span class="ty">Never</span>
+<pre><code class="vita"><span class="sp">undefined</span> <span class="op">:</span> <span class="ty">Never</span>
 </code></pre>
 
 <p>Defining or declaring a variable with the special value <code>undefined</code> will not actually define or declare that variable. For example, the following expressions will do absolutely nothing.</p>
 
-<pre><code class="vita">x <span class="op">=</span> undefined
-y <span class="op">:</span> undefined
+<pre><code class="vita">x <span class="op">=</span> <span class="sp">undefined</span>
+y <span class="op">:</span> <span class="sp">undefined</span>
 </code></pre>
 
 <p>In conjunction with <code>if</code> and <code>case</code> expressions, <code>undefined</code> can be used for conditional definitions. For example, if you wanted to declare a 64-bit signed integer type, but only if the target architecture supports them, you could write the definition as follows.</p>
 
-<pre><code class="vita"><span class="ty">I64</span> <span class="op">:</span> <span class="kw">if</span> (target-bit-width <span class="op">==</span> <span class="num">64</span>) <span class="ty">Type</span> <span class="kw">else</span> undefined
+<pre><code class="vita"><span class="ty">I64</span> <span class="op">:</span> <span class="ty">Type</span> <span class="kw">if</span> target-bit-width <span class="op">==</span> <span class="num">64</span> <span class="kw">else</span> <span class="sp">undefined</span>
 </code></pre>
 
 <h2 id="unreachable"><code>unreachable</code></h2>
 
-<pre><code class="vita">unreachable <span class="op">:</span> <span class="ty">Never</span>
+<pre><code class="vita"><span class="sp">unreachable</span> <span class="op">:</span> <span class="ty">Never</span>
 </code></pre>
 
 <p>Evaluating the special value <code>unreachable</code> at compile-time will result in a compilation error. When <code>unreachable</code> is encountered at runtime the program will crash.</p>

@@ -3,7 +3,7 @@ import scan
 import common/exp
 
 const special_tokens = [
-    "$", "$$", "_", "it", "Varargs", "Quoted", "Expand", "Lazy", "unique"
+    "$", "$$", "_", "it", "Varargs", "Quoted", "Expand", "Lazy", "unique", "undefined", "unreachable"
 ]
 
 const keyword_tokens = [

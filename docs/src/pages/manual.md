@@ -1,13 +1,13 @@
 {{TOC:1-2}}
 
 <article>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 
 # Overview
 
 In Vitamin types are values.
 
 The type system is based on the Martin-Löf dependent type theory.
-
 
 
 # Lexical structure
@@ -999,7 +999,7 @@ y : undefined
 In conjunction with `if` and `case` expressions, `undefined` can be used for conditional definitions. For example, if you wanted to declare a 64-bit signed integer type, but only if the target architecture supports them, you could write the definition as follows.
 
 ```vita
-I64 : if (target-bit-width == 64) Type else undefined
+I64 : Type if target-bit-width == 64 else undefined
 ```
 
 
