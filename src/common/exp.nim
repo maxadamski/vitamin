@@ -110,29 +110,31 @@ proc append*(x: Exp, y: varargs[Exp]): Exp =
     res.exprs &= y
     res
 
-func merge_position*(pos: seq[Position]): Option[Position] =
-    if pos.len == 0: return none(Position)
-    var start_line = pos[0].start_line
-    var start_char = pos[0].start_char
-    var stop_line = pos[0].stop_line
-    var stop_char = pos[0].stop_char
-    var file = pos[0].file
-    for x in pos:
-        if x.file != nil: file = x.file
-        if x.start_line <= start_line:
-            start_line = x.start_line
-            start_char = min(start_char, x.start_char)
-        if x.stop_line >= stop_line:
-            stop_line = x.stop_line
-            stop_char = max(stop_char, x.stop_char)
-    some(pos(start_line, start_char, stop_line, stop_char, file))
+func merge*(positions: seq[Position]): Position =
+    assert positions.len > 0
+    result = positions[0]
+    for pos in positions:
+        if pos.file != nil:
+            result.file = pos.file
+        if pos.start_line < result.start_line:
+            result.start_line = pos.start_line
+            result.start_char = pos.start_char
+        elif pos.start_line == result.start_line:
+            result.start_char = min(result.start_char, pos.start_char)
+        if pos.stop_line > result.stop_line:
+            result.stop_line = pos.stop_line
+            result.stop_char = pos.stop_char
+        elif pos.stop_line == result.stop_line:
+            result.stop_char = max(result.stop_char, pos.stop_char)
 
 func calculate_position*(node: Exp): Option[Position] =
     case node.kind
     of expAtom:
         node.pos
     of expTerm:
-        node.exprs.map_it(it.calculate_position).filter_it(it.is_some).map_it(it.get).merge_position
+        var positions = node.exprs.map_it(it.calculate_position).filter_it(it.is_some).map_it(it.get)
+        if positions.len == 0: return none(Position)
+        return some(positions.merge)
 
 func str*(x: Exp): string
 

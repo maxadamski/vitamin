@@ -90,7 +90,7 @@ type
     ValTag* = enum
         HoldVal, NeuVal, UniqueVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, ExpVal, MemVal, FunVal, FunTypeVal,
-        NumVal, StrVal, I8, U8, I64, U64
+        NumLit, StrLit, I8, U8, I64, U64
 
     ValObj* = object
         case kind*: ValTag
@@ -120,7 +120,7 @@ type
             name*: string
         of NeuVal:
             neu*: Neu
-        of NumVal, StrVal:
+        of NumLit, StrLit:
             lit*: string
         of MemVal:
             mem*: Mem
@@ -185,8 +185,8 @@ func noun*(v: Val): string =
     of HoldVal: "variable"
     of NeuVal: "unevaluated call"
     of UniqueVal: "unique value"
-    of NumVal: "number literal"
-    of StrVal: "string literal"
+    of NumLit: "number literal"
+    of StrLit: "string literal"
     of MemVal: "memory"
     of ExpVal: "expression"
     of TypeVal: "type"
@@ -261,7 +261,7 @@ func str*(v: Val): string =
     of I64: $v.i64
     of U64: $v.u64
     of UniqueVal: "Unique(" & v.inner.str & ")"
-    of NumVal, StrVal: v.lit
+    of NumLit, StrLit: v.lit
     of MemVal: "Memory(...)"
     of ExpVal: "Expr(" & v.exp.str & ")"
     of TypeVal:

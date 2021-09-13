@@ -37,6 +37,10 @@ none : None
 compare : (expr: Quoted(Expr)) -> Bool
 `quote` : (expr: Quoted(Expr)) -> Expr
 gensym : () -> Atom
+num-u8  : (x: Num-Literal) -> U8
+num-i8  : (x: Num-Literal) -> I8
+num-u64 : (x: Num-Literal) -> U64
+num-i64 : (x: Num-Literal) -> I64
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
 
@@ -54,45 +58,61 @@ test "string literals"
     assert type-of(hello) == Str-Literal
     assert type-of("hello") == Str-Literal
 
+test "number literal units"
+    num-dummy(x: Num-Literal) = none
+    assert 42dummy == num-dummy(42)
+
+test "string literal sigils"
+    str-dummy(x: Str-Literal) = none
+    assert dummy"hello" == str-dummy("hello")
+
+test "numbers ignore underscores"
+    assert 1_000_000i64 == 1000000i64
+
+xtest "special base 2, 8 and 16 notation"
+    assert 0b101010 == 42
+    assert 0o766 == 502
+    assert 0xDEAD_BEEF == 3735928559
+
 #
 # Integers
 #
 
 test "number literal converts to 8-bit signed integer"
-    i8(0)
-    i8(127)
-    i8(-128)
-    assert error(i8(128))
-    assert error(i8(-129))
+    0i8
+    127i8
+    -128i8
+    assert error(128i8)
+    assert error(-129i8)
 
 test "number literal converts to 8-bit unsigned integer"
-    u8(0)
-    u8(255)
-    assert error(u8(256))
-    assert error(u8(-1))
+    0u8
+    255u8
+    assert error(256u8)
+    assert error(-1u8)
 
 test "number literal converts to 64-bit signed integer"
-    i64(0)
-    i64(9223372036854775807)
-    i64(-9223372036854775808)
-    assert error(i64(9223372036854775808))
-    assert error(i64(-9223372036854775809))
+    0i64
+    9223372036854775807i64
+    -9223372036854775808i64
+    assert error(9223372036854775808i64)
+    assert error(-9223372036854775809i64)
 
 test "number literal converts to 64-bit unsigned integer"
-    u64(0)
-    u64(18446744073709551615)
-    assert error(u64(18446744073709551616))
-    assert error(u64(-1))
+    0u64
+    18446744073709551615u64
+    assert error(18446744073709551616u64)
+    assert error(-1u64)
 
 test "integer comparison"
-    assert u8(0) == u8(0)
-    assert u8(0) != u8(1)
-    assert i8(0) == i8(0)
-    assert i8(0) != i8(1)
-    assert i64(0) == i64(0)
-    assert i64(0) != i64(1)
-    assert u64(0) == u64(0)
-    assert u64(0) != u64(1)
+    assert 0u8 == 0u8
+    assert 0u8 != 1u8
+    assert 0i8 == 0i8
+    assert 0i8 != 1i8
+    assert 0i64 == 0i64
+    assert 0i64 != 1i64
+    assert 0u64 == 0u64
+    assert 0u64 != 1u64
 
 #
 # Variables

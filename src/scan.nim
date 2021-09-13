@@ -5,7 +5,7 @@ const open_comp* = {")": "(", "]": "[", "}": "{", "|)": "(|", "|]": "[|", "|}": 
 const name_head* = {'a'..'z', 'A'..'Z', '_'}
 const name_tail* = name_head + {'0'..'9', '-'}
 const numb_head* = {'0'..'9'}
-const numb_tail* = numb_head + {'a'..'z', 'A'..'Z', '_'}
+const numb_tail* = numb_head + {'_'}
 const symb_head* = {'%','$','&','=','*','+','!','?','^','/','>','<',':','.','~','-'}
 const symb_tail* = symb_head + {'@','|'}
 
@@ -69,24 +69,61 @@ proc scan*(text: string, file: Option[string] = none(string), start_line: int = 
         if parens[^1].value != open_comp[paren]:
             raise mismatched_paren_error(atom(paren, aSym, s.get_range), parens[^1])
 
+    var signed_number = false
+    var sigil: Option[Exp]
     while not s.eof:
         buf = ""
         s.save
-        let curr = s.eat
+        var curr = s.eat
         buf.add(curr)
+
+        if signed_number or (curr in {'+', '-'} and s.top in numb_head):
+            signed_number = false
+            curr = s.eat
+            buf.add(curr)
+
         case curr
         of name_head:
-            while s.top in name_tail or ord(s.top) > 127: buf.add(s.eat)
-            atoms.add(atom(buf, aSym, s.get_range))
+            while s.top in name_tail or ord(s.top) > 127:buf.add(s.eat)
+            if s.top in {'\'', '"'}:
+                sigil = some(atom("str-" & buf, aSym, s.get_range))
+            else:
+                atoms.add(atom(buf, aSym, s.get_range))
         of symb_head:
             while s.top in symb_tail:
-                if s.top == '-' and s.top(1) in numb_head:
+                if s.top in {'-', '+'} and s.top(1) in numb_head:
+                    signed_number = true
                     break
                 buf.add(s.eat)
             atoms.add(atom(buf, aSym, s.get_range))
         of numb_head:
-            while s.top in numb_tail: buf.add(s.eat)
-            atoms.add(atom(buf, aNum, s.get_range))
+            if curr == '0' and s.top in {'x', 'X'}:
+                buf.add(s.eat)
+                while s.top in {'0'..'9', 'a'..'f', 'A'..'F', '_'}: buf.add(s.eat)
+                atoms.add(atom(buf, aNum, s.get_range))
+            elif curr == '0' and s.top in {'b', 'B'}:
+                buf.add(s.eat)
+                while s.top in {'0', '1', '_'}: buf.add(s.eat)
+                atoms.add(atom(buf, aNum, s.get_range))
+            elif curr == '0' and s.top in {'o', 'O'}:
+                buf.add(s.eat)
+                while s.top in {'0'..'7', '_'}: buf.add(s.eat)
+                atoms.add(atom(buf, aNum, s.get_range))
+            else:
+                while s.top in numb_tail: buf.add(s.eat)
+                if s.top == '.':
+                    buf.add(s.eat)
+                    while s.top in numb_tail: buf.add(s.eat)
+                let num = atom(buf, aNum, s.get_range)
+                var exp = num
+                if s.top in name_head:
+                    buf = ""
+                    s.save
+                    buf.add(s.eat)
+                    while s.top in name_tail or ord(s.top) > 127: buf.add(s.eat)
+                    let unit = atom("num-" & buf, aSym, s.get_range)
+                    exp = term(unit, exp)
+                atoms.add(exp)
         of {'\'', '"', '`'}:
             let tag = if curr == '`': aLit else: aStr
             if tag == aLit:
@@ -102,7 +139,12 @@ proc scan*(text: string, file: Option[string] = none(string), start_line: int = 
             let close_tag = s.eat
             if tag == aStr:
                 buf.add(close_tag)
-            atoms.add(atom(buf, tag, s.get_range))
+            if sigil.is_some:
+                atoms.add(term(sigil.get, atom(buf, tag, s.get_range)))
+                sigil = none(Exp)
+            else:
+                atoms.add(atom(buf, tag, s.get_range))
+
         of {',',';'}:
             atoms.add(atom(buf, aSym, s.get_range))
         of {')',']','}'}:
@@ -188,11 +230,11 @@ proc indent*(tokens: seq[Exp]): seq[Exp] =
         var t = tokens[i]
         i += 1
 
-        if t.tag notin {aWs, aNl}:
+        if t.kind != expAtom or t.tag notin {aWs, aNl}:
             res.add(t)
 
         elif t.tag == aNl and i < tokens.len:
-            while i < tokens.len and tokens[i].tag == aNl:
+            while i < tokens.len and tokens[i].kind == expAtom and tokens[i].tag == aNl:
                 t = tokens[i]
                 i += 1 
             if i >= tokens.len:
@@ -201,10 +243,10 @@ proc indent*(tokens: seq[Exp]): seq[Exp] =
             i += 1
             let next_level = t.value
             let last_level = if levels.len > 0: levels[^1].value else: ""
-            if t.tag != aWs:
+            if t.kind != expAtom or t.tag != aWs:
                 pop_levels(levels.len)
                 res.add(t)
-            elif i < tokens.len and tokens[i].tag == aNl:
+            elif i < tokens.len and tokens[i].kind == expAtom and tokens[i].tag == aNl:
                 continue
             elif next_level == last_level:
                 res.add(atom("$CNT", aCnt, t.pos))

@@ -14,7 +14,7 @@
     "contributes": {
         "languages": [{
             "id": "vitamin",
-            "aliases": ["Vitamin", "vitamin"],
+            "aliases": ["Vitamin", "vitamin", "Vita", "vita"],
             "extensions": [".v", ".vita"],
             "configuration": "./language-configuration.json"
         }],
@@ -31,5 +31,5 @@
         "type": "git",
         "url": "https://github.com/maxadamski/vitamin.git"
     },
-    "homepage": "https://maxadamski.com/vitamin/"
+    "homepage": "https://vita-lang.org"
 }

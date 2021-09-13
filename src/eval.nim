@@ -45,6 +45,9 @@ proc genuid(name: string): int =
     result = next_name_uid[name]
     next_name_uid[name] += 1
 
+proc strip_quotes(s: string): string =
+    s[1 ..< ^1]
+
 #
 # Context
 #
@@ -273,7 +276,7 @@ func `==`*(x, y: Val): bool =
     of FunVal: x.fun == y.fun
     of RecVal: x.rec == y.rec
     of RecTypeVal: x.rec_typ == y.rec_typ
-    of NumVal, StrVal: x.lit == y.lit
+    of NumLit, StrLit: x.lit == y.lit
     of ExpVal: x.exp == y.exp
     of I8: x.i8 == y.i8
     of U8: x.u8 == y.u8
@@ -871,8 +874,8 @@ proc eval_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
 proc eval_test(ctx: Ctx, name_exp, test: Exp) =
     if name_exp.kind != expAtom or name_exp.tag != aStr:
         raise error(name_exp, "Test description must be a string literal. {name_exp.src}")
-    let name = name_exp.value
-    stdout.write "test " & name & " "
+    let name = ctx.eval(name_exp)
+    stdout.write "test " & name.lit & " "
     stdout.flush_file
     try:
         let local = ctx.extend()
@@ -886,8 +889,8 @@ proc eval_test(ctx: Ctx, name_exp, test: Exp) =
 proc eval_xtest(ctx: Ctx, name_exp, body_exp: Exp) =
     if name_exp.kind != expAtom or name_exp.tag != aStr:
         raise error(name_exp, "Test description must be a string literal. {name_exp.src}")
-    let name = name_exp.value
-    echo "test {name} \e[33mSKIPPED\e[0m".fmt
+    let name = ctx.eval(name_exp)
+    echo "test {name.lit} \e[33mSKIPPED\e[0m".fmt
 
 proc eval_assert(ctx: Ctx, arg: Exp) =
     let exp = ctx.expand(arg)
@@ -1037,9 +1040,9 @@ proc reify*(ctx: Ctx, val: Val): Exp =
         atom("Type")
     of ExpVal:
         val.exp
-    of NumVal:
+    of NumLit:
         atom(val.str, tag=aNum)
-    of StrVal:
+    of StrLit:
         atom(val.str, tag=aStr)
     of HoldVal:
         atom(val.name)
@@ -1088,8 +1091,8 @@ proc dynamic_type*(ctx: Ctx, val: Val): Val =
     of I64: Hold("I64")
     of U64: Hold("U64")
     of MemVal: Hold("Size")
-    of NumVal: Hold("Num-Literal")
-    of StrVal: Hold("Str-Literal")
+    of NumLit: Hold("Num-Literal")
+    of StrLit: Hold("Str-Literal")
     of ExpVal:
         case val.exp.kind
         of expAtom: Hold("Atom")
@@ -1119,7 +1122,7 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
     case exp.kind:
     of expAtom:
         case exp.tag:
-        of aSym, aLit:
+        of aSym:
             let name = exp.value
             let variable = ctx.env.get_assumed(name).or_else:
                 raise ctx.error("Type of {name.bold} is unknown. {ctx.src}".fmt)
@@ -1191,8 +1194,8 @@ proc eval*(ctx: Ctx, exp: Exp, unwrap = false): Val =
     of expAtom:
         case exp.tag
         of aSym, aLit: return eval_name(ctx, exp)
-        of aNum: return Val(kind: NumVal, lit: exp.value)
-        of aStr: return Val(kind: StrVal, lit: exp.value)
+        of aNum: return Val(kind: NumLit, lit: exp.value)
+        of aStr: return Val(kind: StrLit, lit: exp.value.strip_quotes)
         else: raise ctx.error(exp=exp, msg="I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
     of expTerm:
         if exp.len == 0:
@@ -1386,25 +1389,25 @@ root_ctx.set_builtin_fun_inline "as":
 root_ctx.set_builtin_fun_inline "eval":
     ctx.eval(args[0].exp)
 
-root_ctx.set_builtin_fun_inline "i8":
+root_ctx.set_builtin_fun_inline "num-i8":
     let num = parse_int(args[0].lit)
     if not (-128 <= num and num <= 127):
         raise ctx.error("Number literal {args[0]} does not fit in the range of type I8. {ctx.src}".fmt)
     Val(kind: I8, i8: int8(num))
 
-root_ctx.set_builtin_fun_inline "u8":
+root_ctx.set_builtin_fun_inline "num-u8":
     let num = parse_int(args[0].lit)
     if not (0 <= num and num <= 255):
         raise ctx.error("Number literal {args[0]} does not fit in the range of type U8. {ctx.src}".fmt)
     Val(kind: U8, u8: uint8(num))
 
-root_ctx.set_builtin_fun_inline "i64":
+root_ctx.set_builtin_fun_inline "num-i64":
     try:
         Val(kind: I64, i64: int64(parse_int(args[0].lit)))
     except ValueError:
         raise ctx.error("Number literal {args[0]} does not fit in the range of type I64. {ctx.src}".fmt)
 
-root_ctx.set_builtin_fun_inline "u64":
+root_ctx.set_builtin_fun_inline "num-u64":
     try:
         let num = parse_uint(args[0].lit)
         Val(kind: U64, u64: uint64(num))
@@ -1414,4 +1417,4 @@ root_ctx.set_builtin_fun_inline "u64":
 root_ctx.set_builtin_fun_inline "inv":
     var lit = args[0].lit
     if lit[0] == '-': lit = lit[1 .. ^1] else: lit = "-" & lit
-    Val(kind: NumVal, lit: lit)
+    Val(kind: NumLit, lit: lit)

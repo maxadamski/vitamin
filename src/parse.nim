@@ -173,7 +173,7 @@ proc parse_expr(p: var Parser, tokens: var ExpStream, follow = init_hash_set[str
 
 
     # if a rule cannot occur here, treat the token as a literal
-    if p.prefix_rules.has_key(expr.value) and not expr.is_literal:
+    if expr.kind == expAtom and p.prefix_rules.has_key(expr.value) and not expr.is_literal:
         let parselet = p.prefix_rules[expr.value]
         let subrule = parselet.rule
         if rule.is_some and parselet.group != "Any" and rule.get.group != some("Any"):
@@ -200,7 +200,7 @@ proc parse_expr(p: var Parser, tokens: var ExpStream, follow = init_hash_set[str
             else:
                 expr = term(head, right.get)
 
-    elif p.infix_rules.has_key(expr.value) and not expr.is_literal:
+    elif expr.kind == expAtom and p.infix_rules.has_key(expr.value) and not expr.is_literal:
         when debug_parser > 0: echo fmt"parse_expr: found infix operator `{expr}` in prefix position: backtracking"
         return parse_error(rule2, term(), nil, reason=fmt"found infix operator `{expr}` in prefix position: backtracking")
 
