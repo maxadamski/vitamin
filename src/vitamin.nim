@@ -5,6 +5,9 @@ import noise
 when defined(profile):
     import nimprof
 
+when defined(profile):
+    import nimprof
+
 import scan, parse, eval, format
 import common/[exp, error, types]
 from syntax import parser
@@ -99,7 +102,7 @@ proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), sta
             quit(0)
         let exprs = to_seq(parse(parser, tokens))
         if debug == "parse":
-            for x in exprs: echo x.str
+            for x in exprs: echo x.str_ugly
             quit(0)
         for x in exprs:
             let val = ctx.eval(x)

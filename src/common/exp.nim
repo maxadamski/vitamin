@@ -56,6 +56,9 @@ func is_whitespace*(x: Exp): bool =
 func is_comment*(x: Exp): bool =
     x.kind == expAtom and x.tag == aCom
 
+func is_atom*(x: Exp, value: string): bool =
+    x.kind == expAtom and x.value == value
+
 func is_token*(x: Exp, value: string): bool =
     x.kind == expAtom and x.value == value
 
@@ -76,6 +79,8 @@ func has_prefix*(x: Exp, token: string): bool =
 
 func has_prefix_any*(x: Exp, tokens: open_array[string]): bool =
     x.len >= 1 and x[0].is_token(tokens)
+
+func head*(x: Exp): Exp = x.exprs[0]
 
 func tail*(x: Exp): seq[Exp] = x.exprs[1 .. ^1]
 
@@ -106,6 +111,7 @@ func concat*(xs: varargs[Exp]): Exp =
     term(exprs)
 
 proc append*(x: Exp, y: varargs[Exp]): Exp =
+    # FIXME: remove this evil function
     var res = if x.kind == expAtom: term(x) else: x
     res.exprs &= y
     res
@@ -142,6 +148,14 @@ func join*(x: Exp, sep: string): string =
     assert x.kind == expTerm
     x.exprs.map(str).join(sep)
 
+func str_ugly_rec(x: Exp): string =
+    case x.kind
+    of expTerm: return "{" & x.exprs.map(str_ugly_rec).join(" ")  & "}"
+    of expAtom: return x.str
+
+func str_ugly*(x: Exp): string =
+    x.str_ugly_rec
+
 func str_group0(x: Exp): string = x.join(" ")
 
 func str_group1(x: Exp): string = x.exprs.map(str_group0).join(", ")
@@ -156,8 +170,9 @@ func str*(x: Exp): string =
         if x.tag == aCnt: return "$CNT"
         if x.tag == aWs: return "$WS"
         if x.tag == aNl: return "$NL"
-        if x.tag == aStr: return "\"" & x.value & "\""
-        if not x.value.match(re"[A-Za-z0-9_-]+"):
+        if x.tag == aStr: return x.value
+        if x.tag == aNum: return x.value
+        if x.value.match(re"[ ;,(){}\[\]]"):
             return "`" & x.value & "`"
         else:
             return x.value
@@ -183,8 +198,7 @@ func str*(x: Exp): string =
             let typ = if x[2].is_nil: "" else: " -> " & x[2].str
             let body = x[3].str
             let params_str = params.join(", ")
-            return "lambda(({params_str}){typ} => {body})".fmt
-
+            return "(({params_str}){typ} => {body})".fmt
 
         elif x.exprs.len >= 3 and x.exprs[0].is_token("()"):
             return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
@@ -203,10 +217,6 @@ func str*(x: Exp): string =
             else:
                 return x.exprs[0].str & "(" & x.exprs[1 .. ^1].map(str).join(", ") & ")"
 
-func str_ugly*(x: Exp): string =
-    case x.kind
-    of expTerm: return "{" & x.exprs.map(str_ugly).join(" ")  & "}"
-    of expAtom: return x.str
 
 proc `$`*(x: Exp): string =
     x.str

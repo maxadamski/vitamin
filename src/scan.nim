@@ -6,8 +6,8 @@ const name_head* = {'a'..'z', 'A'..'Z', '_'}
 const name_tail* = name_head + {'0'..'9', '-'}
 const numb_head* = {'0'..'9'}
 const numb_tail* = numb_head + {'_'}
-const symb_head* = {'%','$','&','=','*','+','!','?','^','/','>','<',':','.','~','-'}
-const symb_tail* = symb_head + {'@','|'}
+const symb_head* = {'@', '%','$','&','=','*','+','!','?','^','/','>','<',':','.','~','-'}
+const symb_tail* = symb_head + {'|'}
 
 func tos(c: char): string =
     var s = ""

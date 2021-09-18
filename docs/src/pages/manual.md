@@ -72,6 +72,111 @@ Characters inside a group are lexically analyzed and parsed on-demand, so a synt
 
 
 
+# Evaluation
+
+Expressions are evaluated with the `eval` function.
+
+Given value `e` of type `Expr` as its argument, `eval` first expands `e` with `expand`, and then evaluates the resulting expression according to the following rules.
+
+
+## Evaluating Atoms
+
+### Identifiers
+
+If an identifier `id` was used to define a variable, then `id` evaluates to the value assigned to that variable. The matching definition in the localmost scope takes priority.
+
+If an identifier `id` was used to declare (but not define) the type of a variable, then `id` cannot be evaluated. TODO: So what?
+
+Evaluating an identifier that wasn't used to define or declare a variable is an error.
+
+### Number and String Literals
+
+Describe the evaluation of the builtin number and string literals
+
+
+## Evaluating Terms
+
+### Empty Term
+
+The empty expression `{}` cannot be evaluated. Trying to evaluate `{}` is a fatal error.
+
+### Quote Term
+
+The primitive quote expression `{$quote e}`, where `e` is an arbitrary expression, is evaluated to a value, of type `Expr`, which represents the abstract syntax tree of `e`. No expansion, evaluation or interpolation is performed on `e` itself. In short, `$quote` is used to internally withold evaluation.
+
+### List Literals
+
+The primitive list literal expression `{$list x1 ... xN}` is evaluated by evaluating subexpressions `x1 ... xN` in unspecified order, and storing the results in a heterogenous container. The type of that container is `List-Literal`.
+
+### Block Terms
+
+The primitive block expression `{$block x1 ... xN}` is evaluated by creating a new scope and evaluating subexpressions `x1 ... xN` in order from left to right. The value of the last subexpression is used as the result.
+
+### Call Term
+
+Expressions of form `{f x1 ... xN}` represent function calls, and are evaluated according to the following algorithm:
+
+1. Expression `f` is evaluated
+	- It is an error if `f` doesn't evaluate to a function value
+2. Argument list `x1 ... xN` is normalized to exactly match the parameter list order for function `f`, resulting in the expression list `u1 ... uM`, which correspond to parameters named `l1 ... lM`.
+	- This step is described in [Argument Normalization](#argument-normalization).
+3. Expressions `u1 ... uM` are evaluated in an unspecified order.
+4. Body of function `f` is evaluated with the values of expressions `u1 ... uN` bound to names `l1 ... lN` in `f`s local scope.
+5. If `f` evaluated to a macro function, then the the returned expression is evaluated.
+
+---
+**NOTE**
+
+For terms of form `{f}` steps 2-4 are still performed, since the function `F` may have default arguments, so the normalized argument list may be non-empty.
+
+---
+
+#### Argument Normalization
+
+- Let `F` be a function with parameters `p1 ... pN`.
+- Let `x1 ... xM` be an argument list of a function call `{f x1 ... xM}`, where each argument `xi` is an expression, and `f` is an expression evaluating to function `F`.
+- A *keyword argument* is an argument of form `{= ki vi}`, where `ki` is a parameter label and `vi` is an arbitrary expression.
+- An *omitted argument* is an argument of form `_`.
+
+1. Create a new argument list `u1 ... uN`.
+2. For each parameter `pi` with a default value:
+	- Set `ui` to the default value of `pi`, and mark `pi` as done.
+3. For each keyword argument `xi`:
+	- Find parameter `pj` with label `ki`.
+	- Fail if there is no parameter with label `ki`.
+	- Fail if an argument with label `ki` was already given. 
+	- Set `uj` to `vi`, and mark `xi` and `pj` as done.
+4. For each remaining argument `xi`:
+	- Find the first remaining parameter `pj`, which does not require a keyword argument and is not a variadic parameter.
+	- Set `uj` to `xi`, and mark `xi` and `pj` as done.
+4. If there were variadic parameters, then for each remaining argument `xi`:
+	- Add `xi` to the list of values of `uj`, where `pj` is a variadic parameter with element type matching `xi`.
+5. Fail if there are remaining parameters or arguments.
+7. For each quoting parameter `pi`:
+	- Set `ui` to `{inert ui}`.
+8. For each variadic parameter `pi`:
+	- Set `ui` to the list literal expression `{list-literal ui1 ... uiM}` where `ui1 ... uiM` is the list of values of `ui`.
+9. Try to infer omitted parameters. At this step the argument list `u1 ... uN` is *almost normalized*.
+	- This step is described in [Argument Inference](#argument-inference).
+	- Fail if didn't succeed.
+10. Fail if the type of any argument `ui` doesn't match the type of `pi`.
+
+#### Argument Inference
+
+- Let `F` be a function with parameters `p1 ... pN` of types `a1 ... aN`.
+- Let `u1 ... uN` be the *almost normalized* argument list of a function call `{f x1 ... xM}`, where `f` is an expression evaluating to function `F`, and `t1 ... tN` are the argument types.
+
+The argument inference algorithm tries to infer the values of omitted arguments by first trying unification, and then performing implicit search, if needed.
+
+**Unification**
+
+Try to infer as many omitted parameters as possible, by solving the unification problem `{ t1 = a1, ..., tN = aN }`, where `ai = qi(u1, ..., ui-1)`, and `qi` is a function from values of some preceding arguments of `ui` to the type `ai` of parameter `pi`. If no parameter type `ai` is dependent on the value of argument `uj` (j < i), then the value `uj` can't be inferred by unification, so the equation `tj = aj` is excluded for the problem. If the function `qi` is not reversible, then the equation `ti = ai` is not included in the unification problem.
+
+**Implicit search**
+
+For each remaining omitted argument `ui`, try to find a previously defined variable with type *exactly equal* (no subtyping) to `ti`. Implicit search starts at the local scope, and advances one level upwards, if it did not find any matches. If there were no matches at the global scope, the algorithm fails. If in any scope there was more than exactly one match, the algorithm also fails.
+
+
 # Variables
 
 ## Definitions
@@ -119,7 +224,6 @@ if condition
 	assert x == 4
 assert x == 2
 ```
-
 
 
 # Values and Types

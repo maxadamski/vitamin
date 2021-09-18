@@ -85,6 +85,13 @@ func is_left*[T, U](val: Either[T, U]): bool =
 func is_right*[T, U](val: Either[T, U]): bool =
     val.kind == EitherKind.Right
 
+func unsafe_left*[T, U](val: Either[T, U]): T =
+    val.left
+
+func unsafe_right*[T, U](val: Either[T, U]): T =
+    val.right
+
+
 # Safe Option type
 
 variantp Opt[T]:
@@ -105,6 +112,9 @@ func `??`*[T](opt: Opt[T], default: T): T =
 
 func map*[T, U](opt: Opt[T], f: proc (x: T): U): Opt[U] =
     if opt.kind == OptKind.Some: Some(f(opt.value)) else: None(U)
+
+func unsafe_get*[T](opt: Opt[T]): T =
+    opt.value
 
 template or_else*[T](opt: Opt[T], default: untyped): untyped =
     if opt.kind == OptKind.Some:

@@ -1,45 +1,47 @@
 
 Has-Prelude : Type
 
-Num-Literal, Str-Literal : Type
+Num-Literal, Str-Literal, List-Literal : Type
 U8, I8, U64, I64 : Type
-inv : (x: Num-Literal) -> Num-Literal
-u8 : (x: Num-Literal) -> U8
-i8 : (x: Num-Literal) -> I8
-u64 : (x: Num-Literal) -> U64
-i64 : (x: Num-Literal) -> I64
+Byte = U8
 Size = U64
 Int = I64
-Quoted, Expand, Varargs : (x: Type) -> Type
-`=` : (pattern value: Quoted(Expr)) -> Expand(Expr)
-`->` : (params result: Quoted(Expr)) -> Expand(Expr)
-`=>` : (head body: Quoted(Expr)) -> Expand(Expr)
+`=` : (pattern value: quoted(Expr)) -> expand(Expr)
+`->` : (params result: quoted(Expr)) -> expand(Expr)
+`=>` : (head body: quoted(Expr)) -> expand(Expr)
 lambda-infer : (params result body: Expr) -> Type
-lambda : (params result body: Quoted(Expr)) -> lambda-infer(params, result, body)
-Lambda : (params result: Quoted(Expr)) -> Type
+lambda : (params result body: quoted(Expr)) -> lambda-infer(params, result, body)
+Lambda : (params result: quoted(Expr)) -> Type
 record-infer : (values: Expr) -> Type
-record : (values: Quoted(Expr)) -> record-infer(values)
-`Record` : (fields: Quoted(Expr)) -> Type
-type-of : (expr: Quoted(Expr)) -> Type
-level-of : (type: Quoted(Expr)) -> Int
+record : (values: quoted(Expr)) -> record-infer(values)
+`Record` : (fields: variadic(quoted(Expr))) -> Type
+type-of : (expr: quoted(Expr)) -> Type
+level-of : (type: quoted(Expr)) -> Int
+Union, Inter : (types: variadic(Type)) -> Type
 Any = Inter()
 Never = Union()
 Unit = Record()
 eval : (e: Expr) -> type-of(e)
-Lazy : (a: Type) -> Type
-`as` : (x: Quoted(Expr), y: Type) -> y
-Bool : Type = unique(Int)
-true = 1 as Bool
-false = 0 as Bool
+`as` : (x: quoted(Expr), y: Type) -> y
+Bool : Type
 None : Type
 none : None
-`test` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
-`xtest` : (name: Quoted(Atom), body: Quoted(Expr)) -> Unit
-`assert` : (cond: Quoted(Expr)) -> Unit
-`==` : (lhs rhs: Quoted(Expr)) -> Bool
-compare : (expr: Quoted(Expr)) -> Bool
-`quote` : (expr: Quoted(Expr)) -> Expr
-gensym : () -> Atom
-`and`(x y: Lazy(Bool)) -> Bool = case x of true y of false false
-`or`(x y: Lazy(Bool)) -> Bool = case x of true true of false y
-`not`(x: Bool) -> Bool = case x of true false of false true
+`test` : (name: Str-Literal, body: quoted(Expr)) -> Unit
+`xtest` : (name: Str-Literal, body: quoted(Expr)) -> Unit
+`assert` : (cond: quoted(Expr)) -> Unit
+`==` : (lhs rhs: quoted(Expr)) -> Bool
+compare : (expr: quoted(Expr)) -> Bool
+`quote` : (expr: quoted(Expr)) -> Expr
+str-r = (x: Str-Literal) => x
+num-u8  : (x: Num-Literal) -> U8
+num-i8  : (x: Num-Literal) -> I8
+num-u64 : (x: Num-Literal) -> U64
+num-i64 : (x: Num-Literal) -> I64
+opaque Bool = Byte
+true = 1u8 as Bool
+false = 0u8 as Bool
+Arguments : (x: Type) -> Type
+`and` = (x y: quoted(Expr)) -> expand(Expr) => quote(case $x of true $y of false false)
+`or` = (x y: quoted(Expr)) -> expand(Expr) => quote(case $x of true true of false $y)
+`not` = (x: Bool) -> Bool => case x of true false of false true
+print : (xs: variadic(Any), sep = ' ', end = '\n') -> Unit
