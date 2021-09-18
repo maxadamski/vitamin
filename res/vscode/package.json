@@ -2,11 +2,12 @@
     "name": "vitamin",
     "displayName": "Vitamin",
     "description": "Vitamin programming language support",
-    "version": "0.0.2",
+    "version": "0.0.3",
+	"license": "MIT",
     "publisher": "maxadamski",
     "icon": "icon.png",
     "engines": {
-        "vscode": "^1.25.0"
+        "vscode": "^1.54.0"
     },
     "categories": [
         "Programming Languages"
@@ -21,7 +22,7 @@
         "grammars": [{
             "language": "vitamin",
             "scopeName": "source.v",
-            "path": "./syntaxes/vitamin.tmLanguage"
+            "path": "./syntaxes/vitamin.tmLanguage.json"
         }]
     },
     "bugs": {

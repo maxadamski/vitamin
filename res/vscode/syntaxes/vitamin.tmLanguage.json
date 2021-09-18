@@ -1,0 +1,108 @@
+{
+  "fileTypes": [
+    "v",
+    "vita"
+  ],
+  "name": "Vitamin",
+  "scopeName": "source.v",
+  "uuid": "b5a8b312-87b3-45e7-9258-7a3e50d1af3b",
+  "patterns": [
+    {
+      "name": "keyword.control.vitamin",
+      "match": "\\b(if|elif|else|while|for|case|of|do|with|where|defer|guard|block|return|continue|break|quote|shift|reset)(?!-)\\b"
+    },
+    {
+      "name": "keyword.other.vitamin",
+      "match": "\\b(let|var|use|fun|test|xtest|Record|Variant|Module|Enum|assert|import|include|pass|undefined|unreachable)(?!-)\\b"
+    },
+    {
+      "name": "comment.block.vitamin",
+      "begin": "#\\[",
+      "end": "]#"
+    },
+    {
+      "name": "comment.line.number-sign.vitamin",
+      "match": "#.*$\n?"
+    },
+    {
+      "name": "punctuation.separator.comma.vitamin",
+      "match": ","
+    },
+    {
+      "name": "punctuation.separator.semicolon.vitamin",
+      "match": ";"
+    },
+    {
+      "name": "keyword.operator.vitamin",
+      "match": "\\b(as|in|div|mod)(?!-)\\b"
+    },
+    {
+      "name": "keyword.boolean.vitamin",
+      "match": "\\b(not|and|or|xor|is)(?!-)\\b"
+    },
+    {
+      "name": "constant.language.vitamin",
+      "match": "\\b(true|false|none)(?!-)\\b"
+    },
+    {
+      "name": "support.function.vitamin",
+      "match": "(^|\\s)\\$[0-9]+\\b"
+    },
+    {
+      "name": "support.function.vitamin",
+      "match": "\\b(unwrap)(?!-)\\b"
+    },
+    {
+      "name": "support.function.vitamin",
+      "match": "(^|\\s)@[A-Za-z_][A-Za-z0-9_-]*([.][A-Za-z_][A-Za-z0-9_-]*)*\\b"
+    },
+    {
+      "name": "support.function.vitamin",
+      "match": "[A-Za-z_][A-Za-z0-9_-]*(?=[\"'])"
+    },
+    {
+      "name": "constant.numeric.decimal.vitamin",
+      "match": "\\b[+-]?[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9]+)?([A-Za-z][A-Za-z0-9_]*)?\\b"
+    },
+    {
+      "name": "constant.numeric.octal.vitamin",
+      "match": "\\b0[oO][0-7][0-7_]*\\b"
+    },
+    {
+      "name": "constant.numeric.hex.vitamin",
+      "match": "\\b0[xX][0-9A-Fa-f][0-9A-Fa-f_]*(\\.[0-9A-Fa-f][0-9A-Fa-f_]*)?([pP][+-]?[0-9]+)?\\b"
+    },
+    {
+      "name": "constant.numeric.bin.vitamin",
+      "match": "\\b0[bB][01][01_]*\\b"
+    },
+    {
+      "name": "string.quoted.double.vitamin",
+      "match": "\"(\\.|[^\"])*\""
+    },
+    {
+      "name": "string.quoted.single.vitamin",
+      "match": "'(\\.|[^\\'])*'"
+    },
+    {
+      "name": "string.quoted.single.vitamin",
+      "match": "`.*`"
+    },
+    {
+      "name": "storage.type.vitamin",
+      "match": "\\b[A-Z][A-Za-z0-9_-]*\\b"
+    },
+    {
+      "name": "entity.name.vitamin",
+      "match": "\\b[A-Za-z_][A-Za-z0-9_-]*\\b"
+    },
+    {
+      "name": "entity.other.vitamin",
+      "match": "([\\{\\[\\(]\\||\\|[\\}\\]\\)])"
+    },
+    {
+      "name": "keyword.operator.vitamin",
+      "match": "[@%$&=*+!?/^><.|~:-]+"
+    }
+  ]
+}
