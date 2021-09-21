@@ -67,7 +67,7 @@ func E(x: string): SyntaxRule = exp_rule(x, StrongerThan)
 
 func I(): SyntaxRule =
     let stat_sep = (";".tr | "$CNT".tr).named("Stmt-Sep")
-    let rule = "$IND".tr & "Any".e.list(stat_sep.plus).with_op("block").opt & stat_sep.star & "$DED".tr
+    let rule = "$IND".tr & "Any".e.list(stat_sep.plus).with_op("$block").opt & stat_sep.star & "$DED".tr
     rule.named("Block")
 
 func b(group: string): SyntaxRule = (I() | group.e).named(fmt"Block({group})")
@@ -183,9 +183,6 @@ parser.add_prefix_mix "Statement", "if", splice(
 for token in ["test", "xtest"]:
     parser.add_prefix_mix "Statement", token,
         splice(token.t & tok_rule("", tag=some(aStr), save=true) & ":".opt & "Any".b)
-
-for token in ["Record", "Variant"]:
-    parser.add_prefix_mix "Apply", token, token.t & "(".t & group().opt  & ")".t
 
 let cmp_operator = "==".ts | "!=".ts | "<".ts | "<=".ts | ">".ts | ">=".ts
 for token in ["==", "!=", ">", ">=", "<", "<="]:

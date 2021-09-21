@@ -402,10 +402,10 @@ test "short named opaque function syntax"
 #
 
 opaque Bool = Byte
-true = 1u8 as Bool
-false = 0u8 as Bool
-`and` = (x y: quoted(Expr)) -> expand(Expr) => quote(case $x of true $y of false false)
-`or` = (x y: quoted(Expr)) -> expand(Expr) => quote(case $x of true true of false $y)
+opaque true = 1u8 as Bool
+opaque false = 0u8 as Bool
+`and` = (x y: Bool) -> Bool => case x of true y of false false
+`or` = (x y: Bool) -> Bool => case x of true true of false y
 `not` = (x: Bool) -> Bool => case x of true false of false true
 
 test "bool operators"
@@ -434,6 +434,11 @@ test "single row records"
 	Single = Record(x: Type)
 	assert type-of(Single) == Type
 	assert type-of((x=Unit)) == Single
+
+xtest "compare records"
+	# why does this break the compiler? (SIGSEGV)
+	assert (x: true) == (x: true)
+	assert (y: true) != (x: true)
 
 test "unit records"
 	assert Unit == Record()

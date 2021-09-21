@@ -8,7 +8,7 @@ when defined(profile):
 when defined(profile):
     import nimprof
 
-import scan, parse, eval, format
+import scan, parse, eval, format, desugar
 import common/[exp, error, types]
 from syntax import parser
 
@@ -104,8 +104,11 @@ proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), sta
         if debug == "parse":
             for x in exprs: echo x.str_ugly
             quit(0)
+        if debug == "desugar":
+            for x in exprs: echo desugar(x).str_ugly
+            quit(0)
         for x in exprs:
-            let val = ctx.eval(x)
+            let val = ctx.eval(desugar(x))
             if print and val != unit:
                 echo val.str
     except VitaminError:

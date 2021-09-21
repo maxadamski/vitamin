@@ -40,4 +40,3 @@ test "mul"
     assert mul(one, three)(N)(s)(z) == s(s(s(z)))
     assert mul(two, two)(N)(s)(z) == s(s(s(s(z))))
     assert mul(two, three)(N)(s)(z) == s(s(s(s(s(s(z))))))
-

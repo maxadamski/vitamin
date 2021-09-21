@@ -1,4 +1,4 @@
-import options, strutils, strformat, sequtils, re
+import options, strutils, sequtils, re
 
 type
     Position* = object
@@ -9,7 +9,7 @@ type
         aInd, aDed, aCnt, aPar, aSym, aLit, aNum, aStr, aWs, aNl, aCom, aEsc
 
     ExpTag* = enum
-        expAtom, expTerm
+        expTerm, expAtom
 
     Exp* = object
         case kind*: ExpTag
@@ -32,6 +32,9 @@ func is_nil*(x: Exp): bool =
 
 func `[]`*(x: Exp, index: int): Exp =
     x.exprs[index]
+
+template `[]`*[A, B](x: Exp, slice: HSlice[A, B]): seq[Exp] =
+    x.exprs[slice]
 
 func `[]=`*(x: var Exp, index: int, value: Exp) =
     x.exprs[index] = value
@@ -150,7 +153,7 @@ func join*(x: Exp, sep: string): string =
 
 func str_ugly_rec(x: Exp): string =
     case x.kind
-    of expTerm: return "{" & x.exprs.map(str_ugly_rec).join(" ")  & "}"
+    of expTerm: return "(" & x.exprs.map(str_ugly_rec).join(" ")  & ")"
     of expAtom: return x.str
 
 func str_ugly*(x: Exp): string =
@@ -177,45 +180,7 @@ func str*(x: Exp): string =
         else:
             return x.value
     of expTerm:
-        if x.has_prefix("Lambda"):
-            var params: seq[string]
-            for p in x[1].exprs:
-                if p[0].is_nil and p[2].is_nil:
-                    params.add(p[1].str)
-                elif not p[0].is_nil and not p[1].is_nil:
-                    params.add(p[0].str & ": " & p[1].str)
-                else:
-                    params.add(p.str)
-            return "((" & params.join(", ") & ") -> " & x[2].str & ")"
-
-        elif x.has_prefix("lambda"):
-            var params: seq[string]
-            for par in x[1].exprs:
-                var name = if par[0].is_nil: "_" else: par[0].str
-                var typ = if par[1].is_nil: "" else: " : " & par[1].str
-                var val = if par[2].is_nil: "" else: " = " & par[2].str
-                params.add(name & typ & val)
-            let typ = if x[2].is_nil: "" else: " -> " & x[2].str
-            let body = x[3].str
-            let params_str = params.join(", ")
-            return "(({params_str}){typ} => {body})".fmt
-
-        elif x.exprs.len >= 3 and x.exprs[0].is_token("()"):
-            return x.exprs[1].str & "(" & x.exprs[2].str_group2 & ")"
-            #return x.exprs[1].str & "(" & x.exprs[2 .. ^1].map(str).join(", ") & ")"
-        elif x.exprs.len >= 2 and x.exprs[0].is_token("[]"):
-            return x.exprs[1].str & "[" & x.exprs[2 .. ^1].map(str).join(", ") & "]"
-        elif x.exprs.len >= 2 and x.exprs[0].is_token("Record"):
-            return x.exprs[0].str & "(" & x.exprs[1].str_group2 & ")"
-        elif x.exprs.len >= 1 and x.exprs[0].is_token("(_)"):
-            return "(" & x.exprs[1].str_group2 & ")"
-        elif x.exprs.len >= 1 and x.exprs[0].is_token("[_]"):
-            return "[" & x.exprs[1].str_group2 & "]"
-        else:
-            if x.exprs.len == 0:
-                return "()"
-            else:
-                return x.exprs[0].str & "(" & x.exprs[1 .. ^1].map(str).join(", ") & ")"
+        return x.str_ugly
 
 
 proc `$`*(x: Exp): string =

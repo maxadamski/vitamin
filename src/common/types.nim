@@ -45,44 +45,34 @@ type
         ctx*: Ctx
         with_trace*: bool
 
-    RecSlot* = object
-        name*: string
-        typ*: Exp
-        default*: Opt[Exp]
-        value*: Opt[Exp]
-        typ_inferred_from_default*: bool
-        typ_inferred_from_position*: bool
-
     RecField* = object
         name*: string
-        val*, typ*: Val
-
-    Rec* = object
-        fields*: seq[RecField]
+        typ*: Exp
+        default*: Exp # optional
 
     RecTyp* = object
-        slots*: seq[RecSlot]
+        fields*: seq[RecField]
         extensible*: bool
-        extension*: Opt[Exp]
+
+    Rec* = object
+        values*: Table[string, Val]
 
     BuiltinFunProc* = proc(ctx: Ctx, args: seq[Val]): Val
 
     FunParam* = object
         name*: string
         typ*: Exp
+        variadic_typ*: Exp
         default*: Opt[Exp]
-        did_infer_typ*: bool
-        searched*: bool
         quoted*: bool
         keyword*: bool
         variadic*: bool
-        lazy*: bool
 
     FunTyp* = object
         params*: seq[FunParam]
         result*: Exp
         #autoapply*: bool
-        is_macro*: bool
+        autoexpand*: bool
 
     Fun* = object
         name*: string # may be empty (anonymous function)
@@ -95,12 +85,14 @@ type
         buf*: pointer
 
     ValTag* = enum
-        NeuVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
+        NeverVal, NeuVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, ExpVal, MemVal, FunVal, FunTypeVal, ListLit
         NumLit, StrLit, I8, U8, I64, U64
 
     ValObj* = object
         case kind*: ValTag
+        of NeverVal:
+            discard
         of I8:
             i8*: int8
         of U8:
@@ -155,6 +147,9 @@ func Neu*(exp: Exp): Val =
 func Neu*(str: string): Val =
     Val(kind: NeuVal, exp: atom(str))
 
+func is_never*(x: Val): bool = x.kind == NeverVal
+
+#[
 func MakeRec*(fields: varargs[RecField]): Rec =
     Rec(fields: @fields)
 
@@ -166,6 +161,7 @@ func MakeFun*(typ: FunTyp, body: Exp, ctx: Ctx): Fun =
 
 func MakeFunTyp*(params: varargs[FunParam], ret: Exp): FunTyp =
     FunTyp(params: @params, result: ret)
+]#
 
 func MakeListLit*(values: varargs[Val]): Val =
     Val(kind: ListLit, values: @values)
@@ -174,6 +170,7 @@ func MakeListLit*(values: varargs[Val]): Val =
 
 func noun*(v: Val): string =
     case v.kind
+    of NeverVal: "unreachable"
     of I8, I64: "integer"
     of U8, U64: "unsigned integer"
     of ListLit: "list literal"
@@ -204,43 +201,42 @@ func bold*(x: Val): string = x.str.bold
 
 func str*(x: RecTyp): string =
     var res: seq[string]
-    for s in x.slots:
+    for s in x.fields:
         var repr = ""
         if s.name != "":
             repr &= s.name & ": "
         repr &= s.typ.str
-        s.default.if_some(default):
-            repr &= " = " & default.str
-        res.add(repr)
+        if not s.default.is_nil:
+            repr &= " = " & s.default.str
+        res &= repr
     "Record(" & res.join(", ") & ")"
 
 func str*(x: FunTyp, ret = true): string =
     var params: seq[string]
     for param in x.params:
         var s = param.name
-        if not param.did_infer_typ:
-            s &= ": "
-            if param.variadic: s &= "@variadic "
-            if param.quoted: s &= "@quoted "
-            s &= param.typ.str
+        s &= ": "
+        if param.variadic: s &= "@variadic "
+        if param.quoted: s &= "@quoted "
+        s &= param.typ.str
         param.default.if_some(default):
             s &= " = " & $default
         params.add(s)
     var res_str = " -> "
-    if x.is_macro: res_str &= "@expand "
+    if x.autoexpand: res_str &= "@expand "
     res_str &= x.result.str
     result = "(" & params.join(", ") & ")"
     if ret: result &= res_str
 
 func str*(x: Rec): string =
     var res: seq[string]
-    for f in x.fields:
-        let prefix = if f.name == "": "" else: f.name & "="
-        res.add(prefix & f.val.str)
+    for (name, val) in x.values.pairs:
+        res.add(name & "=" & val.str)
     "(" & res.join(", ") & ")"
 
 func str*(v: Val): string =
     case v.kind
+    of NeverVal: "unreachable"
     of NeuVal: v.exp.str
     of I8: $v.i8
     of U8: $v.u8

@@ -60,8 +60,10 @@ var next_gensym_id = 0
 var next_name_uid: Table[string, int]
 let type0* = Universe(0)
 let type1* = Universe(1)
-let unit* = Box(MakeRec())
-let unit_type* = Box(MakeRecTyp())
+let never* = UnionType()
+let unreachable* = Val(kind: NeverVal)
+let unit* = Box(Rec())
+let unit_type* = Box(RecTyp())
 
 proc gensym(prefix = "__"): string =
     next_gensym_id += 1
@@ -250,10 +252,12 @@ func `==`(x, y: FunTyp): bool =
     true
 
 func `==`(x, y: Rec): bool =
-    if x.fields.len != y.fields.len: return false
-    for xf in x.fields:
+    x.values.len == y.values.len
+    #[
+    if x.values.len != y.values.len: return false
+    for xf in x.values:
         var found = false
-        for yf in y.fields:
+        for yf in y.values:
             if xf.name == yf.name:
                 if xf.val == yf.val:
                     found = true 
@@ -263,13 +267,13 @@ func `==`(x, y: Rec): bool =
         if not found:
             return false 
     return true
+    ]#
 
 func `==`(x, y: RecTyp): bool =
-    if x.slots.len != y.slots.len: return false
-    let n = x.slots.len
-    let x_slots = x.slots.sorted_by_it(it.name)
-    let y_slots = y.slots.sorted_by_it(it.name)
-    for (a, b) in zip(x_slots, y_slots):
+    if x.fields.len != y.fields.len: return false
+    let x_fields = x.fields.sorted_by_it(it.name)
+    let y_fields = y.fields.sorted_by_it(it.name)
+    for (a, b) in zip(x_fields, y_fields):
         if a.name != b.name or a.typ != b.typ: return false
     return true
 
@@ -282,6 +286,7 @@ func `==`(x, y: seq[Val]): bool =
 func `==`*(x, y: Val): bool =
     if x.kind != y.kind: return false
     case x.kind
+    of NeverVal: true
     of TypeVal: x.level == y.level
     of UnionTypeVal, InterTypeVal: sets_equal(x.values, y.values)
     of ListLit: x.values == y.values
@@ -298,24 +303,26 @@ func `==`*(x, y: Val): bool =
     of U64: x.u64 == y.u64
 
 proc unify_sigma(ctx: Ctx, x, y: RecTyp): bool =
-    if x.slots.len != y.slots.len: return false
-    let n = x.slots.len
+    #echo $x, " ?= ", $y
+    if x.fields.len != y.fields.len: return false
+    let n = x.fields.len
     # FIXME: sort topologically by dependency order
-    let x_slots = x.slots
-    let y_slots = y.slots
+    let x_fields = x.fields
+    let y_fields = y.fields
     let local = ctx.extend()
-    for (a, b) in zip(x_slots, y_slots):
+    for (a, b) in zip(x_fields, y_fields):
         if a.name != b.name: return false
         let a_typ = local.eval(a.typ)
         let b_typ = local.eval(b.typ)
-        a.value.if_some(value):
-            let a_val = local.eval(value)
+        if not a.default.is_nil:
+            let a_val = local.eval(a.default)
             let a_typ = local.eval(a.typ)
             local.env.define(a.name, a_val, a_typ)
         if a_typ != b_typ: return false
     return true
 
 proc is_subtype*(ctx: Ctx, x, y: Val): bool =
+    #echo fmt"{x} {x.kind} ?= {y} {y.kind}"
     # is x a subtype of y
     let x = if x.kind == NeuVal: ctx.eval(x.exp) else: x
     let y = if y.kind == NeuVal: ctx.eval(y.exp) else: y
@@ -333,174 +340,122 @@ proc is_subtype*(ctx: Ctx, x, y: Val): bool =
         return y.values.any_it(ctx.is_subtype(x, it))
     if y.kind == InterTypeVal:
         return y.values.all_it(ctx.is_subtype(x, it))
-    x == y
+    return x == y
 
-#
-# Lambdas
-#
+func reify_param(param: FunParam): Exp =
+    result = term("$param".atom, param.name.atom)
+    result.exprs &= term(":".atom, param.typ)
+    if param.default.is_some: result.exprs &= term("=".atom, param.default.unsafe_get)
+    if param.variadic: result.exprs &= term("$variadic".atom, param.variadic_typ)
+    if param.keyword: result.exprs &= "$keyword".atom
+    if param.quoted: result.exprs &= "$quoted".atom
 
-proc get_typ*(ctx: Ctx, val: Fun): FunTyp =
-    val.typ.or_else:
-        raise ctx.error("Type of lambda {val.name.bold} must be assumed before usage! {ctx.src}".fmt)
+func reify_lambda_type(fun_typ: FunTyp): Exp =
+    result.exprs &= "$Lambda".atom
+    for param in fun_typ.params: result.exprs &= reify_param(param)
+    result.exprs &= term("$result".atom, fun_typ.result)
+    if fun_typ.autoexpand: result.exprs &= "$expand".atom
 
-proc make_lambda_param(ctx: Ctx, param: Exp): FunParam =
-    var (name, typ_exp, val_exp) = (param[0], param[1], param[2])
-    if name.is_nil:
-        name = atom("_")
-    if not name.is_atom:
-        raise ctx.error(exp=name, msg="Lambda parameter name must be an Atom, but got Term {name}. {name.src}".fmt)
+func reify_lambda(fun: Fun): Exp =
+    if fun.name.len > 0: return fun.name.atom
+    result.exprs &= "$lambda".atom & reify_lambda_type(fun.typ.unsafe_get).tail
+    result.exprs &= term("$body".atom, fun.body.unsafe_left)
 
-    var val = None(Exp)
-    var variadic_container = None(Exp)
-    var typ: Val
-    var quoted = false
-    var variadic = false
-    var lazy = false
-    var did_infer_typ = false
-    var searched = false
+proc eval_lambda_param(ctx: Ctx, exp: Exp): FunParam =
+    result.name = exp[1].value
+    for part in exp.exprs[2 .. ^1]:
+        if part.has_prefix(":"):
+            result.typ = ctx.norm(part[1])
+        elif part.has_prefix("="):
+            result.default = Some(ctx.norm(part[1]))
+        elif part.has_prefix("$variadic"):
+            result.variadic = true
+            result.variadic_typ = ctx.norm(part[1])
+        elif part == atom("$quoted"):
+            result.quoted = true
+        elif part == atom("$keyword"):
+            result.keyword = true
 
-    if not typ_exp.is_nil:
-        typ_exp = ctx.expand(typ_exp)
-        while typ_exp.has_prefix_any(["quoted", "variadic", "lazy"]):
-            case typ_exp[0].value
-            of "quoted":
-                typ_exp = typ_exp[1]
-                quoted = true
-            of "variadic":
-                variadic = true
-                if typ_exp.len == 3:
-                    variadic_container = Some(typ_exp[1])
-                    typ_exp = typ_exp[2]
-                else:
-                    typ_exp = typ_exp[1]
-            of "lazy":
-                typ_exp = typ_exp[1]
-                lazy = true
-            typ_exp = ctx.expand(typ_exp)
-
-        #if variadic:
-            #let container = variadic_container ?? atom("List")
-            #typ_exp = term(container, typ_exp)
-            #typ_exp = atom("List-Literal")
-
-        typ = ctx.eval(typ_exp)
-
-    if val_exp.is_token("_"):
-        searched = true
-    elif not val_exp.is_nil:
-        val = Some(val_exp)
-        var val_typ = ctx.infer_type(val_exp)
-        if typ_exp.is_nil:
-            did_infer_typ = true
-            typ = val_typ
-        elif not ctx.is_subtype(val_typ, typ):
-            raise ctx.error(exp=param, msg="Value of {val_typ} can't be used as a default value for parameter of {typ}. {param.src}".fmt)
-
-    elif typ_exp.is_nil:
-        raise ctx.error(exp=param, msg="You have to provide a type or default value for function parameters. {param.src}".fmt)
-
-    ctx.env.assume(name.value, typ, arg=true)
-
-    FunParam(
-        name: name.value,
-        typ: ctx.reify(typ),
-        default: val,
-        did_infer_typ: did_infer_typ,
-        quoted: quoted,
-        variadic: variadic,
-        lazy: lazy,
-        searched: searched,
-    )
-
-proc make_lambda_type(ctx: Ctx, params: seq[Exp], ret: Exp, body: Exp): tuple[typ: FunTyp, ctx: Ctx] =
-    let local = ctx.extend(eval_mode=EvalMode.Norm)
-
-    # TODO: ensure that params form a DAG, and add params in topological order
-    # assume all params in the environment
-    var param_list: seq[FunParam]
-    for param in params:
-        param_list.add(local.make_lambda_param(param))
-
-    var ret_exp = ret
-    var is_macro = false
-    var did_infer_result = false
-
-    if not ret_exp.is_nil:
-        ret_exp = local.expand(ret_exp)
-        if ret_exp.has_prefix("expand"):
-            ret_exp = ret_exp[1]
-            is_macro = true
-        ret_exp = local.norm(ret_exp)
-
-    if not body.is_nil:
-        let body_typ = local.infer_type(body)
-        if ret_exp.is_nil:
-            did_infer_result = true
-            ret_exp = local.reify(body_typ)
-        else:
-            let ret_typ = local.eval(ret_exp)
-            if not ctx.is_subtype(body_typ, ret_typ):
-                raise error(body, "Function body type {body_typ}, doesn't match expected return type {ret_typ}. {term(ret_exp, body).src}".fmt)
-    elif ret_exp.is_nil:
-        raise ctx.error("You have to provide a function result type or function body, so the result type can be inferred. {ctx.src}".fmt)
-
-    let fun_typ = FunTyp(
-        params: param_list,
-        result: ret_exp,
-        is_macro: is_macro,
-    )
-
-    #for k, v in ctx.env.vars.pairs:
-    #    echo "capture {k} = {v}".fmt
-    #    local.env.vars[k] = v
-
-    (typ: fun_typ, ctx: local)
-
-proc desugar_lambda_type_params(ctx: Ctx, exp: Exp): Exp =
-    var params: seq[Exp]
-    if not exp.has_prefix("(_)"):
-        return term(term(term(), exp, term()))
-    let total = exp[1]
-    for outer in total.exprs:
-        for inner in outer.exprs:
-            var inner_typ: Exp = term()
-            var inner_params: seq[Exp]
-            for param in inner.exprs.reverse_iter:
-                var (name, typ, val) = (term(), term(), term())
-                var param = param
-                if param.kind == expAtom:
-                    name = param
-                    typ = inner_typ
-                else:
-                    if param.has_prefix("="):
-                        val = param[2]
-                        param = param[1]
-                    if param.kind == expAtom:
-                        name = param
-                    elif param.has_prefix(":"):
-                        name = param[1]
-                        typ = param[2]
-                        inner_typ = typ
-                    else:
-                        assert inner.exprs.len == 1
-                        name = atom("_")
-                        typ = param
-                inner_params.add(term(name, typ, val))
-            params &= inner_params.reversed
-    term(params)
-
-proc expand_lambda*(ctx: Ctx, lhs, rhs: Exp): Exp =
-    # `=>` : (lhs rhs: Quoted(Expr)) -> Eval(Expr)
-    #let (lhs, rhs) = (args[0].exp, args[1].exp)
-    if lhs.has_prefix("(_)"):
-        let par = desugar_lambda_type_params(ctx, lhs)
-        term(atom("lambda"), par, term(), rhs)
-    elif lhs.has_prefix("->"):
-        let par = desugar_lambda_type_params(ctx, lhs[1])
-        let ret = lhs[2]
-        term(atom("lambda"), par, ret, rhs)
+    let typ = if result.typ.is_nil:
+        ctx.infer_type(result.default.unsafe_get)
     else:
-        raise ctx.error(exp=lhs, msg="Bad lambda term ({lhs.str} => {rhs.str}). {lhs.src}".fmt)
+        ctx.eval(result.typ)
+
+    ctx.env.assume(result.name, typ, arg=true)
+
+proc eval_lambda_type(ctx: Ctx, exp: Exp): FunTyp =
+    # TODO: ensure that params form a DAG, and add params in topological order
+    let local = ctx.extend()
+    for part in exp.tail:
+        if part.has_prefix("$param"):
+            result.params &= local.eval_lambda_param(part)
+        elif part.has_prefix("$result"):
+            result.result = local.norm(part[1])
+        elif part.is_atom("$expand"):
+            result.autoexpand = true
+        else:
+            raise ctx.error("Unexpected $Lambda form {part.str_ugly}. {exp.src}".fmt)
+
+proc infer_lambda_type(ctx: Ctx, exp: Exp, extend=true): FunTyp =
+    var declared_type = unreachable
+    var inferred_type = unreachable
+    let local = if extend: ctx.extend() else: ctx
+    for part in exp.tail:
+        if part.has_prefix("$param"):
+            result.params &= local.eval_lambda_param(part)
+        elif part.has_prefix("$body"):
+            inferred_type = local.infer_type(part[1])
+        elif part.has_prefix("$result"):
+            declared_type = local.eval(part[1])
+        elif part.is_atom("$expand"):
+            result.autoexpand = true
+        else:
+            assert false
+    if not declared_type.is_never and not local.is_subtype(inferred_type, declared_type):
+        raise ctx.error("Inferred type of body {inferred_type.str} is not a subtype of {declared_type.str}. {exp.src}".fmt)
+    let returns = if not declared_type.is_never: declared_type else: inferred_type
+    result.result = ctx.reify(returns)
+
+proc eval_lambda(ctx: Ctx, exp: Exp): Fun =
+    let local = ctx.extend()
+    result.typ = Some(local.infer_lambda_type(exp, extend=false))
+    result.ctx = Some(ctx)
+    for part in exp.tail:
+        if part.has_prefix("$body"):
+            let body = local.norm(part[1])
+            result.body = Left[Exp, BuiltinFunProc](body)
+
+proc infer_record_type(ctx: Ctx, exp: Exp): RecTyp =
+    for part in exp.tail:
+        if part.has_prefix("$arg"):
+            result.fields &= RecField(name: part[1].value, typ: ctx.reify(ctx.infer_type(part[2])))
+        else:
+            assert false
+
+proc eval_record_type(ctx: Ctx, exp: Exp): RecTyp =
+    let local = ctx.extend()
+    for part in exp.tail:
+        if part.has_prefix("$field"):
+            var field : RecField
+            field.name = part[1].value
+            for part in part[2 .. ^1]:
+                if part.has_prefix(":"):
+                    field.typ = local.norm(part[1])
+                elif part.has_prefix("="):
+                    field.default = part[1]
+                else:
+                    assert false
+            result.fields &= field
+        else:
+            assert false
+
+proc eval_record(ctx: Ctx, exp: Exp): Rec =
+    for part in exp.tail:
+        if part.has_prefix("$arg"):
+            let (name, val) = (part[1], part[2])
+            result.values[name.value] = ctx.eval(val)
+        else:
+            raise
 
 proc apply_lambda(ctx: Ctx, fun: Fun, exp: Exp): Val =
     let norm = ctx.match_apply_args(exp)
@@ -529,6 +484,7 @@ proc apply_lambda(ctx: Ctx, fun: Fun, exp: Exp): Val =
             body(local, args)
 
 proc eval_apply(ctx: Ctx, exp: Exp): Val =
+    #echo "eval " & exp.str_ugly
     var head = ctx.eval(exp[0])
     case head.kind
     of FunVal:
@@ -540,183 +496,6 @@ proc eval_apply(ctx: Ctx, exp: Exp): Val =
     else:
         raise ctx.error(exp=exp, msg="Can't evaluate, because {head.noun} {head.bold} of type {ctx.dynamic_type(head).bold} is not callable. {exp[0].src}".fmt)
 
-proc expand_apply(ctx: Ctx, lhs, rhs: Exp): Exp =
-    # `()` : (func: Expr, args: [[[Expr]]]) -> Eval(Expr)
-    var call = @[lhs]
-    let total = rhs
-    assert total.len <= 1
-    for outer in total.exprs:
-        for inner in outer.exprs:
-            for exp in inner.exprs:
-                call &= exp
-    term(call)
-
-#
-# Records
-#
-
-proc expand_record(ctx: Ctx, exp: Exp): Exp =
-    # (e1, e2, .., en)
-    var fields: seq[Exp]
-    for group in exp.exprs:
-        if group.len != 1:
-            raise ctx.error(exp=exp, msg="Tuple elements must be spearated by a comma {group.src}".fmt)
-
-        let arg = group[0]
-        if not arg.has_prefix("="):
-            raise ctx.error(exp=arg, msg="Missing label for record field {arg.src}".fmt)
-
-        assert arg.len == 3
-        var name, typ, val: Exp
-        if arg[1].has_prefix(":"):
-            let name_typ = arg[1]
-            assert name_typ.len == 3
-            name = name_typ[1]
-            typ = name_typ[2]
-            val = arg[2]
-        else:
-            name = arg[1]
-            val = arg[2]
-            typ = term()
-        
-        if name.kind != expAtom:
-            raise ctx.error(exp=name, msg="Field name must be an atom, but got term {name}. {name.src}".fmt)
-
-        fields.add(term(name, typ, val))
-    return term(atom("record"), term(fields))
-
-proc eval_record_type(ctx: Ctx, arg: Exp): RecTyp =
-    var slots: seq[RecSlot]
-    var extensible = false
-    var extension: Opt[Exp]
-    let local = ctx.extend()
-    for group in arg.exprs:
-        # FIXME: correct ordering inside param list
-        if not group.is_term: continue
-        for list in group.exprs: 
-            var list_type = None(Exp)
-            for x in list.exprs.reverse_iter:
-                var slot_name: string
-                var slot_default = None(Exp)
-                var slot_typ: Exp
-                var name_typ = x
-                case x.kind
-                of expAtom:
-                    if x.value == "...":
-                        extensible = true
-                        continue
-                    slot_name = x.value
-                    match list_type:
-                        Some(list_type): slot_typ = list_type
-                        None: assert false
-                of expTerm:
-                    if x[0].is_token(".."):
-                        assert x.len == 2
-                        extension = Some(x[1])
-                        continue
-                    if x[0].is_token("="):
-                        name_typ = x[1]
-                        slot_default = Some(x[2])
-                    if not name_typ[0].is_token(":"):
-                        raise local.error(exp=x, msg="Expected a pair `name : type`, but got {name_typ.str}. {name_typ.src}".fmt)
-                    if name_typ[1].kind != expAtom:
-                        raise local.error(exp=x, msg="Field name must be an atom, but got {name_typ[1].str}. {name_typ[1].src}".fmt)
-                    slot_name = name_typ[1].value
-                    let slot_typ_val = local.eval(name_typ[2])
-                    slot_typ = local.reify(slot_typ_val)
-                    list_type = Some(slot_typ)
-                    local.env.assume(slot_name, slot_typ_val)
-
-                slots.add(RecSlot(name: slot_name, typ: slot_typ, default: slot_default))
-
-    return MakeRecTyp(slots, extensible, extension)
-
-proc eval_record(ctx: Ctx, arg: Exp): Rec =
-    var fields: seq[RecField]
-    let local = ctx.extend()
-    for exp in arg.exprs:
-        let (name_exp, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
-        let name = name_exp.value
-        let val = ctx.eval(val_exp)
-        var typ = ctx.infer_type(val_exp)
-        if not typ_exp.is_nil:
-            let exp_typ = ctx.eval(typ_exp)
-            if not ctx.is_subtype(typ, exp_typ):
-                raise ctx.error(exp=exp, msg="Expected value of {exp_typ}, but found {val} of {typ}. {exp.src}".fmt)
-            typ = exp_typ
-        local.env.define(name, val, typ, Some(exp))
-        fields.add(RecField(name: name, val: val, typ: typ))
-    return MakeRec(fields)
-
-proc record_infer(ctx: Ctx, arg: Exp): RecTyp =
-    var slots: seq[RecSlot]
-    let local = ctx.extend()
-    for exp in arg.exprs:
-        let (name_exp, typ_exp, val_exp) = (exp[0], exp[1], exp[2])
-        let name = name_exp.value
-        let typ_val = if not typ_exp.is_nil:
-            local.eval(typ_exp)
-        else:
-            local.infer_type(val_exp)
-        local.env.assume(name, typ_val)
-        slots.add(RecSlot(name: name, typ: local.reify(typ_val), value: Some(val_exp)))
-    return MakeRecTyp(slots)
-
-#
-# Syntax sugar
-#
-
-proc expand_group(ctx: Ctx, exprs: Exp): Exp =
-    # `(_)` : (args: [[[Expr]]]) -> Eval(Expr)
-
-    # Anatomy of a group:
-    # (a b, d e; f g, h i)
-    #  _ _  _ _  _ _  _ _ exprs       (level 0)
-    #  ---  ---  ---  --- inner group (level 1)
-    #  --------  -------- outer group (level 2)
-    #  ------------------ total group (level 3)
-
-    if exprs.len == 0:
-        # ()
-        return term(atom("record"), term())
-    if exprs.len > 1:
-        # (e1; e2; ...; en)
-        return term(atom("block") & exprs.exprs)
-
-    let lists = exprs[0].exprs
-    if lists.len == 1 and lists[0].len == 1:
-        # (e)
-        # FIXME: detect single element tuple with a trailing comma (e,)
-        let inner = lists[0][0]
-        let is_tuple = inner.is_term(3) and inner[0].is_token("=")
-        if not is_tuple:
-            return inner
-
-    return expand_record(ctx, exprs[0])
-
-proc expand_define(ctx: Ctx, lhs, rhs: Exp): Exp =
-    if lhs.is_term:
-        if lhs.has_prefix("->"):
-            # short function definition with return type
-            let name = lhs[1][1]
-            let params = term(atom("(_)"), lhs[1][2])
-            let res_typ = lhs[2]
-            let fun_typ = term(atom("->"), params, res_typ)
-            let fun = term(atom("=>"), fun_typ, rhs)
-            return term(atom("define"), name, fun)
-        if lhs.has_prefix("()"):
-            # short function definition or pattern matching
-            let name = lhs[1]
-            let params = term(atom("(_)"), lhs[2])
-            let fun = term(atom("=>"), params, rhs)
-            return term(atom("define"), name, fun)
-    return term(atom("define"), lhs, rhs)
-
-proc expand_compare(ctx: Ctx, args: seq[Exp]): Exp =
-    # TODO: handle more cases
-    let exp = term(args)
-    if args.len != 3: raise ctx.error("Only two-argument comparisons are supported right now. {ctx.src}".fmt)
-    term(args[1], args[0], args[2])
 
 #
 # Base functionality
@@ -775,49 +554,38 @@ proc eval_define(ctx: Ctx, lhs, rhs: Exp, only_assume = false): Val =
     return unit
 
 proc eval_assume(ctx: Ctx, lhs, rhs: Exp): Val =
-    var names: seq[string]
-    if lhs.kind == expAtom:
-        names.add(lhs.value)
-    elif lhs.has_prefix(","):
-        for arg in lhs.tail:
-            if arg.kind != expAtom:
-                raise error(arg, fmt"The left side of assumption must be a list of names. {arg.src}")
-            names.add(arg.value)
+    let name = lhs.value
+    let local = ctx.env.find(name)
+    let exp = term(lhs, rhs)
+    if local != nil:
+        if local.vars[name].site.is_none:
+            local.vars[name].site = Some(lhs)
+
+        match local.vars[name].val:
+            None:
+                discard
+                #if ctx.env == local:
+                #    raise error(exp, "Already assumed {lhs} in this scope. {lhs.src}".fmt)
+            Some(val):
+                if val.kind == FunVal and val.fun.builtin:
+                    let builtin = val.fun.builtin
+                    let typ_val = ctx.eval(rhs)
+                    if typ_val.kind != FunTypeVal:
+                        raise ctx.error(exp=rhs, msg="The type of builtin function {val.fun.name.bold} must be a function type, but got {typ_val.noun} {typ_val.bold}. {rhs.src}".fmt)
+                    let typ = typ_val.fun_typ
+                    local.vars[name].typ = Some(Val(kind: FunTypeVal, fun_typ: typ))
+                    local.vars[name].val = Some(Box(Fun(
+                        name: val.fun.name,
+                        body: val.fun.body,
+                        typ: Some(typ),
+                        ctx: None(Ctx),
+                        builtin: true,
+                    )))
+
     else:
-        raise error(lhs, fmt"The left side of assumption must be a name or a list of names. {lhs.src}")
-
-    for name in names:
-        let local = ctx.env.find(name)
-        let exp = term(lhs, rhs)
-        if local != nil:
-            if local.vars[name].site.is_none:
-                local.vars[name].site = Some(exp)
-
-            match local.vars[name].val:
-                None:
-                    if ctx.env == local:
-                        raise error(exp, "Already assumed {name} in this scope. {exp.src}".fmt)
-                Some(val):
-                    if val.kind == FunVal and val.fun.builtin:
-                        let builtin = val.fun.builtin
-                        let typ_val = ctx.eval(rhs)
-                        if typ_val.kind != FunTypeVal:
-                            raise ctx.error(exp=rhs, msg="The type of builtin function {val.fun.name.bold} must be a function type, but got {typ_val.noun} {typ_val.bold}. {rhs.src}".fmt)
-                        let typ = typ_val.fun_typ
-                        local.vars[name].typ = Some(Val(kind: FunTypeVal, fun_typ: typ))
-                        local.vars[name].val = Some(Box(Fun(
-                            name: val.fun.name,
-                            body: val.fun.body,
-                            typ: Some(typ),
-                            ctx: None(Ctx),
-                            builtin: true,
-                        )))
-
-        else:
-            let typ = ctx.eval(rhs)
-            ctx.env.assume(name, typ, site=Some(exp))
-
-    return unit
+        let typ = ctx.eval(rhs)
+        ctx.env.assume(name, typ, site=Some(exp))
+        return unit
 
 proc v_cast(ctx: Ctx, lhs: Exp, dst_typ: Val): Val =
     var src_typ = ctx.infer_type(lhs)
@@ -858,6 +626,8 @@ proc eval_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
     let switch = ctx.eval(switch_exp)
     let typ = ctx.infer_type(switch_exp)
     if switch.kind == NeuVal:
+        if ctx.eval_mode == EvalMode.Norm:
+            return Neu(term(@["case".atom, switch_exp] & cases))
         raise ctx.error("Can't match on an unevaluated value {switch_exp.bold}. {switch_exp.src}".fmt)
     for branch in cases:
         let local = ctx.extend()
@@ -874,6 +644,9 @@ proc eval_test(ctx: Ctx, name: string, test: Exp) =
         let local = ctx.extend()
         discard local.eval(test)
         stdout.write "test " & name & " \e[32mPASSED\e[0m\n".fmt
+    except AssertionDefect:
+        echo get_current_exception().getStackTrace()
+        stdout.write "test " & name & " \e[31mFAILED\e[0m\n".fmt
     except VitaminError:
         stdout.write "test " & name & " \e[31mFAILED\e[0m\n".fmt
         let error = cast[ref VitaminError](get_current_exception())
@@ -885,8 +658,6 @@ proc eval_xtest(ctx: Ctx, name: string, body_exp: Exp) =
 proc eval_assert(ctx: Ctx, exp: Exp) =
     var cond = ctx.expand(exp)
     var negate = false
-    if cond.has_prefix("compare"):
-        cond = expand_compare(ctx, cond.tail)
     if cond.has_prefix("not"):
         cond = ctx.expand(cond[1])
         negate = true
@@ -935,43 +706,12 @@ proc eval_assert(ctx: Ctx, exp: Exp) =
         raise error(exp, "assert doesn't support expressions like {cond.bold} {exp.src}".fmt)
 
 #
-# Quasiquotation
-#
-
-proc unquote(ctx: Ctx, x: Exp): Exp =
-    let res = ctx.eval(x[1])
-    if res.kind != ExpVal:
-        raise error(x, fmt"You can only unquote expressions, but you tried to unquote a value {res.str} of type {ctx.dynamic_type(res)}. {x.src}")
-    res.exp
-
-proc unquote_splice(ctx: Ctx, x: Exp): seq[Exp] =
-    let res = ctx.eval(x[1])
-    if res.kind != ExpVal:
-        raise error(x, fmt"You can only splice terms, but you tried to splice a value of type {ctx.dynamic_type(res)}. {x.src}")
-    let exp = res.exp
-    if exp.kind != expTerm:
-        raise error(x, fmt"You can only splice terms, but you tried to splice an atom `{exp.value}`. {x.src}")
-    exp.exprs
-
-proc quasiquote(ctx: Ctx, x: Exp): Exp =
-    if x.kind == expAtom: return x
-    if x.has_prefix("$"):
-        return unquote(ctx, x)
-    var exprs: seq[Exp]
-    for sub in x.exprs:
-        if sub.has_prefix("$$"):
-            exprs &= unquote_splice(ctx, sub)
-        else:
-            exprs.add(quasiquote(ctx, sub))
-    term(exprs)
-
-#
 # Interpreter 
 #
 
 proc dynamic_level(ctx: Ctx, val: RecTyp): int =
     result = 0
-    for slot in val.slots:
+    for slot in val.fields:
         result = max(result, ctx.infer_level(slot.typ))
 
 proc dynamic_level(ctx: Ctx, val: FunTyp): int =
@@ -1006,15 +746,19 @@ proc reify_fun_params*(params: seq[FunParam]): Exp =
 
 proc dynamic_type*(ctx: Ctx, val: Val): Val =
     case val.kind
+    of NeverVal:
+        never
     of TypeVal, RecTypeVal, FunTypeVal, UnionTypeVal, InterTypeVal:
         Universe(ctx.dynamic_level(val))
     of RecVal:
-        var slots: seq[RecSlot]
-        for field in val.rec.fields:
-            slots.add(RecSlot(name: field.name, typ: ctx.reify(field.typ)))
-        Box(MakeRecTyp(slots))
+        var fields: seq[RecField]
+        for (name, val) in val.rec.values.pairs:
+            fields &= RecField(name: name, typ: ctx.reify(ctx.infer_type(ctx.reify(val))))
+        Val(kind: RecTypeVal, rec_typ: RecTyp(fields: fields))
     of FunVal:
-        Val(kind: FunTypeVal, fun_typ: get_typ(ctx, val.fun))
+        let typ = val.fun.typ.or_else:
+            raise ctx.error("Type of lambda {val.fun.name.bold} must be assumed before usage! {ctx.src}".fmt)
+        Val(kind: FunTypeVal, fun_typ: typ)
     of I8:  ctx.eval("I8".atom)
     of U8:  ctx.eval("U8".atom)
     of I64: ctx.eval("I64".atom)
@@ -1093,7 +837,7 @@ proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
             par_done[i] = DEFAULT
 
     for i, arg in tail:
-        if arg.has_prefix("="):
+        if arg.has_prefix("$define"):
             if arg[1].kind != expAtom:
                 raise ctx.error(exp=arg, msg="Parameter name must be an atom, but got {arg[1].bold}. {exp.src}".fmt)
             let key = arg[1].value
@@ -1135,7 +879,7 @@ proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
     for i, (arg, par) in zip(arg_norm, typ.params):
         if par.variadic:
             let par = typ.params[variadic_par]
-            let par_typ = local.eval(par.typ)
+            let par_typ = local.eval(par.variadic_typ)
             for arg in variadic_arg:
                 let arg_typ = local.infer_type(arg)
                 if not local.is_subtype(arg_typ, par_typ):
@@ -1155,7 +899,7 @@ proc is_macro_expr*(ctx: Ctx, exp: Exp): bool =
     if exp.len >= 1 and exp.head.is_atom:
         let typ = ctx.env.lookup_type(exp.head.value).or_else: return false
         if typ.kind == FunTypeVal:
-            return typ.fun_typ.is_macro
+            return typ.fun_typ.autoexpand
     return false
 
 #
@@ -1172,6 +916,14 @@ proc norm*(ctx: Ctx, exp: Exp): Exp =
 
 proc reify*(ctx: Ctx, val: Val): Exp =
     case val.kind
+    of U8:
+        term("num-u8".atom, atom($val.u8, aNum))
+    of I8:
+        term("num-i8".atom, atom($val.i8, aNum))
+    of U64:
+        term("num-u64".atom, atom($val.u64, aNum))
+    of I64:
+        term("num-i64".atom, atom($val.i64, aNum))
     of TypeVal:
         atom("Type")
     of ExpVal:
@@ -1182,31 +934,18 @@ proc reify*(ctx: Ctx, val: Val): Exp =
         atom("\"" & val.str.escape & "\"", tag=aStr)
     of NeuVal:
         return val.exp
-    of UnionTypeVal, InterTypeVal:
-        let op = case val.kind
-        of UnionTypeVal: "Union"
-        of InterTypeVal: "Inter"
-        else: raise
-        term(atom(op) & val.values.map_it(ctx.reify(it)))
+    of UnionTypeVal:
+        term(atom("Union") & val.values.map_it(ctx.reify(it)))
+    of InterTypeVal:
+        term(atom("Inter") & val.values.map_it(ctx.reify(it)))
     of FunTypeVal:
-        # TODO: handle pragmas
-        let ret_exp = val.fun_typ.result
-        let par_exp = reify_fun_params(val.fun_typ.params)
-        term(atom("Lambda"), par_exp, ret_exp)
+        reify_lambda_type(val.fun_typ)
     of FunVal:
-        if val.fun.name != "": return atom(val.fun.name)
-        let typ = val.fun.typ.or_else:
-            raise ctx.error("Can't reify lambda without a type. {ctx.src}")
-        if val.fun.body.is_right:
-            raise ctx.error("Can't reify unnamed builtin lambda. {ctx.src")
-        var body = val.fun.body.unsafe_left
-        let ret_exp = typ.result
-        let par_exp = reify_fun_params(typ.params)
-        term(atom("lambda"), par_exp, ret_exp, body)
+        reify_lambda(val.fun)
     of RecTypeVal:
-        term(atom("Record"))
+        term(atom("$Record"))
     of RecVal:
-        term(atom("record"))
+        term(atom("$record"))
     else:
         raise ctx.error("Can't reify {val.noun} {val.bold}. {ctx.src}".fmt)
 
@@ -1223,6 +962,7 @@ proc infer_level(ctx: Ctx, exp: Exp): int =
 
 proc infer_type*(ctx: Ctx, exp: Exp): Val =
     let exp = ctx.expand(exp)
+    #echo "infer " & exp.str_ugly
     case exp.kind:
     of expAtom:
         case exp.tag:
@@ -1241,14 +981,29 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
             return unit
         if exp[0].kind == expAtom:
             case exp[0].value:
+            of "$define":
+                return ctx.eval("Unit".atom)
+            of "$assume":
+                return ctx.eval("Unit".atom)
+            of "$Lambda":
+                return Universe(ctx.dynamic_level(ctx.eval(exp)))
+            of "$lambda":
+                return Box(ctx.infer_lambda_type(exp))
+            of "$Record":
+                return Universe(ctx.dynamic_level(ctx.eval(exp)))
+            of "$record":
+                return Box(ctx.infer_record_type(exp))
             of "$quote":
                 return ctx.eval("Expr".atom)
             of "$list":
                 return ctx.eval("List-Literal".atom)
+            of "$block":
+                var res = unit_type
+                for stat in exp.tail:
+                    res = ctx.infer_type(stat)
+                return res
             of "unwrap":
                 return ctx.infer_type(exp[1])
-            of "define":
-                return ctx.eval("Unit".atom)
             of "case":
                 return ctx.infer_case(exp[1], exp.exprs[2 .. ^1])
             of "as":
@@ -1260,6 +1015,7 @@ proc infer_type*(ctx: Ctx, exp: Exp): Val =
 
 proc eval*(ctx: Ctx, exp: Exp): Val =
     let exp = ctx.expand(exp)
+    #echo "eval " & exp.str_ugly
     case exp.kind
     of expAtom:
         case exp.tag
@@ -1272,25 +1028,33 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
             raise ctx.error(trace=true, msg="Can't evaluate empty term. {exp.src}".fmt)
         if exp[0].is_atom:
             case exp[0].value
-            of "$list":
-                return Val(kind: ListLit, values: ctx.eval_all(exp.tail))
+            of "$define":
+                return ctx.eval_define(exp[1], exp[2])
+            of "$assume":
+                return ctx.eval_assume(exp[1], exp[2])
+            of "$Lambda":
+                return Val(kind: FunTypeVal, fun_typ: ctx.eval_lambda_type(exp))
+            of "$lambda":
+                return Val(kind: FunVal, fun: ctx.eval_lambda(exp))
+            of "$Record":
+                return Val(kind: RecTypeVal, rec_typ: ctx.eval_record_type(exp))
+            of "$record":
+                return Val(kind: RecVal, rec: ctx.eval_record(exp))
             of "$quote":
                 return if exp.len == 1: Box(term()) else: Box(exp[1])
-            of "case":
-                return ctx.eval_case(exp[1], exp.exprs[2 .. ^1])
-            of "unwrap":
-                return ctx.unwrap(exp[1])
-            of "define":
-                return ctx.eval_define(exp[1], exp[2])
-            of ":":
-                return ctx.eval_assume(exp[1], exp[2])
-            of "as":
-                return ctx.v_cast(exp[1], ctx.eval(exp[2]))
-            of "block":
+            of "$block":
                 var res = unit
                 for stat in exp.tail:
                     res = eval(ctx, stat)
                 return res
+            of "$list":
+                return Val(kind: ListLit, values: ctx.eval_all(exp.tail))
+            of "case":
+                return ctx.eval_case(exp[1], exp.exprs[2 .. ^1])
+            of "unwrap":
+                return ctx.unwrap(exp[1])
+            of "as":
+                return ctx.v_cast(exp[1], ctx.eval(exp[2]))
         return ctx.eval_apply(exp)
     raise ctx.error(exp=exp, msg="I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
 
@@ -1309,9 +1073,6 @@ proc set_builtin_fun(ctx: Ctx, name: string, fun: BuiltinFunProc) =
 template set_builtin_fun_inline(gctx: Ctx, name: string, stat: untyped): untyped =
     gctx.set_builtin_fun name, (proc (ctx {.inject.}: Ctx, args {.inject.}: seq[Val]): Val = stat)
 
-template def_builtin_fun_inline(gctx: Ctx, name: string, typ: FunTyp, stat: untyped): untyped =
-    gctx.def_builtin_fun name, (proc (ctx {.inject.}: Ctx, args {.inject.}: seq[Val]): Val = stat), typ
-
 var root_ctx* = Ctx(env: Env(parent: nil))
 
 root_ctx.env.define "Type", type0, type1
@@ -1326,133 +1087,11 @@ root_ctx.set_builtin_fun "Union", eval_union
 
 root_ctx.set_builtin_fun "Inter", eval_inter
 
-root_ctx.def_builtin_fun_inline "=", FunTyp(
-    params: @[
-        FunParam(name: "pattern", typ: atom("Expr"), quoted: true),
-        FunParam(name: "expr", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-):
-    Box(expand_define(ctx, args[0].exp, args[1].exp))
-
-root_ctx.def_builtin_fun_inline "@", FunTyp(
-    params: @[
-        FunParam(name: "head", typ: atom("Expr"), quoted: true),
-        FunParam(name: "args", typ: atom("Expr"), quoted: true),
-        FunParam(name: "last", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-):
-    Box(term(args[0].exp & args[1].exp.exprs & args[2].exp))
-
-root_ctx.def_builtin_fun_inline "(_)", FunTyp(
-    params: @[
-        FunParam(name: "group", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-):
-    Box(expand_group(ctx, args[0].exp))
-
-root_ctx.def_builtin_fun_inline "()", FunTyp(
-    params: @[
-        FunParam(name: "func", typ: atom("Expr"), quoted: true),
-        FunParam(name: "args", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-):
-    Box(expand_apply(ctx, args[0].exp, args[1].exp))
-
-root_ctx.def_builtin_fun_inline "=>", FunTyp(
-    params: @[
-        FunParam(name: "head", typ: atom("Expr"), quoted: true),
-        FunParam(name: "body", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-):
-    Box(expand_lambda(ctx, args[0].exp, args[1].exp))
-
-root_ctx.def_builtin_fun_inline "->", FunTyp(
-    params: @[
-        FunParam(name: "params", typ: atom("Expr"), quoted: true),
-        FunParam(name: "result", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-    is_macro: true,
-):
-    let (par_exp, ret_exp) = (args[0].exp, args[1].exp)
-    let par = desugar_lambda_type_params(ctx, par_exp)
-    Box(term(atom("Lambda"), par, ret_exp))
-
-root_ctx.def_builtin_fun_inline "lambda-infer", FunTyp(
-    params: @[
-        FunParam(name: "params", typ: atom("Expr")),
-        FunParam(name: "result", typ: atom("Expr")),
-        FunParam(name: "body", typ: atom("Expr")),
-    ],
-    result: atom("Type"),
-):
-    let (par, ret, body) = (args[0].exp.exprs, args[1].exp, args[2].exp)
-    let (typ, _) = make_lambda_type(ctx, par, ret, body)
-    Box(typ)
-
-root_ctx.def_builtin_fun_inline "lambda", FunTyp(
-    params: @[
-        FunParam(name: "params", typ: atom("Expr"), quoted: true),
-        FunParam(name: "result", typ: atom("Expr"), quoted: true),
-        FunParam(name: "body", typ: atom("Expr"), quoted: true),
-    ],
-    result: term(atom("lambda-infer"), atom("params"), atom("result"), atom("body")),
-):
-    let (par, ret, body) = (args[0].exp.exprs, args[1].exp, args[2].exp)
-    let (typ, closure) = make_lambda_type(ctx, par, ret, body)
-    Box(MakeFun(typ=typ, body=body, ctx=closure))
-
-root_ctx.def_builtin_fun_inline "Lambda", FunTyp(
-    params: @[
-        FunParam(name: "params", typ: atom("Expr"), quoted: true),
-        FunParam(name: "result", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Type"),
-):
-    let (par, ret, body) = (args[0].exp.exprs, args[1].exp, term())
-    let (typ, _) = make_lambda_type(ctx, par, ret, body)
-    Box(typ)
-
-root_ctx.def_builtin_fun_inline "quote", FunTyp(
-    params: @[
-        FunParam(name: "expr", typ: atom("Expr"), quoted: true),
-    ],
-    result: atom("Expr"),
-):
-    Box(quasiquote(ctx, args[0].exp))
-
-
-root_ctx.set_builtin_fun_inline "print":
-    stdout.write args[0].values.join(args[1].str) & args[2].str
-    return unit
-
-root_ctx.set_builtin_fun_inline "record":
-    Box(eval_record(ctx, args[0].exp))
-
-root_ctx.set_builtin_fun_inline "record-infer":
-    Box(record_infer(ctx, args[0].exp))
-
-root_ctx.set_builtin_fun_inline "Record":
-    if args[0].values.len == 0: return unit_type
-    Box(eval_record_type(ctx, args[0].values[0].exp))
-
 root_ctx.set_builtin_fun_inline "type-of":
     ctx.infer_type(args[0].exp)
 
 root_ctx.set_builtin_fun_inline "level-of":
     Val(kind: U64, u64: uint64(ctx.infer_level(args[0].exp)))
-
-# non-essential definitions:
 
 root_ctx.set_builtin_fun_inline "assert":
     eval_assert(ctx, args[0].exp)
@@ -1472,11 +1111,12 @@ root_ctx.set_builtin_fun_inline "==":
     else:
         return ctx.eval(atom("false"))
 
+root_ctx.set_builtin_fun_inline "print":
+    stdout.write args[0].values.join(args[1].str) & args[2].str
+    return unit
+
 root_ctx.set_builtin_fun_inline "gensym":
     Box(atom(gensym(prefix="__")))
-
-root_ctx.set_builtin_fun_inline "compare": 
-    ctx.eval(expand_compare(ctx, args.map_it(it.exp)))
     
 root_ctx.set_builtin_fun_inline "eval":
     ctx.eval(args[0].exp)
