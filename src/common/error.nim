@@ -12,8 +12,9 @@ func error*(node: Exp, msg: string): ref VitaminError =
     error.node = node
     error
 
-func error*(ctx: Ctx, msg: string, trace=false, exp=term()): ref VitaminError =
+func error*(ctx: Ctx, msg: string, trace=false, prefix="", exp=term()): ref VitaminError =
     var error = new_exception(VitaminError, msg)
+    error.prefix = prefix
     error.node = exp
     error.ctx = ctx
     error.with_trace = trace
@@ -168,8 +169,14 @@ proc trace*(ctx: Ctx, max_source_lines = 3, max_expr_width = 60, show_source=fal
         trace &= head & "\n" & source.indent(2)
     trace.reversed.join("\n")
 
-proc print_error*(error: ref VitaminError, file: Option[string] = none(string), prefix="ERROR", force_trace=false, trace_code=true, trace_expr=true) =
-    let prefix = "-- {prefix} ".fmt
+proc print_error*(error: ref VitaminError, file: Option[string] = none(string), prefix="", force_trace=false, trace_code=true, trace_expr=true) =
+    var prefix = prefix
+    if prefix.len == 0:
+        if error.prefix.len > 0:
+            prefix = error.prefix
+        else:
+            prefix = "ERROR"
+    prefix = "-- " & prefix.toupper() & " "
     var suffix = ""
     if file.is_some:
         suffix = " " & file.get

@@ -6,7 +6,7 @@ type
         file*: ref string
 
     AtomTag* = enum
-        aInd, aDed, aCnt, aPar, aSym, aLit, aNum, aStr, aWs, aNl, aCom, aEsc
+        aRes, aInd, aDed, aCnt, aPar, aSym, aLit, aNum, aStr, aWs, aNl, aCom, aEsc
 
     ExpTag* = enum
         expTerm, expAtom
@@ -42,7 +42,11 @@ func `[]=`*(x: var Exp, index: int, value: Exp) =
 func `==`*(x: Exp, y: Exp): bool =
     if x.kind != y.kind: return false
     case x.kind
-    of expAtom: x.value == y.value
+    of expAtom:
+        if x.tag == aRes or y.tag == aRes:
+            x.tag == y.tag and x.value == y.value
+        else:
+            x.value == y.value
     of expTerm:
         if x.exprs.len != y.exprs.len: return false
         for (xe, ye) in zip(x.exprs, y.exprs):
@@ -55,6 +59,9 @@ func is_literal*(x: Exp): bool =
 
 func is_whitespace*(x: Exp): bool =
     x.kind == expAtom and x.tag in {aWs, aNl, aInd, aDed, aCnt, aCom}
+
+func is_reserved*(x: Exp): bool =
+    x.kind == expAtom and x.tag == aRes
 
 func is_comment*(x: Exp): bool =
     x.kind == expAtom and x.tag == aCom
@@ -95,6 +102,9 @@ func atom*(x: string, tag: AtomTag = aSym, pos: Option[Position]): Exp =
 
 func atom*(x: string, tag: AtomTag = aSym): Exp =
     Exp(kind: expAtom, value: x, tag: tag, pos: none(Position))
+
+func reserved_atom*(x: string): Exp =
+    atom(x, tag=aRes)
 
 func term*(x: seq[Exp]): Exp =
     Exp(kind: expTerm, exprs: x)
@@ -173,6 +183,7 @@ func str*(x: Exp): string =
         if x.tag == aCnt: return "$CNT"
         if x.tag == aWs: return "$WS"
         if x.tag == aNl: return "$NL"
+        if x.tag == aRes: return "\e[4m" & x.value & "\e[0m"
         if x.tag == aStr: return x.value
         if x.tag == aNum: return x.value
         if x.value.match(re"[ ;,(){}\[\]]"):

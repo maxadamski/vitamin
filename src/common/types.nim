@@ -1,6 +1,5 @@
 import options, tables
 import exp, utils
-import patty
 
 {.warning[ProveInit]: off.}
 
@@ -44,6 +43,7 @@ type
         node*: Exp
         ctx*: Ctx
         with_trace*: bool
+        prefix*: string
 
     RecField* = object
         name*: string
@@ -74,10 +74,13 @@ type
         #autoapply*: bool
         autoexpand*: bool
 
+    FunInfo* = object
+        #name*: string # may be empty (anonymous function)
+        #typ*: Opt[FunTyp] # cannot be none at invocation
+        discard
+
     Fun* = object
-        name*: string # may be empty (anonymous function)
         body*: Either[Exp, BuiltinFunProc]
-        typ*: Opt[FunTyp] # cannot be none at invocation
         ctx*: Opt[Ctx] # closure context
         builtin*: bool
 
@@ -177,7 +180,7 @@ func noun*(v: Val): string =
     of NumLit: "number literal"
     of StrLit: "string literal"
     of MemVal: "memory"
-    of NeuVal: "unevaluated expression"
+    of NeuVal: "neutral value"
     of ExpVal: "expression"
     of TypeVal: "type"
     of UnionTypeVal: "union type"
@@ -254,14 +257,7 @@ func str*(v: Val): string =
             return if v.kind == UnionTypeVal: "Never" else: "Any"
         v.values.map(str).join(op)
     of FunVal:
-        var show_ret = false
-        let body = match v.fun.body:
-            Left(x): " => " & x.str
-            Right(x): show_ret = true; " => ..."
-        let typ = match v.fun.typ:
-            Some(x): x.str(ret=show_ret)
-            None: "<builtin>"
-        typ & body
+        if v.fun.body.is_left: "<lambda>" else: "<builtin>"
     of FunTypeVal: v.fun_typ.str
     of RecVal: v.rec.str
     of RecTypeVal: v.rec_typ.str

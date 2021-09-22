@@ -34,9 +34,13 @@ test "add"
     assert add(two, two)(N)(s)(z) == s(s(s(s(z))))
     assert add(one, three)(N)(s)(z) == s(s(s(s(z))))
 
-test "mul"
+xtest "mul"
     mul = (m n: Num) => (A: Type) => (f: A -> A) => (x: A) => m(A)(n(A)(f))(x)
     assert mul(one, two)(N)(s)(z) == s(s(z))
     assert mul(one, three)(N)(s)(z) == s(s(s(z)))
     assert mul(two, two)(N)(s)(z) == s(s(s(s(z))))
     assert mul(two, three)(N)(s)(z) == s(s(s(s(s(s(z))))))
+
+xtest "pow"
+    pow = (m n: Num) => (A: Type) => m(A -> A)(n(A))
+    assert pow(two, three)(N)(s)(z) == s(s(s(s(s(s(s(z)))))))

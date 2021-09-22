@@ -164,10 +164,20 @@ test "monomorphic identity function"
 	assert id(42) == 42
 
 test "polymorphic identity function"
+	id = (x: Type, y: x) => y
+	assert id(Num-Literal, 42) == 42
+	assert type-of(id(Num-Literal, 42)) == Num-Literal
+
+test "polymorphic identity function (closure)"
 	id = (x: Type) => (y: x) => y
 	assert id(Num-Literal)(42) == 42
 	assert type-of(id(Num-Literal)) == ((y: Num-Literal) -> Num-Literal)
 	assert type-of(id(Num-Literal)(42)) == Num-Literal
+
+test "values of arguments which are depended upon can be inferred"
+	id = (a: Type = _, x: a) => x
+	assert id(42) == 42
+	assert id(x=Num-Literal, 42) == 42
 
 test "upwards funarg (argument)"
 	foo = (x: Type) => (y: Type) => x
@@ -196,10 +206,11 @@ test "function types with different parameter labels are equal"
 	B = (y: Type) -> Type
 	assert A == B
 
-test "function types are equivalent up to label renaming"
-	A = (a: Type, aa: a) -> Type
-	B = (b: Type, bb: b) -> Type
-	assert A == B
+xtest "equivalence of dependent function types is independent of labels "
+	# is alpha-equivalence of function types useful?
+	assert ((x: Type) -> x) == ((a: Type) -> a)
+	assert ((x: Type, y: x) -> y) == ((a: Type, b: a) -> b)
+	assert ((x: Type) -> (y: x) -> y) == ((a: Type) -> (b: a) -> b)
 
 #
 # Unique variables
@@ -435,10 +446,12 @@ test "single row records"
 	assert type-of(Single) == Type
 	assert type-of((x=Unit)) == Single
 
-xtest "compare records"
-	# why does this break the compiler? (SIGSEGV)
-	assert (x: true) == (x: true)
-	assert (y: true) != (x: true)
+test "records of same type can be compared"
+	assert (x=true) == (x=true)
+	assert (x=true) != (x=false)
+
+test "records of different types can't be compared"
+	assert error((y=true) != (x=true))
 
 test "unit records"
 	assert Unit == Record()
