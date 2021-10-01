@@ -260,7 +260,7 @@ func desugar_lambda_params(exp: Exp): seq[Exp] =
                     typ = term(vararg_container, typ)
 
                 var parts = @["$param".atom, name]
-                if not typ.is_nil: parts &= term(":".atom, typ)
+                if not typ.is_nil and not typ.is_atom("_"): parts &= term(":".atom, typ)
                 if not val.is_nil: parts &= term("=".atom, val)
                 if variadic: parts &= term("$variadic".atom, vararg_typ)
                 if autoquote: parts &= "$quoted".atom

@@ -635,10 +635,15 @@ test "can pass function as an argument"
 	id = (x: Num-Literal) => x
 	assert ap(42, id) == 42
 
-xtest "can infer type of lambda parameters if the lambda is an argument (not implemented)"
+test "can infer type of lambda parameters if the lambda is an argument"
 	foo = (x: Num-Literal, f: Num-Literal -> Num-Literal) => f(x)
 	assert foo(42, (x) => x) == 42
 	assert foo(42, (x) => 2) == 2
+
+test "can infer type of dependent lambda parameters if the lambda is an argument"
+	foo = (A: Type, x: A, f: A -> A) => f(x)
+	assert foo(Num-Literal, 42, (x) => x) == 42
+	assert foo(Num-Literal, 42, (x) => 2) == 2
 
 test "parameter names do not leak outside functions"
 	foo = (do-not-leak: Type) => Type

@@ -527,7 +527,70 @@ proc synth_lambda(ctx: Ctx, exp: Exp): TypedExp =
 
 
 proc check_lambda(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
-    raise compiler_defect("Downwards checking for lambda expression {exp} not implemented! {exp.src}".fmt)
+    type ParamInfo = tuple[name, typ, default: Exp, quoted: bool]
+    if want_typ.kind != FunTypeVal:
+        raise type_error("{want_typ.noun} {want_typ} is not a function type".fmt)
+    let fun_typ = want_typ.fun_typ
+    var params : seq[ParamInfo]
+    var body, ret : Exp
+    var expand = false
+    var core = term("$lambda".atom)
+
+    for typ_part in exp.exprs:
+        if typ_part.has_prefix("$param"):
+            var par : ParamInfo
+            par.name = typ_part[1]
+            for par_part in typ_part.exprs[2 .. ^1]:
+                if par_part.has_prefix(":"): par.typ = par_part[1]
+                elif par_part.has_prefix("="): par.default = par_part[1]
+                elif par_part.is_atom("$quote"): par.quoted = true
+            params &= par
+        elif typ_part.has_prefix("$body"): body = typ_part[1]
+        elif typ_part.has_prefix("$result"): ret = typ_part[1]
+        elif typ_part.has_prefix("$expand"): expand = true
+
+    if fun_typ.params.len != params.len:
+        raise type_error("Expected function with {fun_typ.params.len} parameters, but got {params.len}. {exp.src}")
+
+    # TODO: De Brujin
+    let ctx = ctx.extend()
+    let want_ctx = ctx.extend()
+    for (want_par, par) in zip(fun_typ.params, params):
+        var (name, typ, default, quoted) = par
+        var want_typ_val = want_ctx.eval(want_par.typ)
+        var typ_val : Val
+        if not typ.is_nil:
+            typ = ctx.check_universe(typ)
+            typ_val = ctx.eval(typ)
+            if not ctx.is_subtype(typ_val, want_typ_val):
+                raise type_error("Parameter type {typ_val} is not a subtype of {want_typ_val}. {typ}".fmt)
+        else:
+            typ = want_par.typ
+            typ_val = want_typ_val
+
+        if not default.is_nil:
+            default = ctx.check(default, typ_val).exp
+
+        ctx.env.assume(name.value, want_typ_val)
+        want_ctx.env.assume(want_par.name, want_typ_val)
+
+        var param = term("$param".atom, name)
+        if not typ.is_nil: param &= term(":".atom, typ)
+        if not default.is_nil: param &= term("=".atom, default)
+        if quoted: param &= atom("$quote")
+        core &= param
+
+    if ret.is_nil:
+        var ret_val : Val
+        (body, ret_val) = ctx.check(body)
+        ret = ret_val.reify
+    else:
+        ret = ctx.check_universe(ret)
+        body = ctx.check(body, ctx.eval(ret)).exp
+
+    core &= term("$result".atom, fun_typ.result)
+    core &= term("$body".atom, body)
+    core
 
 
 proc synth_lambda_type(ctx: Ctx, exp: Exp): TypedExp =
@@ -700,6 +763,7 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
             raise type_error("Failed to type check {exp.tag} atom {exp.bold}. {exp.src}".fmt)
     of expTerm:
         if exp.is_nil:
+            writeStackTrace()
             raise compiler_defect("Empty term while checking type {typ}".fmt)
 
         if exp.head.is_atom:
@@ -792,11 +856,11 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                     if dst_typ2.kind == NeuVal: dst_typ2 = ctx.eval(dst_typ2.exp) # try evaluating if variable became unstuck
                     if dst_typ2.kind == OpaqueVal: dst_typ2 = ctx.unwrap(dst_typ2.exp)
                     if not ctx.is_subtype(dst_typ2, dst_typ):
-                        raise error("Cast error check {lhs_core} as {dst_typ} : {dst_typ2.noun} {dst_typ2}".fmt)
+                        raise type_error("Cast error check {lhs_core} as {dst_typ} : {dst_typ2.noun} {dst_typ2}".fmt)
                     return (lhs_core, typ.unsafe_get)
 
                 elif not ctx.is_subtype(src_typ, dst_typ):
-                    raise error("You can't cast {lhs.bold} of {src_typ.noun} {src_typ.bold} to {dst_typ.noun} {dst_typ.bold}.\n\n".fmt &
+                    raise type_error("You can't cast {lhs.bold} of {src_typ.noun} {src_typ.bold} to {dst_typ.noun} {dst_typ.bold}.\n\n".fmt &
                         "Can't upcast, because {src_typ.bold} is not a subtype of {dst_typ.bold}.\n\n".fmt &
                         "Can't downcast, because there is no evidence, that {lhs.bold} was upcast from type {dst_typ.bold}. {lhs.src}".fmt)
 
@@ -923,6 +987,7 @@ proc eval_equals(ctx: Ctx, lhs, rhs: Exp): bool =
 proc eval_name(ctx: Ctx, exp: Exp): Val =
     let name = exp.value
     let vari = ctx.env.lookup(name).or_else:
+        writeStackTrace()
         raise runtime_error("Variable {exp.bold} is unknown. {exp.src}".fmt)
     if ctx.eval_mode == EvalMode.Unwrap:
         if vari.val.is_none:
@@ -1050,6 +1115,7 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
         else: discard
     of expTerm:
         if exp.is_nil:
+            writeStackTrace()
             raise compiler_defect("Can't evaluate empty term.")
         if exp.head.is_atom:
             case exp.head.value
@@ -1106,7 +1172,7 @@ func reify_lambda_type(fun_typ: FunTyp): Exp =
 
 
 func reify_lambda(fun: Fun): Exp =
-    raise error("Can't reify lambda value {fun}.".fmt)
+    raise runtime_error("Can't reify lambda value {fun}.".fmt)
     #if fun.name.len > 0: return fun.name.atom
     #result.exprs &= "$lambda".atom & reify_lambda_type(fun.typ.unsafe_get).tail
     #result.exprs &= term("$body".atom, fun.body.unsafe_left)
@@ -1170,7 +1236,7 @@ func reify*(val: Val): Exp =
     of RecVal:
         reify_record(val.rec)
     of MemVal:
-        raise error("Can't reify {val.noun} {val.bold}.".fmt)
+        raise runtime_error("Can't reify {val.noun} {val.bold}.".fmt)
 
 
 #
