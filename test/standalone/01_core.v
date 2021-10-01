@@ -1,12 +1,13 @@
 # Tests of core language functionality
 
-# NOTE: Try to use ontly the most basic syntax sugar
+# NOTE: Try to use only the most basic syntax sugar
 
 Num-Literal, Str-Literal, List-Literal : Type
 U8, I8, U64, I64 : Type
 Byte = U8
 Size = U64
 Int = I64
+Atom, Term, Expr, Bool, None : Type
 Arguments : (x: Type) -> Type
 `=` : (pattern value: quoted(Expr)) -> expand(Expr)
 `->` : (params result: quoted(Expr)) -> expand(Expr)
@@ -23,14 +24,9 @@ Unit = Record()
 Union, Inter : (types: variadic(Type)) -> Type
 Any = Inter()
 Never = Union()
-Atom, Term : Expr
-Expr = Union(Atom, Term)
 unwrap : (e: quoted(Expr)) -> type-of(e)
 eval : (e: Expr) -> type-of(e)
 #`as` : (x: quoted(Expr), y: Type) -> y
-Bool : Type
-None : Type
-none : None
 `test` : (name: Str-Literal, body: quoted(Expr)) -> Unit
 `xtest` : (name: Str-Literal, body: quoted(Expr)) -> Unit
 `assert` : (cond: quoted(Expr)) -> Unit
@@ -43,6 +39,9 @@ num-i8  : (x: Num-Literal) -> I8
 num-u64 : (x: Num-Literal) -> U64
 num-i64 : (x: Num-Literal) -> I64
 print : (xs: variadic(Any), sep = ' ', end = '\n') -> Unit
+true, false : Bool
+none : None
+Expr = Union(Atom, Term)
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
 
@@ -155,6 +154,18 @@ test "definitional equality of variable types"
 	assert type-of(x) == type-of(y)
 	assert type-of(x) != type-of(z)
 	assert type-of(y) != type-of(z)
+
+test "can't define variable with a value of incompatible type"
+	A, B : Type
+	a: A
+	b: B
+	x1 : A
+	x1 = a
+	assert error(x2 : A = b)
+
+test "can't define variable with a function of incompatible type"
+	assert error(foo : (x: Num-Literal) -> Num-Literal = (x: Str-Literal) => x)
+
 #
 # Simple functions
 #
@@ -171,10 +182,13 @@ test "polymorphic identity function"
 test "polymorphic identity function (closure)"
 	id = (x: Type) => (y: x) => y
 	assert id(Num-Literal)(42) == 42
+
+test "type of dependent closure"
+	id = (x: Type) => (y: x) => y
 	assert type-of(id(Num-Literal)) == ((y: Num-Literal) -> Num-Literal)
 	assert type-of(id(Num-Literal)(42)) == Num-Literal
 
-test "values of arguments which are depended upon can be inferred"
+xtest "values of arguments which are depended upon can be inferred (not implemented)"
 	id = (a: Type = _, x: a) => x
 	assert id(42) == 42
 	assert id(x=Num-Literal, 42) == 42
@@ -211,6 +225,41 @@ xtest "equivalence of dependent function types is independent of labels "
 	assert ((x: Type) -> x) == ((a: Type) -> a)
 	assert ((x: Type, y: x) -> y) == ((a: Type, b: a) -> b)
 	assert ((x: Type) -> (y: x) -> y) == ((a: Type) -> (b: a) -> b)
+
+#
+# Metaprogramming
+#
+
+test "core quotation"
+	assert type-of(`$quote`(whatever)) == Expr
+
+test "quoted function parameters"
+	meta = (x: quoted(Expr)) => x
+	assert type-of(meta(a + b)) == Expr
+	assert meta(a + b) == `$quote`(a + b)
+
+test "quoted function parameters can accept only atoms"
+	meta = (x: quoted(Atom)) => x
+	assert type-of(meta(a)) == Atom
+	assert meta(a) == `$quote`(a)
+	meta(a)
+	assert error(meta(a + b))
+
+test "quoted function parameters can accept only terms"
+	meta = (x: quoted(Term)) => x
+	assert type-of(meta(a + b)) == Term
+	assert meta(a + b) == `$quote`(a + b)
+	meta(a + b)
+	assert error(meta(a))
+
+test "trivial macro"
+	forty-two = () -> expand(Expr) => `$quote`(42)
+	assert forty-two() == 42 
+
+test "unhygienic macro"
+	dirty = () -> expand(Expr) => `$quote`(captured)
+	captured = 42
+	assert dirty() == 42
 
 #
 # Unique variables
@@ -250,7 +299,7 @@ test "can explicitly coerce to opaque type"
 	y = x as B
 	assert type-of(y) == B
 
-test "can't implicly coerce to opaque type"
+test "can't implicitly coerce to opaque type"
 	A : Type
 	opaque B = A
 	x : A
@@ -299,8 +348,22 @@ test "type upcast to Any"
 test "type upcast is idempotent"
 	assert type-of((true as Any) as Any) == Any
 
-test "type upcast is invertible"
+test "type upcast is invertible by coertion"
 	assert type-of((true as Any) as Bool) == Bool
+
+xtest "type upcast is invertible by evidence (not implemented)"
+	# FIXME: upcasts should generate evidence, which could be used later to safely downcast
+	# For example the following cast:
+	true-any = true as Any
+	# Should generate evidence that true-any was upcast from type Bool to Any
+	# `ev : was-upcast-from(true-any, Bool)`
+	# Now it should be legal and safe to downcast
+	true-bool = true-any as Bool
+	assert type-of(true-bool) == Bool
+	assert true-bool == true
+	
+test "can't downcast to unrelated type"
+	assert error(Type as Never)
 
 #
 # Union and intersection types
@@ -413,8 +476,8 @@ test "short named opaque function syntax"
 #
 
 opaque Bool = Byte
-opaque true = 1u8 as Bool
-opaque false = 0u8 as Bool
+true = 1u8 as Bool
+false = 0u8 as Bool
 `and` = (x y: Bool) -> Bool => case x of true y of false false
 `or` = (x y: Bool) -> Bool => case x of true true of false y
 `not` = (x: Bool) -> Bool => case x of true false of false true
@@ -476,25 +539,25 @@ test "row order doesn't affect record type equality"
 
 test "dependent function"
 	A, B : Type
-	t = (y: Bool) => case y of true A of false B
-	assert t(true) == A
-	assert t(false) == B
-	f : (x: Bool) -> t(x)
-	assert type-of(f(true)) == A
-	assert type-of(f(false)) == B
+	Result = (y: Num-Literal) => case y of 1 A of _ B
+	assert Result(1) == A
+	assert Result(0) == B
+	f : (x: Num-Literal) -> Result(x)
+	assert type-of(f(1)) == A
+	assert type-of(f(0)) == B
 
 test "dependent record"
 	L, R : Type
 	r : R
 	l : L
-	Data = (x: Bool) => case x of true R of false L
-	assert Data(true) == R
-	assert Data(false) == L
-	Either = Record(t: Bool, data: Data(t))
-	either-r : Either = (t=true, data=r)
-	either-l : Either = (t=false, data=l)
-	assert error(either-l : Either = (t=false, data=r))
-	assert error(either-r : Either = (t=true, data=l))
+	Data = (x: Num-Literal) => case x of 1 R of _ L
+	assert Data(1) == R
+	assert Data(0) == L
+	Either = Record(t: Num-Literal, data: Data(t))
+	either-r : Either = (t=1, data=r)
+	either-l : Either = (t=0, data=l)
+	assert error(bad-either-l : Either = (t=0, data=r))
+	assert error(bad-either-r : Either = (t=1, data=l))
 
 #
 # Function application
@@ -563,6 +626,29 @@ test "variadic parameters accept one or more arguments"
 	assert foo(true, true) == Type
 	assert foo(true, true, true) == Type
 
-xtest "default type of variadic parameter is Arguments"
-	foo = (x: variadic(Bool)) => type-of(x)
-	assert foo() == Arguments(List-Literal)
+test "default type of variadic parameter is Arguments"
+	foo = (x: variadic(Bool)) => x
+	assert type-of(foo()) == Arguments(Bool)
+
+test "can pass function as an argument"
+	ap = (n: Num-Literal, f: Num-Literal -> Num-Literal) => f(n)
+	id = (x: Num-Literal) => x
+	assert ap(42, id) == 42
+
+xtest "can infer type of lambda parameters if the lambda is an argument (not implemented)"
+	foo = (x: Num-Literal, f: Num-Literal -> Num-Literal) => f(x)
+	assert foo(42, (x) => x) == 42
+	assert foo(42, (x) => 2) == 2
+
+test "parameter names do not leak outside functions"
+	foo = (do-not-leak: Type) => Type
+	A : Type
+	foo(A)
+	assert error(do-not-leak)
+
+test "locally bounded names do not leak outside of scope"
+	foo = () =>
+		do-not-leak = 42
+		Type
+	foo()
+	assert error(do-not-leak)

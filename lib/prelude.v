@@ -6,6 +6,7 @@ Byte = U8
 Size = U64
 Int = I64
 Arguments : (x: Type) -> Type
+Expr, Atom, Term : Type
 `=` : (pattern value: quoted(Expr)) -> expand(Expr)
 `->` : (params result: quoted(Expr)) -> expand(Expr)
 `=>` : (head body: quoted(Expr)) -> expand(Expr)
@@ -21,7 +22,6 @@ Unit = Record()
 Union, Inter : (types: variadic(Type)) -> Type
 Any = Inter()
 Never = Union()
-Atom, Term : Expr
 Expr = Union(Atom, Term)
 unwrap : (e: quoted(Expr)) -> type-of(e)
 eval : (e: Expr) -> type-of(e)
@@ -42,8 +42,8 @@ num-u64 : (x: Num-Literal) -> U64
 num-i64 : (x: Num-Literal) -> I64
 print : (xs: variadic(Any), sep = ' ', end = '\n') -> Unit
 opaque Bool = Byte
-opaque true = 1u8 as Bool
-opaque false = 0u8 as Bool
+true = 1u8 as Bool
+false = 0u8 as Bool
 `and` = (x y: Bool) -> Bool => case x of true y of false false
 `or` = (x y: Bool) -> Bool => case x of true true of false y
 `not` = (x: Bool) -> Bool => case x of true false of false true

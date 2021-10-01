@@ -9,7 +9,7 @@ A -> B
 (x: A, y: B) -> C
 (x, y) -> C
 
-x => f
+#x => f
 (x) => f
 (x: A) => f
 (x: A, y: B) => f
@@ -23,3 +23,7 @@ x => f
 Record(A, B, C)
 Record(x: A, y: B, z: C)
 Variant(x: A, y: B, z: C)
+
+(x: quoted(A)) -> B
+(x: variadic(A)) -> B
+(x: variadic(L, A)) -> B

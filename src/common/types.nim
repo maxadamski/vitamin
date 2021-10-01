@@ -1,4 +1,4 @@
-import options, tables
+import tables, sequtils, strutils
 import exp, utils
 
 {.warning[ProveInit]: off.}
@@ -10,6 +10,7 @@ type
         opaque*: bool
         arg*: bool
         capture*: bool
+        definition*: Exp
 
     VarDefined* = object
         val*, typ*: Val
@@ -38,6 +39,9 @@ type
         eval_mode*: EvalMode
         site_stack*: seq[Exp]
         call_stack*: seq[TraceCall]
+        values*: seq[Val]
+        names*: seq[string]
+        types*: seq[Val]
 
     VitaminError* = object of CatchableError
         node*: Exp
@@ -80,6 +84,7 @@ type
         discard
 
     Fun* = object
+        params*: seq[string]
         body*: Either[Exp, BuiltinFunProc]
         ctx*: Opt[Ctx] # closure context
         builtin*: bool
@@ -88,7 +93,7 @@ type
         buf*: pointer
 
     ValTag* = enum
-        NeverVal, NeuVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
+        NeverVal, OpaqueVal, NeuVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
         TypeVal, ExpVal, MemVal, FunVal, FunTypeVal, ListLit
         NumLit, StrLit, I8, U8, I64, U64
 
@@ -120,10 +125,12 @@ type
             lit*: string
         of MemVal:
             mem*: Mem
-        of NeuVal, ExpVal:
+        of OpaqueVal, NeuVal, ExpVal:
             exp*: Exp 
 
     Val* = ref ValObj not nil
+
+
 
 # Nim, why so much boilerplate :(
 
@@ -180,7 +187,8 @@ func noun*(v: Val): string =
     of NumLit: "number literal"
     of StrLit: "string literal"
     of MemVal: "memory"
-    of NeuVal: "neutral value"
+    of NeuVal: "stuck value"
+    of OpaqueVal: "opaque value"
     of ExpVal: "expression"
     of TypeVal: "type"
     of UnionTypeVal: "union type"
@@ -240,15 +248,14 @@ func str*(x: Rec): string =
 func str*(v: Val): string =
     case v.kind
     of NeverVal: "unreachable"
-    of NeuVal: v.exp.str
+    of OpaqueVal, NeuVal, ExpVal: v.exp.str
     of I8: $v.i8
     of U8: $v.u8
     of I64: $v.i64
     of U64: $v.u64
     of NumLit, StrLit: v.lit
-    of ListLit: "[" & v.values.map(str).join(" ") & "]"
+    of ListLit: "[" & v.values.join(" ") & "]"
     of MemVal: "Memory(...)"
-    of ExpVal: v.exp.str_ugly
     of TypeVal:
         if v.level == 0: "Type" else: "Type" & $v.level
     of UnionTypeVal, InterTypeVal:
@@ -257,7 +264,95 @@ func str*(v: Val): string =
             return if v.kind == UnionTypeVal: "Never" else: "Any"
         v.values.map(str).join(op)
     of FunVal:
-        if v.fun.body.is_left: "<lambda>" else: "<builtin>"
+        if v.fun.body.is_left: "λ " & v.fun.params.join(" ") & " => ..." else: "<builtin>"
     of FunTypeVal: v.fun_typ.str
     of RecVal: v.rec.str
     of RecTypeVal: v.rec_typ.str
+
+#
+# Context
+#
+
+func extend*(env: Env): Env =
+    Env(parent: env, depth: env.depth + 1)
+
+func extend*(ctx: Ctx, new_env = true, eval_mode: EvalMode): Ctx =
+    Ctx(
+        env: if new_env: ctx.env.extend() else: ctx.env,
+        #env: ctx.env,
+        eval_mode: eval_mode,
+        site_stack: ctx.site_stack,
+        call_stack: ctx.call_stack,
+        names: ctx.names,
+        types: ctx.types,
+        values: ctx.values,
+    )
+
+func extend*(ctx: Ctx, new_env = true): Ctx =
+    ctx.extend(new_env, ctx.eval_mode)
+
+proc assume*(env: Env, name: string, typ: Val, site = None[Exp](), arg = false, definition = term()) =
+    env.vars[name] = Var(val: None[Val](), typ: Some(typ), site: site, arg: arg, definition: definition)
+
+proc define*(env: Env, name: string, val, typ: Val, site = None[Exp](), opaque = false, arg = false) =
+    env.vars[name] = Var(val: Some(val), typ: Some(typ), site: site, opaque: opaque, arg: arg)
+
+proc value_by_index*(ctx: Ctx, i: int): Val =
+    ctx.values[ctx.values.high - i]
+
+proc type_by_index*(ctx: Ctx, i: int): Val =
+    ctx.types[ctx.values.high - i]
+
+proc index_by_name*(ctx: Ctx, name: string): int =
+    for level in countdown(ctx.names.high, 0):
+        if ctx.names[level] == name:
+            return ctx.names.high - level
+    return -1
+
+proc find*(env: Env, name: string): Env =
+    var env = env
+    while env != nil:
+        if name in env.vars: return env
+        env = env.parent
+    nil
+
+proc site*(ctx: Ctx): Exp =
+    if ctx.site_stack.len > 0:
+        ctx.site_stack[^1]
+    else:
+        term()
+
+proc push_call*(ctx: Ctx, site: Exp, infer = false) =
+    ctx.call_stack.add(TraceCall(site: site, infer: infer))
+
+proc pop_call*(ctx: Ctx) =
+    discard ctx.call_stack.pop()
+
+#[
+proc push_value*(ctx: Ctx, val: Val) =
+    ctx.values.add(val)
+
+proc pop_value*(ctx: Ctx) =
+    discard ctx.values.pop()
+
+proc push_type*(ctx: Ctx, name: string, typ: Val) =
+    ctx.names.add(name)
+    ctx.types.add(typ)
+
+proc pop_type*(ctx: Ctx) =
+    discard ctx.names.pop()
+    discard ctx.types.pop()
+]#
+
+proc lookup*(env: Env, name: string): Opt[Var] =
+    let env = env.find(name)
+    if env == nil: return None[Var]()
+    Some(env.vars[name])
+
+proc lookup_type*(env: Env, name: string): Opt[Val] =
+    let variable = env.lookup(name).or_else: return None(Val)
+    variable.typ
+
+proc lookup_value*(env: Env, name: string): Opt[Val] =
+    let variable = env.lookup(name).or_else: return None(Val)
+    variable.val

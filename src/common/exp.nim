@@ -1,4 +1,4 @@
-import options, strutils, sequtils, re
+import options, strutils, strformat, sequtils, re
 
 type
     Position* = object
@@ -13,12 +13,13 @@ type
 
     Exp* = object
         case kind*: ExpTag
+        of expTerm:
+            exprs*: seq[Exp]
         of expAtom:
             value*: string
             tag*: AtomTag
             pos*: Option[Position]
-        of expTerm:
-            exprs*: seq[Exp]
+            index*, level*: int
 
 func len*(x: Exp): int =
     if x.kind == expAtom: return -1
@@ -30,14 +31,20 @@ func is_atom*(x: Exp): bool =
 func is_nil*(x: Exp): bool =
     x.kind == expTerm and x.exprs.len == 0
 
-func `[]`*(x: Exp, index: int): Exp =
+func `[]`*(x: Exp, index: int): lent Exp =
     x.exprs[index]
+
+func mref*(x: var Exp, index: int): ptr Exp =
+    addr x.exprs[index]
+
+func `[]=`*(x: var Exp, index: int, value: Exp) =
+    x.exprs[index] = value
 
 template `[]`*[A, B](x: Exp, slice: HSlice[A, B]): seq[Exp] =
     x.exprs[slice]
 
-func `[]=`*(x: var Exp, index: int, value: Exp) =
-    x.exprs[index] = value
+func `&=`*(x: var Exp, value: Exp) =
+    x.exprs &= value
 
 func `==`*(x: Exp, y: Exp): bool =
     if x.kind != y.kind: return false
@@ -94,14 +101,15 @@ func head*(x: Exp): Exp = x.exprs[0]
 
 func tail*(x: Exp): seq[Exp] = x.exprs[1 .. ^1]
 
+iterator mexprs*(x: var Exp): tuple[key: int, val: var Exp] =
+    for (i, xx) in x.exprs.mpairs:
+        yield (i, xx)
+
+func atom*(x: string, tag: AtomTag = aSym, pos = none(Position), index = -1, level = -1): Exp =
+    Exp(kind: expAtom, value: x, tag: tag, pos: pos, index: index, level: level)
+
 func atom*(x: string, tag: AtomTag = aSym, pos: Position): Exp =
-    Exp(kind: expAtom, value: x, tag: tag, pos: some(pos))
-
-func atom*(x: string, tag: AtomTag = aSym, pos: Option[Position]): Exp =
-    Exp(kind: expAtom, value: x, tag: tag, pos: pos)
-
-func atom*(x: string, tag: AtomTag = aSym): Exp =
-    Exp(kind: expAtom, value: x, tag: tag, pos: none(Position))
+    atom(x, tag, some(pos))
 
 func reserved_atom*(x: string): Exp =
     atom(x, tag=aRes)
@@ -155,26 +163,6 @@ func calculate_position*(node: Exp): Option[Position] =
         if positions.len == 0: return none(Position)
         return some(positions.merge)
 
-func str*(x: Exp): string
-
-func join*(x: Exp, sep: string): string =
-    assert x.kind == expTerm
-    x.exprs.map(str).join(sep)
-
-func str_ugly_rec(x: Exp): string =
-    case x.kind
-    of expTerm: return "(" & x.exprs.map(str_ugly_rec).join(" ")  & ")"
-    of expAtom: return x.str
-
-func str_ugly*(x: Exp): string =
-    x.str_ugly_rec
-
-func str_group0(x: Exp): string = x.join(" ")
-
-func str_group1(x: Exp): string = x.exprs.map(str_group0).join(", ")
-
-func str_group2(x: Exp): string = x.exprs.map(str_group1).join("; ")
-
 func str*(x: Exp): string =
     case x.kind
     of expAtom:
@@ -189,10 +177,11 @@ func str*(x: Exp): string =
         if x.value.match(re"[ ;,(){}\[\]]"):
             return "`" & x.value & "`"
         else:
-            return x.value
+            if x.index != -1:
+                return "{x.value}^{x.index}".fmt
+            else:
+                return x.value
     of expTerm:
-        return x.str_ugly
+        return "(" & x.exprs.map(str).join(" ")  & ")"
 
-
-proc `$`*(x: Exp): string =
-    x.str
+func `$`*(x: Exp): string = x.str

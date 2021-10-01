@@ -1,7 +1,9 @@
 import options, tables, sets, sequtils, strformat, strutils, algorithm
 import common/[exp, error, utils, types]
 import patty
-import sugar
+
+type
+    TypedExp = tuple[exp: Exp, typ: Val]
 
 # TODO: Allow access to the expression stack in macros
 
@@ -12,19 +14,34 @@ import sugar
 # Boilerplate forward declarations :/
 #
 
+
+proc is_subtype*(ctx: Ctx, x, y: Val): bool
+
+# surface -> core
+proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp
+proc check*(ctx: Ctx, exp: Exp, typ: Val): TypedExp = ctx.check(exp, Some(typ))
+
+# core -> value
 proc eval*(ctx: Ctx, exp: Exp): Val
-proc dynamic_type*(ctx: Ctx, val: Val): Val
-proc dynamic_level*(ctx: Ctx, val: Val): int
-proc infer_type*(ctx: Ctx, exp: Exp): Val
-proc infer_level*(ctx: Ctx, exp: Exp): int
+
+# value -> core
 func reify*(val: Val): Exp
-proc norm*(ctx: Ctx, exp: Exp): Exp
+
 proc unwrap*(ctx: Ctx, exp: Exp): Val
 proc expand*(ctx: Ctx, exp: Exp): Exp
-proc is_subtype*(ctx: Ctx, x, y: Val): bool
 func `==`*(x, y: Val): bool
 func equal*(x, y: Val): bool = x == y
-proc match_apply_args(ctx: Ctx, exp: Exp): Exp
+
+proc infer_type*(ctx: Ctx, exp: Exp): Val =
+    ctx.check(exp).typ
+
+proc unwrap*(ctx: Ctx, exp: Exp): Val =
+    let new_ctx = ctx.extend(new_env=false, eval_mode=EvalMode.Unwrap)
+    new_ctx.eval(exp)
+
+proc norm*(ctx: Ctx, exp: Exp): Exp =
+    let new_ctx = ctx.extend(new_env=false, eval_mode=EvalMode.Norm)
+    new_ctx.eval(exp).reify
 
 proc norm_all*(ctx: Ctx, exps: seq[Exp]): seq[Exp] =
     exps.map_it(ctx.norm(it))
@@ -32,33 +49,12 @@ proc norm_all*(ctx: Ctx, exps: seq[Exp]): seq[Exp] =
 proc eval_all*(ctx: Ctx, exps: seq[Exp]): seq[Val] =
     exps.map_it(ctx.eval(it))
 
-func substitute(exp: Exp, src: string, dst: Exp): Exp =
-    case exp.kind:
-    of expAtom:
-        if exp.value == src: dst else: exp
-    of expTerm:
-        term(exp.exprs.map_it(substitute(it, src, dst)))
+proc eval_core*(ctx: Ctx, exp: Exp): Val =
+    ctx.eval(exp)
 
-proc print_env(ctx: Ctx, skip_top = true, only_args = false) =
-    var env = ctx.env
-    var level = ctx.env.depth
-    while env != nil:
-        if skip_top and env.parent == nil: break
-        for (k, v) in env.vars.pairs:
-            if only_args and not (v.arg or v.capture): continue
-            var typ = v.typ.map(str) ?? ""
-            var val = v.val.map(str) ?? ""
-            if val.len > 0:
-                val = " = " & val
-                typ = ""
-            elif typ.len > 0:
-                typ = " : " & typ
-            var tag = ""
-            if v.capture: tag &= "C"
-            if v.arg: tag &= "A"
-            echo "({level}) [{tag}] {k}{typ}{val}".fmt
-        env = env.parent
-        level -= 1
+proc eval_surface*(ctx: Ctx, exp: Exp): Val =
+    let (core_exp, _) = ctx.check(exp)
+    ctx.eval(core_exp)
 
 #
 # Glooobals
@@ -89,61 +85,6 @@ func strip_quotes(s: string): string =
 func basic_str(x: string): string =
     x.strip_quotes.multi_replace(("\\n", "\n"), ("\\t", "\t"), ("\\\"", "\""), ("\\'", "'"))
 
-#
-# Context
-#
-
-func extend*(env: Env): Env =
-    Env(parent: env, depth: env.depth + 1)
-
-func extend*(ctx: Ctx, new_env = true, eval_mode: EvalMode): Ctx =
-    Ctx(
-        env: if new_env: ctx.env.extend() else: ctx.env,
-        eval_mode: eval_mode,
-        site_stack: ctx.site_stack,
-        call_stack: ctx.call_stack,
-    )
-
-func extend*(ctx: Ctx, new_env = true): Ctx =
-    ctx.extend(new_env, ctx.eval_mode)
-
-proc assume*(env: Env, name: string, typ: Val, site = None[Exp](), arg = false) =
-    env.vars[name] = Var(val: None[Val](), typ: Some(typ), site: site, arg: arg)
-
-proc define*(env: Env, name: string, val, typ: Val, site = None[Exp](), opaque = false, arg = false) =
-    env.vars[name] = Var(val: Some(val), typ: Some(typ), site: site, opaque: opaque, arg: arg)
-
-proc find*(env: Env, name: string): Env =
-    var env = env
-    while env != nil:
-        if name in env.vars: return env
-        env = env.parent
-    nil
-
-proc site*(ctx: Ctx): Exp =
-    if ctx.site_stack.len > 0:
-        ctx.site_stack[^1]
-    else:
-        term()
-
-proc push_call*(ctx: Ctx, site: Exp, infer = false) =
-    ctx.call_stack.add(TraceCall(site: site, infer: infer))
-
-proc pop_call*(ctx: Ctx) =
-    discard ctx.call_stack.pop()
-
-proc lookup*(env: Env, name: string): Opt[Var] =
-    let env = env.find(name)
-    if env == nil: return None[Var]()
-    Some(env.vars[name])
-
-proc lookup_type*(env: Env, name: string): Opt[Val] =
-    let variable = env.lookup(name).or_else: return None(Val)
-    variable.typ
-
-proc lookup_value*(env: Env, name: string): Opt[Val] =
-    let variable = env.lookup(name).or_else: return None(Val)
-    variable.val
 
 #
 # Unions & intersections
@@ -154,20 +95,24 @@ func sets_inter*(xs, ys: seq[Val]): seq[Val] =
         if ys.any_it(x == it):
             result.add(x)
 
+
 func value_union*(xs, ys: seq[Val]): seq[Val] =
     result = xs
     for y in ys:
         if result.all_it(it != y):
             result.add(y)
 
+
 func value_inter*(xs, ys: seq[Val]): seq[Val] =
     sets_inter(xs, ys)
+
 
 func value_set*(xs: seq[Val]): seq[Val] =
     for x in xs:
         if result.any_it(x == it):
             continue
         result.add(x)
+
 
 func sets_equal*(xs, ys: seq[Val]): bool =
     if xs.len != ys.len: return false
@@ -178,6 +123,7 @@ func sets_equal*(xs, ys: seq[Val]): bool =
                     break inner
             return false
     true
+
 
 func norm_union*(args: varargs[Val]): Val =
     var types: seq[Val]
@@ -200,6 +146,7 @@ func norm_union*(args: varargs[Val]): Val =
             types.add(outer)
 
     UnionType(types.value_set)
+
 
 func norm_inter*(args: varargs[Val]): Val =
     var types: seq[Val]
@@ -233,6 +180,25 @@ func norm_inter*(args: varargs[Val]): Val =
         return norm_union(inters)
     return result
 
+
+proc eval_union*(ctx: Ctx, args: seq[Val]): Val =
+    if args[0].kind != ListLit:
+        raise error("Runtime error: {args[0]} is not a list.".fmt)
+    let args = args[0].values
+    if args.len == 0: return UnionType()
+    if args.len == 1: return args[0]
+    return norm_union(args)
+
+
+proc eval_inter*(ctx: Ctx, args: seq[Val]): Val =
+    if args[0].kind != ListLit:
+        raise error("Runtime error: {args[0]} is not a list.".fmt)
+    let args = args[0].values 
+    if args.len == 0: return InterType()
+    if args.len == 1: return args[0]
+    return norm_inter(args)
+
+
 #
 # Value equality & subtyping
 #
@@ -248,8 +214,10 @@ func `==`*(x, y: Exp): bool =
             if a != b: return false
         return true
 
+
 func `==`(x, y: Fun): bool =
     x == y
+
 
 func `==`(x, y: FunTyp): bool =
     if x.params.len != y.params.len: return false
@@ -264,8 +232,10 @@ func `==`(x, y: FunTyp): bool =
         #b_res = substitute(b_res, bi.name, reserved_atom($i))
     a_res == b_res
 
+
 func `==`(x, y: Rec): bool =
     x.values == y.values
+
 
 func `==`(x, y: RecTyp): bool =
     if x.fields.len != y.fields.len: return false
@@ -275,11 +245,13 @@ func `==`(x, y: RecTyp): bool =
         if a.name != b.name or a.typ != b.typ: return false
     return true
 
+
 func `==`(x, y: seq[Val]): bool =
     if x.len != y.len: return false
     for (a, b) in zip(x, y):
         if a != b: return false
     true
+
 
 func `==`*(x, y: Val): bool =
     if x.kind != y.kind: return false
@@ -294,11 +266,12 @@ func `==`*(x, y: Val): bool =
     of RecVal: x.rec == y.rec
     of RecTypeVal: x.rec_typ == y.rec_typ
     of NumLit, StrLit: x.lit == y.lit
-    of NeuVal, ExpVal: x.exp == y.exp
+    of OpaqueVal, NeuVal, ExpVal: x.exp == y.exp
     of I8: x.i8 == y.i8
     of U8: x.u8 == y.u8
     of I64: x.i64 == y.i64
     of U64: x.u64 == y.u64
+
 
 proc unify_record_type(ctx: Ctx, x, y: RecTyp): bool =
     if x.fields.len != y.fields.len: return false
@@ -317,24 +290,31 @@ proc unify_record_type(ctx: Ctx, x, y: RecTyp): bool =
         if a_typ != b_typ: return false
     return true
 
+
 proc unify_lambda_type(ctx: Ctx, x, y: FunTyp): bool =
     if x.params.len != y.params.len: return false
     # FIXME: sort topologically by dependency order
-    let local = ctx.extend()
+    let xctx = ctx.extend()
+    let yctx = ctx.extend()
     for (xp, yp) in zip(x.params, y.params):
-        if not ctx.is_subtype(local.eval(yp.typ), local.eval(xp.typ)): return false
-    return ctx.is_subtype(local.eval(x.result), local.eval(y.result))
+        let xt = xctx.eval(xp.typ)
+        if not xctx.is_subtype(yctx.eval(yp.typ), xt): return false
+        xctx.env.assume(xp.name, xt)
+        yctx.env.assume(yp.name, xt)
+    return xctx.is_subtype(xctx.eval(x.result), yctx.eval(y.result))
+
 
 proc is_subtype*(ctx: Ctx, x, y: Val): bool =
-    #echo fmt"{x} {x.kind} ?= {y} {y.kind}"
     # is x a subtype of y
-    let x = if x.kind == NeuVal: ctx.eval(x.exp) else: x
-    let y = if y.kind == NeuVal: ctx.eval(y.exp) else: y
+    #let x = if x.kind == NeuVal: ctx.eval(x.exp) else: x
+    #let y = if y.kind == NeuVal: ctx.eval(y.exp) else: y
     if x.kind == y.kind:
         case x.kind
         of UnionTypeVal:
+            if x.values == y.values: return true
             return sets_inter(x.values, y.values).len > 0
         of InterTypeVal:
+            if x.values == y.values: return true
             return value_set(x.values & y.values).len > x.values.len
         of RecTypeVal:
             return ctx.unify_record_type(x.rec_typ, y.rec_typ)
@@ -352,71 +332,38 @@ proc is_subtype*(ctx: Ctx, x, y: Val): bool =
 # Interpreter 
 #
 
-proc dynamic_level(ctx: Ctx, val: RecTyp): int =
-    result = 0
-    for slot in val.fields:
-        result = max(result, ctx.infer_level(slot.typ))
 
-proc dynamic_level(ctx: Ctx, val: FunTyp): int =
-    result = 0
-    let local = ctx.extend()
-    for par in val.params:
-        local.env.assume(par.name, local.eval(par.typ))
-        result = max(result, local.infer_level(par.typ))
-    result = max(result, local.infer_level(val.result))
+proc is_macro_expr*(ctx: Ctx, exp: Exp): bool =
+    if exp.len >= 1 and exp.head.is_atom:
+        let typ = ctx.env.lookup_type(exp.head.value).or_else: return false
+        if typ.kind == FunTypeVal:
+            return typ.fun_typ.autoexpand
+    return false
 
-proc dynamic_level*(ctx: Ctx, val: Val): int =
-    case val.kind
-    of TypeVal:
-        val.level + 1
-    of NeuVal:
-        ctx.dynamic_level(ctx.infer_type(val.exp))
-    of UnionTypeVal, InterTypeVal:
-        max_or(val.values.map_it(ctx.dynamic_level(it)), default=0)
-    of RecTypeVal:
-        ctx.dynamic_level(val.rec_typ)
-    of FunTypeVal:
-        ctx.dynamic_level(val.fun_typ)
-    else:
-        raise error("`level-of` expected an argument of Type, but got {val.str}.".fmt)
 
-proc dynamic_type*(ctx: Ctx, val: Val): Val =
-    case val.kind
-    of NeverVal:
-        never
-    of TypeVal, RecTypeVal, FunTypeVal, UnionTypeVal, InterTypeVal:
-        Universe(ctx.dynamic_level(val))
-    of RecVal:
-        var fields: seq[RecField]
-        for (name, val) in val.rec.values.pairs:
-            fields &= RecField(name: name, typ: ctx.infer_type(val.reify).reify)
-        Val(kind: RecTypeVal, rec_typ: RecTyp(fields: fields))
-    of FunVal:
-        raise ctx.error("Type of lambda is erased. {ctx.src}".fmt)
-        #let typ = val.fun.typ.or_else:
-        #    raise ctx.error("Type of lambda {val.fun.name.bold} must be assumed before usage! {ctx.src}".fmt)
-        #Val(kind: FunTypeVal, fun_typ: typ)
-    of I8:  ctx.eval("I8".atom)
-    of U8:  ctx.eval("U8".atom)
-    of I64: ctx.eval("I64".atom)
-    of U64: ctx.eval("U64".atom)
-    of MemVal:  ctx.eval("Size".atom)
-    of NumLit:  ctx.eval("Num-Literal".atom)
-    of StrLit:  ctx.eval("Str-Literal".atom)
-    of ListLit: ctx.eval("List-Literal".atom)
-    of ExpVal:
-        case val.exp.kind
-        of expAtom: ctx.eval("Atom".atom)
-        of expTerm: ctx.eval("Term".atom)
-    of NeuVal:
-        ctx.infer_type(val.exp)
+#
+# Elaborating type checking
+#
 
-proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
+
+proc check_universe_level(ctx: Ctx, exp: Exp): tuple[exp: Exp, level: int] =
+    let (core_exp, typ) = ctx.check(exp)
+    if typ.kind != TypeVal:
+        raise error("Expression {exp} needs to have type Type, but got {typ}. {exp.src}".fmt)
+    (core_exp, typ.level)
+
+
+proc check_universe(ctx: Ctx, exp: Exp): Exp =
+    ctx.check_universe_level(exp).exp
+
+
+proc check_apply_lambda(ctx: Ctx, exp: Exp, want_typ: Opt[Val]): TypedExp =
     let (head, tail) = (exp[0], exp.tail)
 
-    let head_typ = ctx.infer_type(head)
+    let (head_core, head_typ) = ctx.check(head)
     if head_typ.kind != FunTypeVal:
-        return exp
+        raise error("Expression {head} of type {head_typ} is not callable. {head.src}".fmt)
+    let head_val = ctx.eval(head_core)
 
     let UNSET = 0
     let DEFAULT = 1
@@ -427,6 +374,7 @@ proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
     var arg_norm = new_seq[Exp](par_count)
     var par_done = new_seq[int](par_count)
     var arg_done = new_seq[bool](tail.len)
+    var par_default = new_seq[bool](par_count)
     var variadic_par = -1
     var variadic_arg : seq[Exp]
 
@@ -437,6 +385,7 @@ proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
         par.default.if_some(arg_default):
             arg_norm[i] = arg_default
             par_done[i] = DEFAULT
+            par_default[i] = true
 
     for i, arg in tail:
         if arg.has_prefix("$define"):
@@ -452,6 +401,7 @@ proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
             arg_norm[par_index] = val
             par_done[par_index] = DONE
             arg_done[i] = true
+            par_default[i] = false
 
     for i, arg in tail:
         if arg_done[i]: continue
@@ -477,42 +427,401 @@ proc match_apply_args(ctx: Ctx, exp: Exp): Exp =
     if variadic_par != -1 and typ.params[variadic_par].quoted:
         variadic_arg = variadic_arg.map_it(term(atom("$quote"), it))
 
-    let local = ctx.extend()
+    let ctx = ctx.extend()
     for i, (arg, par) in zip(arg_norm, typ.params):
         if par.variadic:
             let par = typ.params[variadic_par]
-            let par_typ = local.eval(par.variadic_typ)
-            for arg in variadic_arg:
-                let arg_typ = local.infer_type(arg)
-                if not local.is_subtype(arg_typ, par_typ):
-                    raise local.error(exp=arg, msg="Value for variadic parameter {par.name.bold} must be of type {par_typ.bold}, but got {arg.bold} of type {arg_typ.bold}. {exp.src}".fmt)
+            let variadic_typ = ctx.eval(par.variadic_typ)
+            for arg in variadic_arg.mitems:
+                let (arg_exp, arg_typ) = ctx.check(arg)
+                if not ctx.is_subtype(arg_typ, variadic_typ):
+                    raise ctx.error(exp=arg, msg="Value for variadic parameter {par.name.bold} must be of type {variadic_typ.bold}, but got {arg.bold} of type {arg_typ.bold}. {exp.src}".fmt)
+                arg = arg_exp
             arg_norm[i] = term(atom("$list") & variadic_arg)
+            ctx.env.define(par.name, ctx.eval(arg_norm[i]), ctx.eval(par.typ))
+        elif par_default[i]:
+            let par_typ = ctx.eval(par.typ)
+            ctx.env.define(par.name, ctx.eval(arg), par_typ)
         else:
-            let arg_typ = local.infer_type(arg)
-            let par_typ = local.eval(par.typ)
-            if not local.is_subtype(arg_typ, par_typ):
-                raise local.error(exp=arg, msg="Value for parameter {par.name.bold} must be of type {par_typ.bold}, but got {arg.bold} of type {arg_typ.bold}. {exp.src}".fmt)
-            let arg_val = local.eval(arg)
-            local.env.define(par.name, arg_val, par_typ)
+            let par_typ = ctx.eval(par.typ)
+            let (arg_exp, arg_typ) = ctx.check(arg, par_typ)
+            #if not ctx.is_subtype(arg_typ, par_typ):
+            #    raise ctx.error(exp=arg, msg="Value for parameter {par.name.bold} must be of type {par_typ.bold}, but got {arg.bold} of type {arg_typ.bold}. {exp.src}".fmt)
+            arg_norm[i] = arg_exp
+            ctx.env.define(par.name, ctx.eval(arg_exp), par_typ) # TODO: De Brujin
 
-    term(head & arg_norm)
+    var core_exp = term("$apply".atom, term(head_core & arg_norm))
+    var result_typ = ctx.eval(typ.result)
 
-proc is_macro_expr*(ctx: Ctx, exp: Exp): bool =
-    if exp.len >= 1 and exp.head.is_atom:
-        let typ = ctx.env.lookup_type(exp.head.value).or_else: return false
-        if typ.kind == FunTypeVal:
-            return typ.fun_typ.autoexpand
-    return false
+    if want_typ.is_some and not ctx.is_subtype(result_typ, want_typ.unsafe_get):
+        raise error("Expected call {exp} to be of type {want_typ.unsafe_get}, but it had type {result_typ}. {exp.src}".fmt)
+
+    if typ.autoexpand:
+        let macro_result = ctx.eval(core_exp)
+        if macro_result.kind != ExpVal:
+            raise compiler_defect("Macro didn't return an expression! Got {macro_result.noun} {macro_result} {exp.src}".fmt)
+        (core_exp, result_typ) = ctx.check(macro_result.exp, want_typ)
+
+    return (core_exp, want_typ ?? result_typ)
+
+
+proc synth_lambda(ctx: Ctx, exp: Exp): TypedExp =
+    let ctx = ctx.extend()
+    var core_exp = term("$lambda".atom)
+    var typ : FunTyp
+
+    for typ_part in exp.exprs:
+        if typ_part.has_prefix("$param"):
+            var par = FunParam(name: typ_part[1].value)
+            var core_par = term("$param".atom, typ_part[1])
+            for par_part in typ_part.exprs:
+                if par_part.has_prefix(":"):
+                    par.typ = par_part[1]
+                elif par_part.has_prefix("="):
+                    par.default = Some(par_part[1])
+                elif par_part.is_atom("$quoted"):
+                    par.quoted = true
+                    core_par &= par_part
+                elif par_part.has_prefix("$variadic"):
+                    par.variadic = true
+                    par.variadic_typ = ctx.check_universe(par_part[1])
+                    core_par &= term("$variadic".atom, par.variadic_typ)
+
+            var default_typ = None(Val)
+            if par.default.is_some:
+                let (e, t) = ctx.check(par.default.unsafe_get)
+                core_par &= term("=".atom, e)
+                default_typ = Some(t)
+
+            if par.typ.is_nil:
+                if par.default.is_none:
+                    raise error("Type of parameter {par.name} is ambiguous in this context. {typ_part.src}".fmt)
+                par.typ = reify(default_typ.unsafe_get)
+
+            par.typ = ctx.check_universe(par.typ)
+            core_par &= term(":".atom, par.typ)
+
+            ctx.env.assume(par.name, ctx.eval(par.typ)) # TODO: De Brujin
+            typ.params.add(par)
+            core_exp &= core_par
+            
+        elif typ_part.has_prefix("$result"):
+            typ.result = ctx.check_universe(typ_part[1])
+            core_exp &= term("$result".atom, typ.result)
+
+        elif typ_part.has_prefix("$body"):
+            if typ.result.is_nil:
+                let (body, res) = ctx.check(typ_part[1])
+                typ.result = reify(res)
+                core_exp &= term("$result".atom, typ.result)
+                core_exp &= term("$body".atom, body)
+            else:
+                let body = ctx.check(typ_part[1], ctx.eval(typ.result)).exp
+                core_exp &= term("$body".atom, body)
+        
+        elif typ_part.is_atom("$expand"):
+            core_exp &= typ_part
+            typ.autoexpand = true
+    
+    (core_exp, Val(kind: FunTypeVal, fun_typ: typ))
+
+
+proc check_lambda(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
+    raise compiler_defect("Downwards checking for lambda expression {exp} not implemented! {exp.src}".fmt)
+
+
+proc synth_lambda_type(ctx: Ctx, exp: Exp): TypedExp =
+    let ctx = ctx.extend()
+    var core = term("$Lambda".atom)
+    var univ = 0
+    for typ_part in exp.exprs:
+        if typ_part.has_prefix("$param"):
+            var par_name = typ_part[1]
+            var core_par = term("$param".atom, par_name)
+            var par_typ, par_default : Exp
+            for par_part in typ_part[2 .. ^1]:
+                if par_part.has_prefix(":"): par_typ = par_part[1]
+                elif par_part.has_prefix("="): par_default = par_part[1]
+                elif par_part.is_atom("$quoted"): core_par &= par_part
+                elif par_part.has_prefix("$variadic"): core_par &= term("$variadic".atom, ctx.check_universe(par_part[1]))
+                else: core_par &= par_part
+            
+            var default_typ = None(Val)
+            if not par_default.is_nil:
+                let (e, t) = ctx.check(par_default)
+                core_par &= term("=".atom, e)
+                default_typ = Some(t)
+
+            if par_typ.is_nil:
+                if default_typ.is_none:
+                    raise error("Type of parameter {par_name} is ambiguous in this context. {typ_part.src}".fmt)
+                par_typ = reify(default_typ.unsafe_get)
+
+            let (par_typ_core, par_typ_universe) = ctx.check_universe_level(par_typ)
+            univ = max(univ, par_typ_universe)
+            par_typ = par_typ_core
+            core_par &= term(":".atom, par_typ)
+            core &= core_par
+
+            ctx.env.assume(par_name.value, ctx.eval(par_typ_core)) # TODO: De Brujin
+
+        elif typ_part.has_prefix("$result"):
+            let (ret_typ_core, ret_typ_universe) = ctx.check_universe_level(typ_part[1])
+            univ = max(univ, ret_typ_universe)
+            core &= term("$result".atom, ret_typ_core)
+        
+        elif typ_part.is_atom("$expand"):
+            core &= typ_part
+
+    (core, Val(kind: TypeVal, level: univ))
+
+
+proc check_lambda_type(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
+    raise compiler_defect("Downwards checking for lambda type {exp} not implemented! {exp.src}".fmt)
+
+
+proc synth_record_type(ctx: Ctx, exp: Exp): tuple[exp: Exp, typ: Val] =
+    var core = term("$Record".atom)
+    var univ = 0
+
+    for part in exp.tail:
+        if part.has_prefix("$field"):
+            let name = part[1]
+            var field_core = term("$field".atom, name)
+            for field_part in part[2 .. ^1]:
+                if field_part.has_prefix(":"):
+                    let (typ_core, typ_univ) = ctx.check_universe_level(field_part[1])
+                    univ = max(univ, typ_univ)
+                    field_core &= term(":".atom, typ_core)
+                    ctx.env.assume(name.value, ctx.eval(typ_core)) # TODO: De Brujin?
+
+                elif field_part.has_prefix("="):
+                    let (default_core, default_typ) = ctx.check(field_part[1])
+                    # TODO: ensure that default_typ <: field_typ
+                    field_core &= term("=".atom, default_core)
+
+            core &= field_core
+        else:
+            assert false
+
+    (core, Val(kind: TypeVal, level: univ))
+
+
+proc check_record_type(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
+    raise compiler_defect("Downwards checking for record type {exp} not implemented! {exp.src}".fmt)
+
+
+proc synth_record(ctx: Ctx, exp: Exp): tuple[exp: Exp, typ: Val] =
+    var core = term("$record".atom)
+    var rec_typ : RecTyp
+    for part in exp.tail:
+        if part.has_prefix("$arg"):
+            let name = part[1]
+            let (value_core, typ) = ctx.check(part[2])
+            rec_typ.fields &= RecField(name: name.value, typ: reify(typ))
+            core &= term("$arg".atom, name, value_core)
+
+        else:
+            assert false
+    (core, Val(kind: RecTypeVal, rec_typ: rec_typ))
+
+
+proc check_record(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
+    if want_typ.kind != RecTypeVal:
+        raise type_error("Can't type check if record is of type {want_typ}, because {want_typ.noun} {want_typ} is not a record type. {exp.src}".fmt)
+
+    result = term("$record".atom)
+    let ctx = ctx.extend()
+
+    var field_values : Table[string, tuple[name, value: Exp]] 
+    for part in exp.tail:
+        if part.has_prefix("$arg"):
+            field_values[part[1].value] = (part[1], part[2])
+
+    for field in want_typ.rec_typ.fields:
+        var name, value : Exp
+        var want_field_typ = ctx.eval(field.typ)
+        var typ : Val
+        if field.name notin field_values:
+            if field.default.is_nil:
+                raise type_error("Missing value for field {field.name} of type {field.typ}. {exp.src}".fmt)
+            (name, value, typ) = (field.name.atom, field.default, want_typ)
+        else:
+            (name, value) = field_values[field.name]
+            (value, typ) = ctx.check(value, want_field_typ)
+
+        ctx.env.define(field.name, ctx.eval(value), typ)
+        result &= term("$arg".atom, name, value)
+
+
+proc check_apply(ctx: Ctx, exp: Exp, typ: Opt[Val]): TypedExp =
+    let (_, head_typ) = ctx.check(exp.head)
+    case head_typ.kind
+    of FunTypeVal:
+        return ctx.check_apply_lambda(exp, typ)
+    else:
+        raise error(msg="Expression {exp.head.bold} of type {head_typ.bold} is not callable. {exp.src}".fmt)
+
+
+proc check_block*(ctx: Ctx, exp: Exp): Val =
+    result = unit_type
+    for stat in exp.tail:
+        result = ctx.infer_type(stat)
+
+
+proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
+    var exp = exp
+    case exp.kind:
+    of expAtom:
+        case exp.tag:
+        of aSym, aLit:
+            let vari = ctx.env.lookup(exp.value).or_else:
+                raise type_error("Variable {exp.bold} was not declared. {exp.src}".fmt)
+            let var_typ = vari.typ.or_else:
+                raise type_error("Variable {exp.bold} has no type. {exp.src}".fmt)
+            if typ.is_none:
+                return (exp, var_typ)
+            let typ = typ.unsafe_get
+            if not ctx.is_subtype(var_typ, typ):
+                raise type_error("Expected value of type {typ}, but got variable {exp} of type {var_typ}. {exp.src}".fmt)
+            return (exp, typ)
+        of aNum:
+            let typ = typ.or_else: return (exp, ctx.eval("Num-Literal".atom))
+            if typ == ctx.eval("Num-Literal".atom): return (exp, ctx.eval("Num-Literal".atom))
+            if typ == ctx.eval("I64".atom): return (term("num-i64".atom, exp), ctx.eval("I64".atom))
+            if typ == ctx.eval("U64".atom): return (term("num-u64".atom, exp), ctx.eval("U64".atom))
+            if typ == ctx.eval("I8".atom): return (term("num-i8".atom, exp), ctx.eval("I8".atom))
+            if typ == ctx.eval("U8".atom): return (term("num-u8".atom, exp), ctx.eval("U8".atom))
+            raise type_error("Can't convert number literal {exp} to type {typ}. {exp.src}".fmt)
+        of aStr:
+            if typ.is_none or typ.unsafe_get == ctx.eval("Str-Literal".atom): return (exp, ctx.eval("Str-Literal".atom))
+            raise type_error("Can't convert string literal {exp} to type {typ}. {exp.src}".fmt)
+        else:
+            raise type_error("Failed to type check {exp.tag} atom {exp.bold}. {exp.src}".fmt)
+    of expTerm:
+        if exp.is_nil:
+            raise compiler_defect("Empty term while checking type {typ}".fmt)
+
+        if exp.head.is_atom:
+            case exp.head.value:
+            of "$apply":
+                writeStackTrace()
+                raise compiler_defect("Can't type check core expression {exp}. {exp.src}".fmt)
+            of "$quote":
+                let typ = typ.or_else: return (exp, ctx.eval("Expr".atom))
+                if typ == ctx.eval("Expr".atom): return (exp, ctx.eval("Expr".atom))
+                if typ == ctx.eval("Atom".atom) and exp[1].is_atom: return (exp, ctx.eval("Atom".atom))
+                if typ == ctx.eval("Term".atom) and exp[1].is_term: return (exp, ctx.eval("Term".atom))
+                raise type_error("Expression {exp} is not of type {typ}. {exp.src}".fmt)
+            of "$lambda":
+                return if typ.is_some:
+                    (ctx.check_lambda(exp, typ.unsafe_get), typ.unsafe_get)
+                else:
+                    ctx.synth_lambda(exp)
+            of "$Lambda":
+                return if typ.is_some:
+                    (ctx.check_lambda_type(exp, typ.unsafe_get), typ.unsafe_get)
+                else:
+                    ctx.synth_lambda_type(exp)
+            of "$Record":
+                return if typ.is_some:
+                    (ctx.check_record_type(exp, typ.unsafe_get), typ.unsafe_get)
+                else:
+                    ctx.synth_record_type(exp)
+            of "$record":
+                return if typ.is_some:
+                    (ctx.check_record(exp, typ.unsafe_get), typ.unsafe_get)
+                else:
+                    ctx.synth_record(exp)
+            of "$assume":
+                let name = exp[1].value
+                let typ_exp = ctx.check_universe(exp[2])
+                let local = ctx.env.find(name)
+                let typ_val = ctx.eval(typ_exp)
+                if local != nil:
+                    local.vars[name].typ = Some(typ_val)
+                    local.vars[name].site = Some(exp)
+                else:
+                    ctx.env.assume(name, typ_val, site=Some(exp)) # TODO: De Brujin
+                exp[2] = typ_exp
+                return (exp, unit_type)
+            of "$define":
+                let name = exp[1].value
+                var opaque = false
+                for part in exp[3 .. ^1]:
+                    if part.is_atom("$opaque"): opaque = true
+                var rhs_core : Exp
+                var rhs_typ : Val 
+                if name in ctx.env.vars and ctx.env.vars[name].typ.is_some:
+                    let ass_typ = ctx.env.vars[name].typ.unsafe_get
+                    (rhs_core, rhs_typ) = ctx.check(exp[2], ass_typ)
+                    if not ctx.is_subtype(rhs_typ, ass_typ):
+                        raise type_error("Variable {name} was declared as {ass_typ}, which is incompatible with value {ctx.eval(rhs_core)} of {rhs_typ}. {exp.src}".fmt)
+                else:
+                    (rhs_core, rhs_typ) = ctx.check(exp[2], typ)
+                var core = term("$define".atom, exp[1], rhs_core, reify(rhs_typ), if opaque: atom("true") else: atom("false"))
+                let rhs_val = ctx.eval(rhs_core)
+                ctx.env.define(name, rhs_val, rhs_typ, opaque=opaque) # TODO: De Brujin
+                return (core, rhs_typ)
+            of "$block":
+                var exps : seq[Exp]
+                var types: seq[Val]
+                for exp in exp.tail:
+                    let (core_exp, typ) = ctx.check(exp)
+                    exps.add(core_exp)
+                    types.add(typ)
+                return (term("$block".atom & exps), types[^1])
+            of "case":
+                var types : seq[Val]
+                var core = term(exp[0], ctx.check(exp[1]).exp)
+                for x in exp.exprs[2 .. ^1]:
+                    let (pattern, body) = (x[0], x[1])
+                    types &= ctx.infer_type(body)
+                    core &= term(pattern, body)
+                return (core, ctx.eval_union(@[MakeListLit(types)]))
+            of "as":
+                let lhs = exp[1]
+                let rhs = ctx.eval(ctx.check_universe(exp[2]))
+                var dst_typ = if rhs.kind == OpaqueVal: ctx.unwrap(rhs.exp) else: rhs
+                var lhs_core : Exp
+                var src_typ : Val
+                (lhs_core, src_typ) = ctx.check(lhs, dst_typ)
+
+                if typ.is_some:
+                    var dst_typ2 = typ.unsafe_get
+                    if dst_typ2.kind == NeuVal: dst_typ2 = ctx.eval(dst_typ2.exp) # try evaluating if variable became unstuck
+                    if dst_typ2.kind == OpaqueVal: dst_typ2 = ctx.unwrap(dst_typ2.exp)
+                    if not ctx.is_subtype(dst_typ2, dst_typ):
+                        raise error("Cast error check {lhs_core} as {dst_typ} : {dst_typ2.noun} {dst_typ2}".fmt)
+                    return (lhs_core, typ.unsafe_get)
+
+                elif not ctx.is_subtype(src_typ, dst_typ):
+                    raise error("You can't cast {lhs.bold} of {src_typ.noun} {src_typ.bold} to {dst_typ.noun} {dst_typ.bold}.\n\n".fmt &
+                        "Can't upcast, because {src_typ.bold} is not a subtype of {dst_typ.bold}.\n\n".fmt &
+                        "Can't downcast, because there is no evidence, that {lhs.bold} was upcast from type {dst_typ.bold}. {lhs.src}".fmt)
+
+                return (lhs_core, rhs)
+            of "unwrap":
+                let (arg, typ) = ctx.check(exp[1], typ)
+                return (term("$unwrap".atom, arg), typ)
+            else:
+                discard
+        
+        return ctx.check_apply(exp, typ)
+
 
 #
 # Evaluation - computes the value of an expression
 #
 
+
 proc eval_lambda_param(ctx: Ctx, exp: Exp): FunParam =
     result.name = exp[1].value
+    var typ : Val
     for part in exp.exprs[2 .. ^1]:
         if part.has_prefix(":"):
-            result.typ = part[1]
+            typ = ctx.eval(part[1])
+            result.typ = reify(typ)
         elif part.has_prefix("="):
             result.default = Some(ctx.norm(part[1]))
         elif part.has_prefix("$variadic"):
@@ -522,63 +831,51 @@ proc eval_lambda_param(ctx: Ctx, exp: Exp): FunParam =
             result.quoted = true
         elif part == atom("$keyword"):
             result.keyword = true
+    assert typ != nil
+    ctx.env.assume(result.name, typ, site=Some(exp)) # TODO: De Brujin
 
-    let typ = if result.typ.is_nil:
-        if result.default.is_none:
-            raise ctx.error("Neither type, nor default value was specified for lambda paramer {result.name}. {exp.src}".fmt)
-        let default_typ = ctx.infer_type(result.default.unsafe_get)
-        result.typ = default_typ.reify
-        default_typ
-    else:
-        let norm_typ = ctx.eval(result.typ)
-        result.typ = norm_typ.reify
-        norm_typ
-
-    #echo fmt"{result.name} : {typ}"
-    ctx.env.assume(result.name, typ, arg=true)
 
 proc eval_lambda_type(ctx: Ctx, exp: Exp): FunTyp =
-    # TODO: ensure that params form a DAG, and add params in topological order
-    let local = ctx.extend()
+    let ctx = ctx.extend()
     for part in exp.tail:
         if part.has_prefix("$param"):
-            result.params &= local.eval_lambda_param(part)
+            result.params &= ctx.eval_lambda_param(part)
         elif part.has_prefix("$result"):
-            result.result = local.norm(part[1])
+            result.result = ctx.norm(part[1])
         elif part.is_atom("$expand"):
             result.autoexpand = true
         else:
-            raise ctx.error("Unexpected $Lambda form {part.str_ugly}. {exp.src}".fmt)
+            raise runtime_error("Unexpected $Lambda form {part.str}. {exp.src}".fmt)
+
 
 proc eval_lambda(ctx: Ctx, exp: Exp): Fun =
-    #result.typ = Some(local.infer_lambda_type(exp, extend=false))
-    #let local = ctx.extend()
-    #result.typ = Some(local.infer_type(exp))
+    let ctx = ctx.extend()
     result.ctx = Some(ctx)
     for part in exp.tail:
-        if part.has_prefix("$body"):
-            #let body = local.norm(part[1])
+        if part.has_prefix("$param"):
+            result.params &= part[1].value
+        elif part.has_prefix("$body"):
             let body = part[1]
             result.body = Left[Exp, BuiltinFunProc](body)
 
+
 proc eval_record_type(ctx: Ctx, exp: Exp): RecTyp =
-    # order fields by dependency 
-    let local = ctx.extend()
+    let ctx = ctx.extend()
     for part in exp.tail:
         if part.has_prefix("$field"):
             var field : RecField
             field.name = part[1].value
             for part in part[2 .. ^1]:
-                if part.has_prefix(":"):
-                    field.typ = local.norm(part[1])
-                elif part.has_prefix("="):
-                    field.default = part[1]
-                else:
-                    assert false
-            local.env.assume(field.name, local.eval(field.typ), site=Some(part))
+                if part.has_prefix(":"): field.typ = part[1]
+                elif part.has_prefix("="): field.default = part[1]
+                else: assert false
+            let typ = ctx.eval(field.typ)
+            field.typ = typ.reify
+            ctx.env.assume(field.name, typ, site=Some(part))
             result.fields &= field
         else:
             assert false
+
 
 proc eval_record(ctx: Ctx, exp: Exp): Rec =
     for part in exp.tail:
@@ -586,33 +883,31 @@ proc eval_record(ctx: Ctx, exp: Exp): Rec =
             let (name, val) = (part[1], part[2])
             result.values[name.value] = ctx.eval(val)
         else:
-            raise
+            assert false
 
-proc eval_apply_lambda(ctx: Ctx, fun: Fun, typ: FunTyp, args: seq[Exp]): Val =
+
+proc eval_apply_lambda(ctx: Ctx, fun: Fun, args: seq[Exp]): Val =
     let local = fun.ctx ?? ctx.extend()
     match fun.body:
         Left(body):
-            for (par, arg) in zip(typ.params, args):
-                local.env.vars[par.name] = Var(val: Some(ctx.eval(arg)), typ: Some(local.eval(par.typ)), arg: true)
+            for (name, it) in zip(fun.params, args):
+                local.env.vars[name] = Var(val: Some(ctx.eval(it))) # TODO: De Brujin
             eval(local, body)
         Right(body):
-            body(local, args.map_it(local.eval(it)))
+            body(local, args.map_it(ctx.eval(it)))
+
 
 proc eval_apply(ctx: Ctx, exp: Exp): Val =
-    var head = ctx.eval(exp.head)
-    case head.kind
+    let head = ctx.eval(exp.head)
+    case head.kind:
     of FunVal:
-        let typ = ctx.infer_type(exp.head)
-        if typ.kind != FunTypeVal:
-            raise ctx.error(exp=exp, msg="This shouldn't happen: function {exp.head} didn't have a function type (was {typ}). {exp.src}".fmt)
-        let norm = ctx.match_apply_args(exp)
-        ctx.eval_apply_lambda(head.fun, typ.fun_typ, norm.tail)
-    of NeuVal:
-        Neu(term(head.exp & ctx.norm_all(exp.tail)))
-    of RecTypeVal:
-        raise ctx.error(exp=exp, msg="Record constructors not implemented. {exp.src}".fmt)
+        ctx.eval_apply_lambda(head.fun, exp.tail)
+    of NeuVal, OpaqueVal:
+        let res = term("$apply".atom, term(reify(head) & exp.tail.map_it(ctx.norm(it))))
+        if head.kind == NeuVal: Neu(res) else: Val(kind: OpaqueVal, exp: res)
     else:
-        raise ctx.error(exp=exp, msg="Can't evaluate, because {head.noun} {head.bold} of type {ctx.dynamic_type(head).bold} is not callable. {exp[0].src}".fmt)
+        raise ctx.error(exp=exp, msg="Can't evaluate, because {head.kind} {head.bold} is not callable. {exp.src}".fmt)
+
 
 proc eval_equals(ctx: Ctx, lhs, rhs: Exp): bool =
     let lhs_typ = ctx.infer_type(lhs)
@@ -624,17 +919,19 @@ proc eval_equals(ctx: Ctx, lhs, rhs: Exp): bool =
         raise error(exp, "Can't compare arguments of different types {lhs_val} of {lhs_typ} and {rhs_val} of {rhs_typ}. {exp.src}".fmt)
     lhs_val == rhs_val
 
+
 proc eval_name(ctx: Ctx, exp: Exp): Val =
     let name = exp.value
     let vari = ctx.env.lookup(name).or_else:
-        raise ctx.error("Variable {name.bold} is not defined or assumed. {exp.src}".fmt)
+        raise runtime_error("Variable {exp.bold} is unknown. {exp.src}".fmt)
     if ctx.eval_mode == EvalMode.Unwrap:
         if vari.val.is_none:
-            raise ctx.error("Can't unwrap because {name.bold} is not defined. {exp.src}".fmt)
+            raise runtime_error("Can't unwrap because {name.bold} is not defined. {exp.src}".fmt)
         return vari.val.unsafe_get
     if vari.opaque:
-        return Neu(exp)
+        return Val(kind: OpaqueVal, exp: exp)
     vari.val ?? Neu(exp)
+
 
 proc eval_assume(ctx: Ctx, exp: Exp): Val =
     let (name, typ_exp) = (exp[1].value, exp[2])
@@ -648,79 +945,39 @@ proc eval_assume(ctx: Ctx, exp: Exp): Val =
         ctx.env.assume(name, ctx.eval(typ_exp), site=Some(exp))
     return unit
 
+
 proc eval_define(ctx: Ctx, exp: Exp, only_assume = false): Val =
-    var (lhs, rhs) = (exp[1], exp[2])
-    var lhs_typ = None(Val)
-    var opaque = false
-    if lhs.has_prefix(":"):
-        lhs_typ = Some(ctx.eval(lhs[2]))
-        lhs = lhs[1]
-    if lhs.has_prefix("opaque"):
-        opaque = true
-        lhs = lhs[1]
-    if lhs.kind != expAtom:
-        raise error(lhs, "Expected an Atom on the left side of definition, but found Term {lhs}. {lhs.src}".fmt)
-    let name = lhs.value
-    if name in ctx.env.vars and ctx.env.vars[name].val.is_some:
-        let vari = ctx.env.vars[name]
-        let site = vari.site.map(x => "\n\nIt was already defined here: {x.src(hi=false)}".fmt) ?? ""
-        raise error(lhs, "Cannot define `{name}`. {lhs.src} {site}".fmt)
-    var rhs_typ = ctx.infer_type(rhs)
-    lhs_typ.if_some(lhs_typ):
-        if not ctx.is_subtype(rhs_typ, lhs_typ):
-            raise ctx.error(exp=rhs, msg="Can't coerce {rhs} of type {rhs_typ.bold} to type {lhs_typ.bold}. {rhs.src}".fmt)
-    let typ = lhs_typ ?? rhs_typ
-    let site = term(lhs, rhs)
-    if only_assume:
-        ctx.env.assume(name, typ, site=Some(site))
-    var rhs_val = ctx.eval(rhs)
-    #if rhs_val.kind == FunVal:
-    #    rhs_val.fun.name = name
-    ctx.env.define(name, rhs_val, typ, site=Some(site), opaque=opaque)
-    return unit
+    var (name, val_exp, typ_exp) = (exp[1].value, exp[2], exp[3])
+    let opaque = exp[4].is_atom("true")
+    let val = ctx.eval(val_exp)
+    ctx.env.define(name, val, ctx.eval(typ_exp), site=Some(exp), opaque=opaque) # TODO: De Brujin
+    return val
 
-proc eval_cast(ctx: Ctx, lhs: Exp, dst_typ: Val): Val =
-    var src_typ = ctx.infer_type(lhs)
-    let dst_typ = if dst_typ.kind == NeuVal: ctx.unwrap(dst_typ.exp) else: dst_typ
-    # check if can cast to subtype
-    if not ctx.is_subtype(src_typ, dst_typ):
-        raise error(lhs, "You can't cast {lhs.bold} of {src_typ.bold} to type {dst_typ.bold}.\n\n".fmt &
-        "Can't upcast, because type {src_typ.bold} is not a subtype of {dst_typ.bold}.\n\n".fmt &
-        "Can't downcast, because there is no evidence, that {lhs.bold} was upcast from type {dst_typ.bold}. {lhs.src}".fmt)
-    return ctx.eval(lhs)
-
-proc eval_union*(ctx: Ctx, args: seq[Val]): Val =
-    let args = args[0].values
-    if args.len == 0: return UnionType()
-    if args.len == 1: return args[0]
-    return norm_union(args)
-
-proc eval_inter*(ctx: Ctx, args: seq[Val]): Val =
-    let args = args[0].values 
-    if args.len == 0: return InterType()
-    if args.len == 1: return args[0]
-    return norm_inter(args)
 
 proc eval_match(ctx: Ctx, lhs_exp: Exp, rhs_val: Val): bool =
     if lhs_exp.is_token("_"): return true
     let lhs_val = ctx.eval(lhs_exp)
     return lhs_val == rhs_val
 
+
 proc eval_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
     let switch = ctx.eval(switch_exp)
-    if switch.kind == NeuVal and ctx.eval_mode == EvalMode.Norm:
-        return Neu(term(@["case".atom, switch_exp] & cases))
+    if switch.kind == NeuVal:
+        return Neu(term(@["case".atom, ctx.norm(switch_exp)] & cases)) # FIXME: norm cases (special treatment for patterns)
         #raise ctx.error("Can't match on a neutral value {switch_exp.bold}. {switch_exp.src}".fmt)
     for branch in cases:
-        let local = ctx.extend()
-        if local.eval_match(branch[0], switch):
-            return local.eval(branch[1])
-    raise ctx.error(prefix="runtime defect", msg="Unreachable case {switch.noun} {switch.bold}. {switch_exp.src}".fmt)
+        #let local = ctx.extend()
+        if ctx.eval_match(branch[0], switch):
+            return ctx.eval(branch[1])
+    writeStackTrace()
+    raise runtime_error("Unreachable case {switch.noun} {switch.bold}. {switch_exp.src}".fmt)
+
 
 proc eval_test(ctx: Ctx, name: string, test: Exp) =
     try:
-        let local = ctx.extend()
-        discard local.eval(test)
+        let ctx = ctx.extend()
+        let (test_exp, _) = ctx.check(test)
+        discard ctx.eval(test_exp)
         stdout.write "test " & name & " \e[32mPASSED\e[0m\n".fmt
     except AssertionDefect:
         echo get_current_exception().getStackTrace()
@@ -730,8 +987,10 @@ proc eval_test(ctx: Ctx, name: string, test: Exp) =
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error)
 
+
 proc eval_xtest(ctx: Ctx, name: string, body_exp: Exp) =
     echo "test {name} \e[33mSKIPPED\e[0m".fmt
+
 
 proc eval_assert(ctx: Ctx, exp: Exp) =
     let prefix = "ASSERTION FAILED"
@@ -744,10 +1003,8 @@ proc eval_assert(ctx: Ctx, exp: Exp) =
     let neg_neg = if negate: "" else: "not "
     if cond.has_prefix("==") or cond.has_prefix("!="):
         let op = cond[0].value
-        let (lhs, rhs) = (cond[1], cond[2])
-        #echo "{ctx.expand(lhs).str_ugly} ?= {ctx.expand(rhs).str_ugly}".fmt
-        let actual_typ = ctx.infer_type(lhs)
-        let expected_typ = ctx.infer_type(rhs)
+        let (lhs, actual_typ) = ctx.check(cond[1])
+        let (rhs, expected_typ) = ctx.check(cond[2])
         if not ctx.is_subtype(actual_typ, expected_typ):
             raise error(exp, "can't compare {lhs.str} of type {actual_typ.str} ".fmt &
                 "with {rhs.str} of type {expected_typ.str}. {exp.src}".fmt)
@@ -763,43 +1020,39 @@ proc eval_assert(ctx: Ctx, exp: Exp) =
                     "\n         but {actual.bold} == {expected.bold} {exp.src}".fmt)
     elif cond.has_prefix("is-subtype"):
         let (lhs, rhs) = (cond[1], cond[2])
-        let lhs_val = ctx.eval(lhs)
-        let rhs_val = ctx.eval(rhs)
+        let lhs_val = ctx.eval_surface(lhs)
+        let rhs_val = ctx.eval_surface(rhs)
         if not ctx.is_subtype(lhs_val, rhs_val) xor negate:
             raise ctx.error(exp=exp, prefix=prefix, msg="Expected {lhs_val.bold} to {neg}be a subtype of {rhs_val.bold}. {exp.src}".fmt)
     elif cond.has_prefix("error"):
         var cond = cond[1]
-        var res = None(Val)
+        var exp : Exp
+        var typ, val : Val
         try:
-            res = Some(ctx.eval(cond))
+            (exp, typ) = ctx.check(cond)
+            val = ctx.eval(exp)
         except VitaminError:
             discard
-
-        match res:
-            None:
-                discard
-            Some(val):
-                raise ctx.error(exp=cond, prefix=prefix, msg="Expected expression {cond.bold} to raise a compile-time error,\n".fmt &
-                    "but it successfuly evaluated to {val.bold} of type {ctx.dynamic_type(val).bold}. {cond.src}".fmt)
+        if typ != nil and val != nil:
+            raise ctx.error(exp=cond, prefix=prefix, msg="Expected expression {cond.bold} to raise a compile-time error,\n".fmt &
+                "but it successfuly evaluated to {val.bold} of type {typ.bold} {cond.src}".fmt)
     else:
         raise error(exp, "assert doesn't support expressions like {cond.bold} {exp.src}".fmt)
 
+
 proc eval*(ctx: Ctx, exp: Exp): Val =
-    let exp = ctx.expand(exp)
-    #echo "eval {exp}".fmt
     case exp.kind
     of expAtom:
         case exp.tag
         of aSym, aLit: return eval_name(ctx, exp)
         of aNum: return Val(kind: NumLit, lit: exp.value)
         of aStr: return Val(kind: StrLit, lit: exp.value.basic_str)
-        else: raise ctx.error(exp=exp, msg="I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
+        else: discard
     of expTerm:
-        if exp.len == 0:
-            writeStackTrace()
-            raise ctx.error(trace=true, msg="Can't evaluate empty term. {exp.src}".fmt)
-        if exp[0].is_atom:
-            case exp[0].value
+        if exp.is_nil:
+            raise compiler_defect("Can't evaluate empty term.")
+        if exp.head.is_atom:
+            case exp.head.value
             of "$define":
                 return ctx.eval_define(exp)
             of "$assume":
@@ -812,6 +1065,8 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
                 return Val(kind: RecTypeVal, rec_typ: ctx.eval_record_type(exp))
             of "$record":
                 return Val(kind: RecVal, rec: ctx.eval_record(exp))
+            of "$apply":
+                return ctx.eval_apply(exp[1])
             of "$quote":
                 return if exp.len == 1: Box(term()) else: Box(exp[1])
             of "$block":
@@ -823,143 +1078,12 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
                 return Val(kind: ListLit, values: ctx.eval_all(exp.tail))
             of "case":
                 return ctx.eval_case(exp[1], exp.exprs[2 .. ^1])
-            of "unwrap":
+            of "$unwrap":
                 return ctx.unwrap(exp[1])
-            of "as":
-                return ctx.eval_cast(exp[1], ctx.eval(exp[2]))
-        return ctx.eval_apply(exp)
-    raise ctx.error(exp=exp, msg="I don't know how to evaluate term {exp.str}. {exp.src}".fmt)
+            else:
+                discard
+    raise compiler_defect("Can't evaluate non-core term {exp.str}. {exp.src}".fmt)
 
-#
-# Type inference - returns a type given an expression
-#
-
-proc infer_lambda_type(ctx: Ctx, exp: Exp, extend=true): FunTyp =
-    var declared_type = unreachable
-    var inferred_type = unreachable
-    let local = if extend: ctx.extend() else: ctx
-    for part in exp.tail:
-        if part.has_prefix("$param"):
-            result.params &= local.eval_lambda_param(part)
-        elif part.has_prefix("$body"):
-            inferred_type = local.infer_type(part[1])
-        elif part.has_prefix("$result"):
-            declared_type = local.eval(part[1])
-        elif part.is_atom("$expand"):
-            result.autoexpand = true
-        else:
-            assert false
-    if not declared_type.is_never and not local.is_subtype(inferred_type, declared_type):
-        raise ctx.error("Inferred type of body {inferred_type.str} is not a subtype of {declared_type.str}. {exp.src}".fmt)
-    let returns = if not declared_type.is_never: declared_type else: inferred_type
-    result.result = reify(returns)
-
-proc infer_record_type(ctx: Ctx, exp: Exp): RecTyp =
-    for part in exp.tail:
-        if part.has_prefix("$arg"):
-            result.fields &= RecField(name: part[1].value, typ: reify(ctx.infer_type(part[2])))
-        else:
-            assert false
-
-proc infer_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
-    #let branches = exp.exprs[2 .. ^1]
-    var types: seq[Val]
-    for x in cases:
-        let (pattern, body) = (x[0], x[1])
-        types.add(ctx.infer_type(body))
-    eval_union(ctx, @[MakeListLit(types)])
-
-proc infer_apply*(ctx: Ctx, exp: Exp): Val =
-    let head_exp = exp[0]
-    let head_typ = ctx.infer_type(head_exp)
-    #ctx.push_call(exp, infer=true)
-    #defer: ctx.pop_call()
-    case head_typ.kind
-    of FunTypeVal:
-        let args = ctx.match_apply_args(exp).tail
-        let typ = head_typ.fun_typ
-
-        # TODO: skip defining parameters if not a dependent type
-        let local = ctx.extend()
-        for (par, arg) in zip(typ.params, args):
-            let arg_val = local.eval(arg)
-            let par_typ = local.eval(par.typ)
-            local.env.define(par.name, arg_val, par_typ)
-
-        let res_typ = local.eval(typ.result)
-        return res_typ
-
-    of TypeVal:
-        let head = ctx.eval(head_exp)
-        case head.kind
-        of RecTypeVal:
-            return head
-        else:
-            raise ctx.error(exp=exp, msg="Can't use function call syntax to construct a value of type {head}. {ctx.src}".fmt)
-    else:
-        raise ctx.error(exp=exp, msg="Can't infer type of expression, because {head_exp.bold} of {head_typ.noun} {head_typ.bold} is not callable. {exp.src}".fmt)
-
-proc infer_block*(ctx: Ctx, exp: Exp): Val =
-    result = unit_type
-    for stat in exp.tail:
-        result = ctx.infer_type(stat)
-
-proc infer_type*(ctx: Ctx, exp: Exp): Val =
-    let exp = ctx.expand(exp)
-    case exp.kind:
-    of expAtom:
-        case exp.tag:
-        of aSym:
-            let typ = ctx.env.lookup_type(exp.value).or_else:
-                raise ctx.error("Type of {exp.bold} is unknown. {exp.src}".fmt)
-            return typ
-        of aNum:
-            return ctx.eval("Num-Literal".atom)
-        of aStr:
-            return ctx.eval("Str-Literal".atom)
-        else:
-            discard
-    of expTerm:
-        if exp.len == 0:
-            return unit
-        if exp[0].kind == expAtom:
-            case exp[0].value:
-            of "$define":
-                ctx.env.assume(name=exp[1].value, typ=ctx.infer_type(exp[2]), site=Some(exp))
-                return ctx.eval("Unit".atom)
-            of "$assume":
-                ctx.env.assume(name=exp[1].value, typ=ctx.eval(exp[2]), site=Some(exp))
-                return ctx.eval("Unit".atom)
-            of "$Lambda":
-                return Universe(ctx.dynamic_level(ctx.eval(exp)))
-            of "$lambda":
-                return Box(ctx.infer_lambda_type(exp))
-            of "$Record":
-                return Universe(ctx.dynamic_level(ctx.eval(exp)))
-            of "$record":
-                return Box(ctx.infer_record_type(exp))
-            of "$quote":
-                return ctx.eval("Expr".atom)
-            of "$list":
-                return ctx.eval("List-Literal".atom)
-            of "$block":
-                var res = unit_type
-                for stat in exp.tail:
-                    res = ctx.infer_type(stat)
-                return res
-            of "unwrap":
-                return ctx.infer_type(exp[1])
-            of "case":
-                return ctx.infer_case(exp[1], exp.exprs[2 .. ^1])
-            of "as":
-                return ctx.eval(exp[2])
-            of "block":
-                return ctx.infer_block(exp)
-        return ctx.infer_apply(exp)
-    raise ctx.error(trace=true, msg="infer-type not implemented for expression {exp}. {exp.src}".fmt)
-
-proc infer_level*(ctx: Ctx, exp: Exp): int =
-    ctx.dynamic_level(ctx.infer_type(exp))
 
 #
 # Reification - converts values back to expressions
@@ -973,11 +1097,13 @@ func reify_lambda_param(param: FunParam): Exp =
     if param.keyword: result.exprs &= "$keyword".atom
     if param.quoted: result.exprs &= "$quoted".atom
 
+
 func reify_lambda_type(fun_typ: FunTyp): Exp =
     result.exprs &= "$Lambda".atom
     for param in fun_typ.params: result.exprs &= reify_lambda_param(param)
     result.exprs &= term("$result".atom, fun_typ.result)
     if fun_typ.autoexpand: result.exprs &= "$expand".atom
+
 
 func reify_lambda(fun: Fun): Exp =
     raise error("Can't reify lambda value {fun}.".fmt)
@@ -985,32 +1111,40 @@ func reify_lambda(fun: Fun): Exp =
     #result.exprs &= "$lambda".atom & reify_lambda_type(fun.typ.unsafe_get).tail
     #result.exprs &= term("$body".atom, fun.body.unsafe_left)
 
+
 func reify_record_field(field: RecField): Exp =
     result = term("$field".atom, field.name.atom, term(":".atom, field.typ))
     if not field.default.is_nil: result.exprs &= term("=".atom, field.default)
+
 
 func reify_record_type(rec_typ: RecTyp): Exp =
     result.exprs &= "$Record".atom
     for field in rec_typ.fields:
         result.exprs &= reify_record_field(field)
 
+
 func reify_record(rec: Rec): Exp =
     result.exprs &= "$record".atom
     for (name, val) in rec.values.pairs:
         result.exprs &= term("$arg".atom, name.atom, val.reify)
+
+
+func reify_unary_apply(foo: string, arg: Exp): Exp = 
+    term("$apply".atom, term(foo.atom, arg))
+
 
 func reify*(val: Val): Exp =
     case val.kind
     of NeverVal:
         "unreachable".atom
     of U8:
-        term("num-u8".atom, atom($val.u8, aNum))
+        reify_unary_apply("num-u8", atom($val.u8, aNum))
     of I8:
-        term("num-i8".atom, atom($val.i8, aNum))
+        reify_unary_apply("num-i8", atom($val.i8, aNum))
     of U64:
-        term("num-u64".atom, atom($val.u64, aNum))
+        reify_unary_apply("num-u64", atom($val.u64, aNum))
     of I64:
-        term("num-i64".atom, atom($val.i64, aNum))
+        reify_unary_apply("num-i64", atom($val.i64, aNum))
     of NumLit:
         atom(val.str, tag=aNum)
     of StrLit:
@@ -1021,12 +1155,12 @@ func reify*(val: Val): Exp =
        "Type".atom
     of ExpVal:
         term("$quote".atom, val.exp)
-    of NeuVal:
+    of OpaqueVal, NeuVal:
         val.exp
     of UnionTypeVal:
-        term("Union".atom & val.values.map(reify))
+        reify_unary_apply("Union", term("$list".atom & val.values.map(reify)))
     of InterTypeVal:
-        term("Inter".atom & val.values.map(reify))
+        reify_unary_apply("Inter", term("$list".atom & val.values.map(reify)))
     of FunTypeVal:
         reify_lambda_type(val.fun_typ)
     of FunVal:
@@ -1038,24 +1172,17 @@ func reify*(val: Val): Exp =
     of MemVal:
         raise error("Can't reify {val.noun} {val.bold}.".fmt)
 
+
 #
 # Others
 #
-
-proc unwrap*(ctx: Ctx, exp: Exp): Val =
-    let new_ctx = ctx.extend(new_env=false, eval_mode=EvalMode.Unwrap)
-    new_ctx.eval(exp)
-
-proc norm*(ctx: Ctx, exp: Exp): Exp =
-    let new_ctx = ctx.extend(new_env=false, eval_mode=EvalMode.Norm)
-    new_ctx.eval(exp).reify
 
 proc expand*(ctx: Ctx, exp: Exp): Exp =
     result = exp
     while ctx.is_macro_expr(result):
         var val = ctx.eval_apply(result)
         if val.kind != ExpVal:
-            raise error(exp, "Expected macro {result} to return a value of type Expr, but got {val} of {ctx.dynamic_type(val)}. {exp.src}".fmt)
+            raise error(exp, "Expected macro {result} to return a value of type Expr, but got {val} of ??. {exp.src}".fmt)
         result = val.exp
 
 #
@@ -1089,9 +1216,6 @@ root_ctx.set_builtin_fun "Inter", eval_inter
 
 root_ctx.set_builtin_fun_inline "type-of":
     ctx.infer_type(args[0].exp)
-
-root_ctx.set_builtin_fun_inline "level-of":
-    Val(kind: U64, u64: uint64(ctx.infer_level(args[0].exp)))
 
 root_ctx.set_builtin_fun_inline "assert":
     eval_assert(ctx, args[0].exp)

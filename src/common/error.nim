@@ -1,8 +1,29 @@
 import exp
-import os, math, options, terminal, strutils, strformat
+import tables, os, math, options, terminal, strutils, strformat, algorithm
 import types, utils
 
 var stdin_history* = ""
+
+proc print_env*(ctx: Ctx, skip_top = true, only_args = false) =
+    var env = ctx.env
+    var level = ctx.env.depth
+    while env != nil:
+        if skip_top and env.parent == nil: break
+        for (k, v) in env.vars.pairs:
+            if only_args and not (v.arg or v.capture): continue
+            var typ = v.typ.map(str) ?? ""
+            var val = v.val.map(str) ?? ""
+            if val.len > 0:
+                val = " = " & val
+                typ = ""
+            elif typ.len > 0:
+                typ = " : " & typ
+            var tag = ""
+            if v.capture: tag &= "C"
+            if v.arg: tag &= "A"
+            echo "({level}) [{tag}] {k}{typ}{val}".fmt
+        env = env.parent
+        level -= 1
 
 proc type_rule*(goal: string, given: varargs[string]): string =
     given.join("\n") & "\n-------------------------\n" & goal
@@ -12,6 +33,10 @@ func error*(node: Exp, msg: string): ref VitaminError =
     error.node = node
     error
 
+func error*(prefix, msg: string): ref VitaminError =
+    result = new_exception(VitaminError, msg)
+    result.prefix = prefix
+
 func error*(ctx: Ctx, msg: string, trace=false, prefix="", exp=term()): ref VitaminError =
     var error = new_exception(VitaminError, msg)
     error.prefix = prefix
@@ -19,6 +44,14 @@ func error*(ctx: Ctx, msg: string, trace=false, prefix="", exp=term()): ref Vita
     error.ctx = ctx
     error.with_trace = trace
     error
+
+func runtime_error*(msg: string): ref VitaminError = error("runtime error", msg)
+
+func type_error*(msg: string): ref VitaminError = error("type error", msg)
+
+proc compiler_defect*(msg: string): ref VitaminError =
+    #writeStackTrace()
+    error("compiler defect", msg)
 
 func error*(msg: string): ref VitaminError =
     error(term(), msg)

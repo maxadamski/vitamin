@@ -4,9 +4,18 @@
 # These functions should only perform context-free Exprs transformations.
 
 # TODO: serious error handling
+# TODO: refactor these functions
 
-import sequtils
-import common/[exp, utils]
+import sequtils, algorithm
+import common/[exp, error, utils]
+
+const define_head = "$define"
+const assume_head = "$assume"
+const Lambda_head = "$Lambda"
+const lambda_head = "$lambda"
+const Record_head = "$Record"
+const record_head = "$record"
+const block_head = "$block"
 
 
 func desugar*(exp: Exp): Exp
@@ -14,25 +23,50 @@ func desugar*(exp: Exp): Exp
 
 func desugar_define*(exp: Exp): Exp =
     let (lhs, rhs) = (exp[1], exp[2])
+    var opaque = false
+
+    template desugar_name(x: var Exp) =
+        if x.has_prefix("opaque"):
+            opaque = true
+            x = x[1]
+        if not x.is_atom:
+            raise error("Left side of definition must be an atom, but got term " & $x)
 
     if lhs.is_term:
+        if lhs.has_prefix(":"):
+            # (x : a) = y
+            var name = lhs[1]
+            let typ = lhs[2].desugar
+            let val = rhs.desugar
+            desugar_name(name)
+            return term("$block".atom, term("$assume".atom, name, typ), term("$define".atom, name, val))
+
         if lhs.has_prefix("->"):
             # short function definition with return type
-            let name = lhs[1][1]
+            var name = lhs[1][1]
             let params = term(atom("(_)"), lhs[1][2])
             let res_typ = lhs[2]
             let fun_typ = term(atom("->"), params, res_typ)
             let fun = term(atom("=>"), fun_typ, rhs)
-            return term(atom("$define"), name, fun.desugar)
+            desugar_name(name)
+            result = term(atom("$define"), name, fun.desugar)
+            if opaque: result.exprs &= "$opaque".atom
+            return result
 
         if lhs.has_prefix("()"):
             # short function definition or pattern matching
-            let name = lhs[1]
+            var name = lhs[1]
             let params = term(atom("(_)"), lhs[2])
             let fun = term(atom("=>"), params, rhs)
-            return term(atom("$define"), name, fun.desugar)
+            desugar_name(name)
+            result = term(atom("$define"), name, fun.desugar)
+            if opaque: result.exprs &= "$opaque".atom
+            return result
 
-    term(atom("$define"), lhs.desugar, rhs.desugar)
+    var name = lhs
+    desugar_name(name)
+    result = term(atom("$define"), name, rhs.desugar)
+    if opaque: result.exprs &= "$opaque".atom
 
 
 func desugar_assume*(exp: Exp): Exp =
@@ -42,11 +76,11 @@ func desugar_assume*(exp: Exp): Exp =
         var parts: seq[Exp]
         for name in lhs.tail:
             if not name.is_atom: assert false
-            parts &= term("$assume".atom, name, rhs)
-        return term("$block".atom & parts)
+            parts &= term(assume_head.atom, name, rhs)
+        return term(block_head.atom & parts)
 
     if not lhs.is_atom: assert false
-    term("$assume".atom, lhs, rhs)
+    term(assume_head.atom, lhs, rhs)
 
 
 func desugar_record_type*(exp: Exp): Exp =
@@ -92,7 +126,7 @@ func desugar_record_type*(exp: Exp): Exp =
 
             fields &= list_res
 
-    term("$Record".atom & fields)
+    term(Record_head.atom & fields)
 
 
 func desugar_record*(exp: Exp): Exp =
@@ -123,7 +157,7 @@ func desugar_record*(exp: Exp): Exp =
 
         fields &= term("$arg".atom, name, val.desugar)
 
-    term("$record".atom & fields)
+    term(record_head.atom & fields)
 
 
 func desugar_group*(exp: Exp): Exp =
@@ -138,10 +172,10 @@ func desugar_group*(exp: Exp): Exp =
 
     if exp.len == 0:
         # ()
-        return term(atom("$record"))
+        return term(record_head.atom)
     if exp.len > 1:
         # (e1; e2; ...; en)
-        return term(atom("$block") & exp.exprs).desugar
+        return term(block_head.atom & exp.exprs).desugar
 
     let lists = exp[0].exprs
     if lists.len == 1 and lists[0].len == 1:
@@ -241,7 +275,7 @@ func desugar_lambda_type*(exp: Exp): Exp =
     # <pi-params> -> expand(e)
 
     var (lhs, rhs) = (exp[1], desugar(exp[2]))
-    var parts = @["$Lambda".atom]
+    var parts = @[Lambda_head.atom]
     var autoexpand = false
 
     if lhs.has_prefix("(_)"):
@@ -269,7 +303,7 @@ func desugar_lambda*(exp: Exp): Exp =
     # _ -> _ => e
 
     let (lhs, rhs) = (exp[1], exp[2])
-    var parts = @["$lambda".atom]
+    var parts = @[lambda_head.atom]
 
     if lhs.has_prefix("(_)"):
         parts &= desugar_lambda_params(lhs)

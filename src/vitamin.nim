@@ -102,13 +102,15 @@ proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), sta
             quit(0)
         let exprs = to_seq(parse(parser, tokens))
         if debug == "parse":
-            for x in exprs: echo x.str_ugly
+            for x in exprs: echo x.str
             quit(0)
         if debug == "desugar":
-            for x in exprs: echo desugar(x).str_ugly
+            for x in exprs: echo x.desugar.str
             quit(0)
         for x in exprs:
-            let val = ctx.eval(desugar(x))
+            let exp_surf = x.desugar
+            let (exp_core, _) = ctx.check(exp_surf)
+            let val = ctx.eval(exp_core)
             if print and val != unit:
                 echo val.str
     except VitaminError:

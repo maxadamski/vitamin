@@ -52,7 +52,7 @@ proc raise_parse_error(error: ParseError, token: Option[Exp]) =
         follow = trace.rule.follow
         text &= "while parsing " & trace.rule.str
         if trace.partial.is_some:
-            text &= "\n  found: " & trace.partial.get.str_ugly
+            text &= "\n  found: " & trace.partial.get.str
             node = concat(node, trace.partial.get)
         if trace.reason != "":
             text &= "\n  error: " & trace.reason

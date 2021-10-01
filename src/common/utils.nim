@@ -1,5 +1,4 @@
-import options, tables, sequtils, strutils, strformat, algorithm, os
-export options, tables, sequtils, strutils, strformat, algorithm
+import options, tables, sequtils, strutils, strformat, os
 import patty
 
 # "Optional unwrapping" for strings
