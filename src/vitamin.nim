@@ -111,13 +111,14 @@ proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), sta
             for x in exprs:
                 let core = ctx.check(x.desugar).exp
                 if not core.is_nil: echo core
-            quit(0)
+        if debug != "":
+            return
         for x in exprs:
             let exp_surf = x.desugar
-            let (exp_core, _) = ctx.check(exp_surf)
+            let (exp_core, typ) = ctx.check(exp_surf)
             let val = ctx.eval(exp_core)
             if print and val != unit:
-                echo val.str
+                echo val.str & " : " & typ.reify.str
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error, force_trace=force_trace, trace_code=code_in_trace, trace_expr=expr_in_trace)

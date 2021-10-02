@@ -163,6 +163,8 @@ parser.add_infix_mix "Lambda", "=>", "=>".t & "Lambda".b
 
 #parser.add_prefix_mix "Statement", "quote", "quote".t & "Any".b
 
+parser.add_prefix_mix "Statement", "break", "break".t
+
 parser.add_prefix_mix "Statement", "while",
     ("while".t & "Statement".E & ":".opt & "Any".b).splice
 

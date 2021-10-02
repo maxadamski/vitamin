@@ -18,6 +18,7 @@ proc is_subtype*(ctx: Ctx, x, y: Val): bool
 
 # surface -> core
 proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp
+
 proc check*(ctx: Ctx, exp: Exp, typ: Val): TypedExp = ctx.check(exp, Some(typ))
 
 # core -> value
@@ -26,9 +27,8 @@ proc eval*(ctx: Ctx, exp: Exp): Val
 # value -> core
 func reify*(val: Val): Exp
 
-proc unwrap*(ctx: Ctx, exp: Exp): Val
-proc expand*(ctx: Ctx, exp: Exp): Exp
 func `==`*(x, y: Val): bool
+
 func equal*(x, y: Val): bool = x == y
 
 proc infer_type*(ctx: Ctx, exp: Exp): Val =
@@ -257,6 +257,7 @@ func `==`*(x, y: Val): bool =
         return x.exp == y.exp
     if x.kind != y.kind: return false
     case x.kind
+    of InterruptVal: false
     of NeverVal: true
     of TypeVal: x.level == y.level
     of UnionTypeVal, InterTypeVal: sets_equal(x.values, y.values)
@@ -771,7 +772,7 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
 
         if exp.head.is_atom:
             case exp.head.value:
-            of "Core/define", "Core/apply", "Core/block", "Core/case", "Core/quote", "Core/list", "Core/unwrap",
+            of "Core/define", "Core/apply", "Core/block", "Core/case", "Core/quote", "Core/list", "Core/unwrap", "Core/while", "Core/break",
                "Core/Lambda", "Core/lambda", "Core/Record", "Core/record":
                 writeStackTrace()
                 raise compiler_defect("Can't type check core expression {exp}. {exp.src}".fmt)
@@ -832,25 +833,6 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                 let rhs_val = ctx.eval(rhs_core)
                 ctx.env.define(name, rhs_val, rhs_typ, opaque=opaque) # TODO: De Brujin
                 return (term("Core/define".atom, name_exp, rhs_core), rhs_typ)
-            of "block":
-                var exps : seq[Exp]
-                var types: seq[Val]
-                for exp in exp.tail:
-                    let (core_exp, typ) = ctx.check(exp)
-                    if not core_exp.is_nil:
-                        exps.add(core_exp)
-                        types.add(typ)
-                if exps.len == 0:
-                    return (term(), unit)
-                return (term("Core/block".atom & exps), types[^1])
-            of "case":
-                var types : seq[Val]
-                var core = term("Core/case".atom, ctx.check(exp[1]).exp)
-                for x in exp.exprs[2 .. ^1]:
-                    let (pattern, body) = (x[0], x[1])
-                    types &= ctx.infer_type(body)
-                    core &= term(pattern, body)
-                return (core, ctx.eval_union(@[MakeListLit(types)]))
             of "as":
                 let lhs = exp[1]
                 let rhs = ctx.eval(ctx.check_universe(exp[2]))
@@ -873,6 +855,31 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                         "Can't downcast, because there is no evidence, that {lhs.bold} was upcast from type {dst_typ.bold}. {lhs.src}".fmt)
 
                 return (lhs_core, rhs)
+            of "case":
+                var types : seq[Val]
+                var core = term("Core/case".atom, ctx.check(exp[1]).exp)
+                for x in exp.exprs[2 .. ^1]:
+                    let (pattern, body) = (x[0], x[1])
+                    types &= ctx.infer_type(body)
+                    core &= term(pattern, body)
+                return (core, ctx.eval_union(@[MakeListLit(types)]))
+            of "block":
+                var exps : seq[Exp]
+                var types: seq[Val]
+                for exp in exp.tail:
+                    let (core_exp, typ) = ctx.check(exp)
+                    if not core_exp.is_nil:
+                        exps.add(core_exp)
+                        types.add(typ)
+                if exps.len == 0:
+                    return (term(), unit)
+                return (term("Core/block".atom & exps), types[^1])
+            of "while":
+                let (cond, _) = ctx.check(exp[1])
+                let (body, _) = ctx.check(exp[2])
+                return (term("Core/while".atom, cond, body), ctx.eval("Never".atom))
+            of "break":
+                return (term("Core/break".atom), ctx.eval("Never".atom))
             of "unwrap":
                 let (arg, typ) = ctx.check(exp[1], typ)
                 return (term("Core/unwrap".atom, arg), typ)
@@ -1056,10 +1063,10 @@ proc eval_xtest(ctx: Ctx, name: string, body_exp: Exp) =
 
 proc eval_assert(ctx: Ctx, exp: Exp) =
     let prefix = "ASSERTION FAILED"
-    var cond = ctx.expand(exp)
+    var cond = exp
     var negate = false
     if cond.has_prefix("not"):
-        cond = ctx.expand(cond[1])
+        cond = cond[1]
         negate = true
     let neg = if negate: "not " else: ""
     let neg_neg = if negate: "" else: "not "
@@ -1133,6 +1140,8 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
                 var res = unit
                 for stat in exp.tail:
                     res = ctx.eval(stat)
+                    if res.kind == InterruptVal:
+                        return res
                 return res
             of "Core/list":
                 return Val(kind: ListLit, values: ctx.eval_all(exp.tail))
@@ -1140,6 +1149,15 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
                 return ctx.eval_case(exp[1], exp.exprs[2 .. ^1])
             of "Core/unwrap":
                 return ctx.unwrap(exp[1])
+            of "Core/while":
+                while true:
+                    let cond = ctx.eval(exp[1])
+                    if cond.u8 == 0: break
+                    let res = ctx.eval(exp[2])
+                    if res.kind == InterruptVal: break
+                return unit
+            of "Core/break":
+                return Val(kind: InterruptVal)
             else:
                 discard
     raise compiler_defect("Can't evaluate non-core term {exp.str}. {exp.src}".fmt)
@@ -1197,6 +1215,8 @@ func reify*(val: Val): Exp =
     case val.kind
     of NeverVal:
         "unreachable".atom
+    of InterruptVal:
+        term("Core/break".atom)
     of U8:
         reify_unary_apply("num-u8", atom($val.u8, aNum))
     of I8:
@@ -1232,18 +1252,6 @@ func reify*(val: Val): Exp =
     of MemVal:
         raise runtime_error("Can't reify {val.noun} {val.bold}.".fmt)
 
-
-#
-# Others
-#
-
-proc expand*(ctx: Ctx, exp: Exp): Exp =
-    result = exp
-    while ctx.is_macro_expr(result):
-        var val = ctx.eval_apply(result)
-        if val.kind != ExpVal:
-            raise error(exp, "Expected macro {result} to return a value of type Expr, but got {val} of ??. {exp.src}".fmt)
-        result = val.exp
 
 #
 # Global context definitions

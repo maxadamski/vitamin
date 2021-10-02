@@ -35,6 +35,7 @@ none : None
 `==` : (lhs rhs: quoted(Expr)) -> Bool
 compare : (expr: quoted(Expr)) -> Bool
 `quote` : (expr: quoted(Expr)) -> Expr
+gensym : () -> Atom
 str-r = (x: Str-Literal) => x
 num-u8  : (x: Num-Literal) -> U8
 num-i8  : (x: Num-Literal) -> I8

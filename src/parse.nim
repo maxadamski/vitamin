@@ -199,6 +199,8 @@ proc parse_expr(p: var Parser, tokens: var ExpStream, follow = init_hash_set[str
                 expr = concat(head, right.get)
             else:
                 expr = term(head, right.get)
+        else:
+            expr = term(head)
 
     elif expr.kind == expAtom and p.infix_rules.has_key(expr.value) and not expr.is_literal:
         when debug_parser > 0: echo fmt"parse_expr: found infix operator `{expr}` in prefix position: backtracking"

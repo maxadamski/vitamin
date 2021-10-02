@@ -94,12 +94,12 @@ type
 
     ValTag* = enum
         NeverVal, OpaqueVal, NeuVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
-        TypeVal, ExpVal, MemVal, FunVal, FunTypeVal, ListLit
+        TypeVal, ExpVal, MemVal, FunVal, FunTypeVal, ListLit, InterruptVal,
         NumLit, StrLit, I8, U8, I64, U64
 
     ValObj* = object
         case kind*: ValTag
-        of NeverVal:
+        of NeverVal, InterruptVal:
             discard
         of I8:
             i8*: int8
@@ -181,6 +181,7 @@ func MakeListLit*(values: varargs[Val]): Val =
 func noun*(v: Val): string =
     case v.kind
     of NeverVal: "unreachable"
+    of InterruptVal: "interrupt"
     of I8, I64: "integer"
     of U8, U64: "unsigned integer"
     of ListLit: "list literal"
@@ -248,6 +249,7 @@ func str*(x: Rec): string =
 func str*(v: Val): string =
     case v.kind
     of NeverVal: "unreachable"
+    of InterruptVal: "interrupt"
     of OpaqueVal, NeuVal, ExpVal: v.exp.str
     of I8: $v.i8
     of U8: $v.u8
