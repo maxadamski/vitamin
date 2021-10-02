@@ -13,11 +13,11 @@ proc print_env*(ctx: Ctx, skip_top = true, only_args = false) =
             if only_args and not (v.arg or v.capture): continue
             var typ = v.typ.map(str) ?? ""
             var val = v.val.map(str) ?? ""
+            if typ.len > 0:
+                typ = " : " & typ
             if val.len > 0:
                 val = " = " & val
                 typ = ""
-            elif typ.len > 0:
-                typ = " : " & typ
             var tag = ""
             if v.capture: tag &= "C"
             if v.arg: tag &= "A"

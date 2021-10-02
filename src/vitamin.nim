@@ -107,6 +107,11 @@ proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), sta
         if debug == "desugar":
             for x in exprs: echo x.desugar.str
             quit(0)
+        if debug == "core":
+            for x in exprs:
+                let core = ctx.check(x.desugar).exp
+                if not core.is_nil: echo core
+            quit(0)
         for x in exprs:
             let exp_surf = x.desugar
             let (exp_core, _) = ctx.check(exp_surf)

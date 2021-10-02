@@ -9,13 +9,13 @@
 import sequtils, algorithm
 import common/[exp, error, utils]
 
-const define_head = "$define"
-const assume_head = "$assume"
-const Lambda_head = "$Lambda"
-const lambda_head = "$lambda"
-const Record_head = "$Record"
-const record_head = "$record"
-const block_head = "$block"
+const define_head = "="
+const assume_head = ":"
+const Lambda_head = "Lambda"
+const lambda_head = "lambda"
+const Record_head = "Record"
+const record_head = "record"
+const block_head = "block"
 
 
 func desugar*(exp: Exp): Exp
@@ -39,7 +39,7 @@ func desugar_define*(exp: Exp): Exp =
             let typ = lhs[2].desugar
             let val = rhs.desugar
             desugar_name(name)
-            return term("$block".atom, term("$assume".atom, name, typ), term("$define".atom, name, val))
+            return term(block_head.atom, term(assume_head.atom, name, typ), term(define_head.atom, name, val))
 
         if lhs.has_prefix("->"):
             # short function definition with return type
@@ -49,8 +49,8 @@ func desugar_define*(exp: Exp): Exp =
             let fun_typ = term(atom("->"), params, res_typ)
             let fun = term(atom("=>"), fun_typ, rhs)
             desugar_name(name)
-            result = term(atom("$define"), name, fun.desugar)
-            if opaque: result.exprs &= "$opaque".atom
+            result = term(define_head.atom, name, fun.desugar)
+            if opaque: result.exprs &= "#opaque".atom
             return result
 
         if lhs.has_prefix("()"):
@@ -59,14 +59,14 @@ func desugar_define*(exp: Exp): Exp =
             let params = term(atom("(_)"), lhs[2])
             let fun = term(atom("=>"), params, rhs)
             desugar_name(name)
-            result = term(atom("$define"), name, fun.desugar)
-            if opaque: result.exprs &= "$opaque".atom
+            result = term(define_head.atom, name, fun.desugar)
+            if opaque: result.exprs &= "#opaque".atom
             return result
 
     var name = lhs
     desugar_name(name)
-    result = term(atom("$define"), name, rhs.desugar)
-    if opaque: result.exprs &= "$opaque".atom
+    result = term(define_head.atom, name, rhs.desugar)
+    if opaque: result.exprs &= "#opaque".atom
 
 
 func desugar_assume*(exp: Exp): Exp =
@@ -118,9 +118,9 @@ func desugar_record_type*(exp: Exp): Exp =
                 if list_idx == 0:
                     list_typ = typ
 
-                var parts = @["$field".atom, name]
-                if not typ.is_nil: parts &= term(":".atom, typ)
-                if not val.is_nil: parts &= term("=".atom, val)
+                var parts = @["#field".atom, name]
+                if not typ.is_nil: parts &= term("#type".atom, typ)
+                if not val.is_nil: parts &= term("#default".atom, val)
                 list_idx += 1
                 list_res[^list_idx] = term(parts)
 
@@ -155,7 +155,7 @@ func desugar_record*(exp: Exp): Exp =
 
         if not name.is_nil and not name.is_atom: assert false
 
-        fields &= term("$arg".atom, name, val.desugar)
+        fields &= term("#arg".atom, name, val.desugar)
 
     term(record_head.atom & fields)
 
@@ -259,12 +259,12 @@ func desugar_lambda_params(exp: Exp): seq[Exp] =
                     vararg_typ = typ
                     typ = term(vararg_container, typ)
 
-                var parts = @["$param".atom, name]
-                if not typ.is_nil and not typ.is_atom("_"): parts &= term(":".atom, typ)
-                if not val.is_nil: parts &= term("=".atom, val)
-                if variadic: parts &= term("$variadic".atom, vararg_typ)
-                if autoquote: parts &= "$quoted".atom
-                if force_keyword: parts &= "$keyword".atom
+                var parts = @["#param".atom, name]
+                if not typ.is_nil and not typ.is_atom("_"): parts &= term("#type".atom, typ)
+                if not val.is_nil: parts &= term("#default".atom, val)
+                if variadic: parts &= term("#variadic".atom, vararg_typ)
+                if autoquote: parts &= "#quoted".atom
+                if force_keyword: parts &= "#keyword".atom
 
                 inner_params.add(term(parts))
             result &= inner_params.reversed
@@ -281,18 +281,18 @@ func desugar_lambda_type*(exp: Exp): Exp =
     if lhs.has_prefix("(_)"):
         parts &= desugar_lambda_params(lhs)
     else:
-        parts &= term("$param".atom, "_".atom, term(":".atom, lhs))
+        parts &= term("#param".atom, "_".atom, term("#type".atom, lhs))
 
     if rhs.has_prefix("expand"):
         autoexpand = true
         rhs = rhs[1]
 
-    parts &= term("$result".atom, rhs)
+    parts &= term("#result".atom, rhs)
 
     # TODO: parse effects
 
     if autoexpand:
-        parts &= "$expand".atom
+        parts &= "#expand".atom
 
     term(parts)
 
@@ -314,7 +314,7 @@ func desugar_lambda*(exp: Exp): Exp =
     else:
         assert false
 
-    parts &= term("$body".atom, rhs.desugar)
+    parts &= term("#body".atom, rhs.desugar)
 
     term(parts)
 

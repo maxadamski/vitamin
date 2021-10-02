@@ -9,17 +9,10 @@ Size = U64
 Int = I64
 Atom, Term, Expr, Bool, None : Type
 Arguments : (x: Type) -> Type
-`=` : (pattern value: quoted(Expr)) -> expand(Expr)
-`->` : (params result: quoted(Expr)) -> expand(Expr)
-`=>` : (head body: quoted(Expr)) -> expand(Expr)
-lambda-infer : (params result body: Expr) -> Type
-lambda : (params result body: quoted(Expr)) -> lambda-infer(params, result, body)
-Lambda : (params result: quoted(Expr)) -> Type
-record-infer : (values: Expr) -> Type
-record : (values: quoted(Expr)) -> record-infer(values)
 type-of : (expr: quoted(Expr)) -> Type
 level-of : (type: quoted(Expr)) -> Int
-`Record` : (fields: variadic(quoted(Expr))) -> Type
+type-of-constructor-of : (type: Expr) -> Type
+constructor-of : (type: quoted(Expr)) -> type-of-constructor-of(type)
 Unit = Record()
 Union, Inter : (types: variadic(Type)) -> Type
 Any = Inter()
@@ -32,7 +25,7 @@ eval : (e: Expr) -> type-of(e)
 `assert` : (cond: quoted(Expr)) -> Unit
 `==` : (lhs rhs: quoted(Expr)) -> Bool
 compare : (expr: quoted(Expr)) -> Bool
-`quote` : (expr: quoted(Expr)) -> Expr
+quote : (expr: quoted(Expr)) -> Expr
 str-r = (x: Str-Literal) => x
 num-u8  : (x: Num-Literal) -> U8
 num-i8  : (x: Num-Literal) -> I8
@@ -188,7 +181,7 @@ test "type of dependent closure"
 	assert type-of(id(Num-Literal)) == ((y: Num-Literal) -> Num-Literal)
 	assert type-of(id(Num-Literal)(42)) == Num-Literal
 
-xtest "values of arguments which are depended upon can be inferred (not implemented)"
+xtest "values of dependee arguments can be inferred (not implemented)"
 	id = (a: Type = _, x: a) => x
 	assert id(42) == 42
 	assert id(x=Num-Literal, 42) == 42
@@ -231,33 +224,33 @@ xtest "equivalence of dependent function types is independent of labels "
 #
 
 test "core quotation"
-	assert type-of(`$quote`(whatever)) == Expr
+	assert type-of(quote(whatever)) == Expr
 
 test "quoted function parameters"
 	meta = (x: quoted(Expr)) => x
 	assert type-of(meta(a + b)) == Expr
-	assert meta(a + b) == `$quote`(a + b)
+	assert meta(a + b) == quote(a + b)
 
 test "quoted function parameters can accept only atoms"
 	meta = (x: quoted(Atom)) => x
 	assert type-of(meta(a)) == Atom
-	assert meta(a) == `$quote`(a)
+	assert meta(a) == quote(a)
 	meta(a)
 	assert error(meta(a + b))
 
 test "quoted function parameters can accept only terms"
 	meta = (x: quoted(Term)) => x
 	assert type-of(meta(a + b)) == Term
-	assert meta(a + b) == `$quote`(a + b)
+	assert meta(a + b) == quote(a + b)
 	meta(a + b)
 	assert error(meta(a))
 
 test "trivial macro"
-	forty-two = () -> expand(Expr) => `$quote`(42)
+	forty-two = () -> expand(Expr) => quote(42)
 	assert forty-two() == 42 
 
 test "unhygienic macro"
-	dirty = () -> expand(Expr) => `$quote`(captured)
+	dirty = () -> expand(Expr) => quote(captured)
 	captured = 42
 	assert dirty() == 42
 
@@ -539,25 +532,25 @@ test "row order doesn't affect record type equality"
 
 test "dependent function"
 	A, B : Type
-	Result = (y: Num-Literal) => case y of 1 A of _ B
-	assert Result(1) == A
-	assert Result(0) == B
-	f : (x: Num-Literal) -> Result(x)
-	assert type-of(f(1)) == A
-	assert type-of(f(0)) == B
+	Result = (y: Bool) => case y of true A of false B
+	assert Result(true) == A
+	assert Result(false) == B
+	f : (x: Bool) -> Result(x)
+	assert type-of(f(true)) == A
+	assert type-of(f(false)) == B
 
 test "dependent record"
 	L, R : Type
 	r : R
 	l : L
-	Data = (x: Num-Literal) => case x of 1 R of _ L
-	assert Data(1) == R
-	assert Data(0) == L
-	Either = Record(t: Num-Literal, data: Data(t))
-	either-r : Either = (t=1, data=r)
-	either-l : Either = (t=0, data=l)
-	assert error(bad-either-l : Either = (t=0, data=r))
-	assert error(bad-either-r : Either = (t=1, data=l))
+	Data = (x: Bool) => case x of true R of false L
+	assert Data(true) == R
+	assert Data(false) == L
+	Either = Record(t: Bool, data: Data(t))
+	either-r : Either = (t=true, data=r)
+	either-l : Either = (t=false, data=l)
+	assert error(bad-either-l : Either = (t=false, data=r))
+	assert error(bad-either-r : Either = (t=true, data=l))
 
 #
 # Function application

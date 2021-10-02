@@ -67,7 +67,7 @@ func E(x: string): SyntaxRule = exp_rule(x, StrongerThan)
 
 func I(): SyntaxRule =
     let stat_sep = (";".tr | "$CNT".tr).named("Stmt-Sep")
-    let rule = "$IND".tr & "Any".e.list(stat_sep.plus).with_op("$block").opt & stat_sep.star & "$DED".tr
+    let rule = "$IND".tr & "Any".e.list(stat_sep.plus).with_op("block").opt & stat_sep.star & "$DED".tr
     rule.named("Block")
 
 func b(group: string): SyntaxRule = (I() | group.e).named(fmt"Block({group})")
@@ -161,7 +161,7 @@ parser.add_infix_mix "Definition", "=", "=".t & "Definition".b
 
 parser.add_infix_mix "Lambda", "=>", "=>".t & "Lambda".b
 
-parser.add_prefix_mix "Statement", "quote", "quote".t & "Any".b
+#parser.add_prefix_mix "Statement", "quote", "quote".t & "Any".b
 
 parser.add_prefix_mix "Statement", "while",
     ("while".t & "Statement".E & ":".opt & "Any".b).splice

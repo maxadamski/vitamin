@@ -14,7 +14,6 @@ type
 # Boilerplate forward declarations :/
 #
 
-
 proc is_subtype*(ctx: Ctx, x, y: Val): bool
 
 # surface -> core
@@ -254,6 +253,8 @@ func `==`(x, y: seq[Val]): bool =
 
 
 func `==`*(x, y: Val): bool =
+    if x.kind in {OpaqueVal, NeuVal} and y.kind in {OpaqueVal, NeuVal}:
+        return x.exp == y.exp
     if x.kind != y.kind: return false
     case x.kind
     of NeverVal: true
@@ -388,7 +389,7 @@ proc check_apply_lambda(ctx: Ctx, exp: Exp, want_typ: Opt[Val]): TypedExp =
             par_default[i] = true
 
     for i, arg in tail:
-        if arg.has_prefix("$define"):
+        if arg.has_prefix("="):
             if arg[1].kind != expAtom:
                 raise ctx.error(exp=arg, msg="Parameter name must be an atom, but got {arg[1].bold}. {exp.src}".fmt)
             let key = arg[1].value
@@ -422,10 +423,10 @@ proc check_apply_lambda(ctx: Ctx, exp: Exp, want_typ: Opt[Val]): TypedExp =
 
     for i, par in typ.params:
         if par.quoted:
-            arg_norm[i] = term(atom("$quote"), arg_norm[i])
+            arg_norm[i] = term(atom("quote"), arg_norm[i])
 
     if variadic_par != -1 and typ.params[variadic_par].quoted:
-        variadic_arg = variadic_arg.map_it(term(atom("$quote"), it))
+        variadic_arg = variadic_arg.map_it(term(atom("quote"), it))
 
     let ctx = ctx.extend()
     for i, (arg, par) in zip(arg_norm, typ.params):
@@ -437,7 +438,7 @@ proc check_apply_lambda(ctx: Ctx, exp: Exp, want_typ: Opt[Val]): TypedExp =
                 if not ctx.is_subtype(arg_typ, variadic_typ):
                     raise ctx.error(exp=arg, msg="Value for variadic parameter {par.name.bold} must be of type {variadic_typ.bold}, but got {arg.bold} of type {arg_typ.bold}. {exp.src}".fmt)
                 arg = arg_exp
-            arg_norm[i] = term(atom("$list") & variadic_arg)
+            arg_norm[i] = term(atom("Core/list") & variadic_arg)
             ctx.env.define(par.name, ctx.eval(arg_norm[i]), ctx.eval(par.typ))
         elif par_default[i]:
             let par_typ = ctx.eval(par.typ)
@@ -450,7 +451,7 @@ proc check_apply_lambda(ctx: Ctx, exp: Exp, want_typ: Opt[Val]): TypedExp =
             arg_norm[i] = arg_exp
             ctx.env.define(par.name, ctx.eval(arg_exp), par_typ) # TODO: De Brujin
 
-    var core_exp = term("$apply".atom, term(head_core & arg_norm))
+    var core_exp = term("Core/apply".atom, term(head_core & arg_norm))
     var result_typ = ctx.eval(typ.result)
 
     if want_typ.is_some and not ctx.is_subtype(result_typ, want_typ.unsafe_get):
@@ -467,30 +468,30 @@ proc check_apply_lambda(ctx: Ctx, exp: Exp, want_typ: Opt[Val]): TypedExp =
 
 proc synth_lambda(ctx: Ctx, exp: Exp): TypedExp =
     let ctx = ctx.extend()
-    var core_exp = term("$lambda".atom)
+    var core_exp = term("Core/lambda".atom)
     var typ : FunTyp
 
     for typ_part in exp.exprs:
-        if typ_part.has_prefix("$param"):
+        if typ_part.has_prefix("#param"):
             var par = FunParam(name: typ_part[1].value)
-            var core_par = term("$param".atom, typ_part[1])
+            var core_par = term("#param".atom, typ_part[1])
             for par_part in typ_part.exprs:
-                if par_part.has_prefix(":"):
+                if par_part.has_prefix("#type"):
                     par.typ = par_part[1]
-                elif par_part.has_prefix("="):
+                elif par_part.has_prefix("#default"):
                     par.default = Some(par_part[1])
-                elif par_part.is_atom("$quoted"):
+                elif par_part.is_atom("#quoted"):
                     par.quoted = true
                     core_par &= par_part
-                elif par_part.has_prefix("$variadic"):
+                elif par_part.has_prefix("#variadic"):
                     par.variadic = true
                     par.variadic_typ = ctx.check_universe(par_part[1])
-                    core_par &= term("$variadic".atom, par.variadic_typ)
+                    core_par &= term("#variadic".atom, par.variadic_typ)
 
             var default_typ = None(Val)
             if par.default.is_some:
                 let (e, t) = ctx.check(par.default.unsafe_get)
-                core_par &= term("=".atom, e)
+                core_par &= term("#default".atom, e)
                 default_typ = Some(t)
 
             if par.typ.is_nil:
@@ -499,27 +500,27 @@ proc synth_lambda(ctx: Ctx, exp: Exp): TypedExp =
                 par.typ = reify(default_typ.unsafe_get)
 
             par.typ = ctx.check_universe(par.typ)
-            core_par &= term(":".atom, par.typ)
+            core_par &= term("#type".atom, par.typ)
 
             ctx.env.assume(par.name, ctx.eval(par.typ)) # TODO: De Brujin
             typ.params.add(par)
             core_exp &= core_par
             
-        elif typ_part.has_prefix("$result"):
+        elif typ_part.has_prefix("#result"):
             typ.result = ctx.check_universe(typ_part[1])
-            core_exp &= term("$result".atom, typ.result)
+            core_exp &= term("#result".atom, typ.result)
 
-        elif typ_part.has_prefix("$body"):
+        elif typ_part.has_prefix("#body"):
             if typ.result.is_nil:
                 let (body, res) = ctx.check(typ_part[1])
                 typ.result = reify(res)
-                core_exp &= term("$result".atom, typ.result)
-                core_exp &= term("$body".atom, body)
+                core_exp &= term("#result".atom, typ.result)
+                core_exp &= term("#body".atom, body)
             else:
                 let body = ctx.check(typ_part[1], ctx.eval(typ.result)).exp
-                core_exp &= term("$body".atom, body)
+                core_exp &= term("#body".atom, body)
         
-        elif typ_part.is_atom("$expand"):
+        elif typ_part.is_atom("#expand"):
             core_exp &= typ_part
             typ.autoexpand = true
     
@@ -534,20 +535,20 @@ proc check_lambda(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
     var params : seq[ParamInfo]
     var body, ret : Exp
     var expand = false
-    var core = term("$lambda".atom)
+    var core = term("Core/lambda".atom)
 
     for typ_part in exp.exprs:
-        if typ_part.has_prefix("$param"):
+        if typ_part.has_prefix("#param"):
             var par : ParamInfo
             par.name = typ_part[1]
             for par_part in typ_part.exprs[2 .. ^1]:
-                if par_part.has_prefix(":"): par.typ = par_part[1]
-                elif par_part.has_prefix("="): par.default = par_part[1]
-                elif par_part.is_atom("$quote"): par.quoted = true
+                if par_part.has_prefix("#type"): par.typ = par_part[1]
+                elif par_part.has_prefix("#default"): par.default = par_part[1]
+                elif par_part.is_atom("#quote"): par.quoted = true
             params &= par
-        elif typ_part.has_prefix("$body"): body = typ_part[1]
-        elif typ_part.has_prefix("$result"): ret = typ_part[1]
-        elif typ_part.has_prefix("$expand"): expand = true
+        elif typ_part.has_prefix("#body"): body = typ_part[1]
+        elif typ_part.has_prefix("#result"): ret = typ_part[1]
+        elif typ_part.has_prefix("#expand"): expand = true
 
     if fun_typ.params.len != params.len:
         raise type_error("Expected function with {fun_typ.params.len} parameters, but got {params.len}. {exp.src}")
@@ -574,10 +575,10 @@ proc check_lambda(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
         ctx.env.assume(name.value, want_typ_val)
         want_ctx.env.assume(want_par.name, want_typ_val)
 
-        var param = term("$param".atom, name)
-        if not typ.is_nil: param &= term(":".atom, typ)
-        if not default.is_nil: param &= term("=".atom, default)
-        if quoted: param &= atom("$quote")
+        var param = term("#param".atom, name)
+        if not typ.is_nil: param &= term("#type".atom, typ)
+        if not default.is_nil: param &= term("#default".atom, default)
+        if quoted: param &= atom("#quoted")
         core &= param
 
     if ret.is_nil:
@@ -588,31 +589,31 @@ proc check_lambda(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
         ret = ctx.check_universe(ret)
         body = ctx.check(body, ctx.eval(ret)).exp
 
-    core &= term("$result".atom, fun_typ.result)
-    core &= term("$body".atom, body)
+    core &= term("#result".atom, fun_typ.result)
+    core &= term("#body".atom, body)
     core
 
 
 proc synth_lambda_type(ctx: Ctx, exp: Exp): TypedExp =
     let ctx = ctx.extend()
-    var core = term("$Lambda".atom)
+    var core = term("Core/Lambda".atom)
     var univ = 0
     for typ_part in exp.exprs:
-        if typ_part.has_prefix("$param"):
+        if typ_part.has_prefix("#param"):
             var par_name = typ_part[1]
-            var core_par = term("$param".atom, par_name)
+            var core_par = term("#param".atom, par_name)
             var par_typ, par_default : Exp
             for par_part in typ_part[2 .. ^1]:
-                if par_part.has_prefix(":"): par_typ = par_part[1]
-                elif par_part.has_prefix("="): par_default = par_part[1]
-                elif par_part.is_atom("$quoted"): core_par &= par_part
-                elif par_part.has_prefix("$variadic"): core_par &= term("$variadic".atom, ctx.check_universe(par_part[1]))
+                if par_part.has_prefix("#type"): par_typ = par_part[1]
+                elif par_part.has_prefix("#default"): par_default = par_part[1]
+                elif par_part.is_atom("#quoted"): core_par &= par_part
+                elif par_part.has_prefix("#variadic"): core_par &= term("#variadic".atom, ctx.check_universe(par_part[1]))
                 else: core_par &= par_part
             
             var default_typ = None(Val)
             if not par_default.is_nil:
                 let (e, t) = ctx.check(par_default)
-                core_par &= term("=".atom, e)
+                core_par &= term("#default".atom, e)
                 default_typ = Some(t)
 
             if par_typ.is_nil:
@@ -623,17 +624,17 @@ proc synth_lambda_type(ctx: Ctx, exp: Exp): TypedExp =
             let (par_typ_core, par_typ_universe) = ctx.check_universe_level(par_typ)
             univ = max(univ, par_typ_universe)
             par_typ = par_typ_core
-            core_par &= term(":".atom, par_typ)
+            core_par &= term("#type".atom, par_typ)
             core &= core_par
 
             ctx.env.assume(par_name.value, ctx.eval(par_typ_core)) # TODO: De Brujin
 
-        elif typ_part.has_prefix("$result"):
+        elif typ_part.has_prefix("#result"):
             let (ret_typ_core, ret_typ_universe) = ctx.check_universe_level(typ_part[1])
             univ = max(univ, ret_typ_universe)
-            core &= term("$result".atom, ret_typ_core)
+            core &= term("#result".atom, ret_typ_core)
         
-        elif typ_part.is_atom("$expand"):
+        elif typ_part.is_atom("#expand"):
             core &= typ_part
 
     (core, Val(kind: TypeVal, level: univ))
@@ -641,27 +642,29 @@ proc synth_lambda_type(ctx: Ctx, exp: Exp): TypedExp =
 
 proc check_lambda_type(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
     raise compiler_defect("Downwards checking for lambda type {exp} not implemented! {exp.src}".fmt)
+    #var core = term("Core/Lambda".atom)
+    #core
 
 
 proc synth_record_type(ctx: Ctx, exp: Exp): tuple[exp: Exp, typ: Val] =
-    var core = term("$Record".atom)
+    var core = term("Core/Record".atom)
     var univ = 0
 
     for part in exp.tail:
-        if part.has_prefix("$field"):
+        if part.has_prefix("#field"):
             let name = part[1]
-            var field_core = term("$field".atom, name)
+            var field_core = term("#field".atom, name)
             for field_part in part[2 .. ^1]:
-                if field_part.has_prefix(":"):
+                if field_part.has_prefix("#type"):
                     let (typ_core, typ_univ) = ctx.check_universe_level(field_part[1])
                     univ = max(univ, typ_univ)
-                    field_core &= term(":".atom, typ_core)
+                    field_core &= term("#type".atom, typ_core)
                     ctx.env.assume(name.value, ctx.eval(typ_core)) # TODO: De Brujin?
 
-                elif field_part.has_prefix("="):
+                elif field_part.has_prefix("#default"):
                     let (default_core, default_typ) = ctx.check(field_part[1])
                     # TODO: ensure that default_typ <: field_typ
-                    field_core &= term("=".atom, default_core)
+                    field_core &= term("#default".atom, default_core)
 
             core &= field_core
         else:
@@ -675,14 +678,14 @@ proc check_record_type(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
 
 
 proc synth_record(ctx: Ctx, exp: Exp): tuple[exp: Exp, typ: Val] =
-    var core = term("$record".atom)
+    var core = term("Core/record".atom)
     var rec_typ : RecTyp
     for part in exp.tail:
-        if part.has_prefix("$arg"):
+        if part.has_prefix("#arg"):
             let name = part[1]
             let (value_core, typ) = ctx.check(part[2])
             rec_typ.fields &= RecField(name: name.value, typ: reify(typ))
-            core &= term("$arg".atom, name, value_core)
+            core &= term("#arg".atom, name, value_core)
 
         else:
             assert false
@@ -693,12 +696,12 @@ proc check_record(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
     if want_typ.kind != RecTypeVal:
         raise type_error("Can't type check if record is of type {want_typ}, because {want_typ.noun} {want_typ} is not a record type. {exp.src}".fmt)
 
-    result = term("$record".atom)
+    result = term("Core/record".atom)
     let ctx = ctx.extend()
 
     var field_values : Table[string, tuple[name, value: Exp]] 
     for part in exp.tail:
-        if part.has_prefix("$arg"):
+        if part.has_prefix("#arg"):
             field_values[part[1].value] = (part[1], part[2])
 
     for field in want_typ.rec_typ.fields:
@@ -714,7 +717,7 @@ proc check_record(ctx: Ctx, exp: Exp, want_typ: Val): Exp =
             (value, typ) = ctx.check(value, want_field_typ)
 
         ctx.env.define(field.name, ctx.eval(value), typ)
-        result &= term("$arg".atom, name, value)
+        result &= term("#arg".atom, name, value)
 
 
 proc check_apply(ctx: Ctx, exp: Exp, typ: Opt[Val]): TypedExp =
@@ -746,7 +749,7 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                 return (exp, var_typ)
             let typ = typ.unsafe_get
             if not ctx.is_subtype(var_typ, typ):
-                raise type_error("Expected value of type {typ}, but got variable {exp} of type {var_typ}. {exp.src}".fmt)
+                raise type_error("Expected value of type {typ.noun} {typ}, but got variable {exp} of type {var_typ.noun} {var_typ}. {exp.src}".fmt)
             return (exp, typ)
         of aNum:
             let typ = typ.or_else: return (exp, ctx.eval("Num-Literal".atom))
@@ -768,36 +771,38 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
 
         if exp.head.is_atom:
             case exp.head.value:
-            of "$apply":
+            of "Core/define", "Core/apply", "Core/block", "Core/case", "Core/quote", "Core/list", "Core/unwrap",
+               "Core/Lambda", "Core/lambda", "Core/Record", "Core/record":
                 writeStackTrace()
                 raise compiler_defect("Can't type check core expression {exp}. {exp.src}".fmt)
-            of "$quote":
+            of "quote":
+                exp[0] = "Core/quote".atom
                 let typ = typ.or_else: return (exp, ctx.eval("Expr".atom))
                 if typ == ctx.eval("Expr".atom): return (exp, ctx.eval("Expr".atom))
                 if typ == ctx.eval("Atom".atom) and exp[1].is_atom: return (exp, ctx.eval("Atom".atom))
                 if typ == ctx.eval("Term".atom) and exp[1].is_term: return (exp, ctx.eval("Term".atom))
                 raise type_error("Expression {exp} is not of type {typ}. {exp.src}".fmt)
-            of "$lambda":
+            of "lambda":
                 return if typ.is_some:
                     (ctx.check_lambda(exp, typ.unsafe_get), typ.unsafe_get)
                 else:
                     ctx.synth_lambda(exp)
-            of "$Lambda":
+            of "Lambda":
                 return if typ.is_some:
                     (ctx.check_lambda_type(exp, typ.unsafe_get), typ.unsafe_get)
                 else:
                     ctx.synth_lambda_type(exp)
-            of "$Record":
+            of "Record":
                 return if typ.is_some:
                     (ctx.check_record_type(exp, typ.unsafe_get), typ.unsafe_get)
                 else:
                     ctx.synth_record_type(exp)
-            of "$record":
+            of "record":
                 return if typ.is_some:
                     (ctx.check_record(exp, typ.unsafe_get), typ.unsafe_get)
                 else:
                     ctx.synth_record(exp)
-            of "$assume":
+            of ":":
                 let name = exp[1].value
                 let typ_exp = ctx.check_universe(exp[2])
                 let local = ctx.env.find(name)
@@ -808,36 +813,39 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                 else:
                     ctx.env.assume(name, typ_val, site=Some(exp)) # TODO: De Brujin
                 exp[2] = typ_exp
-                return (exp, unit_type)
-            of "$define":
-                let name = exp[1].value
+                return (term(), unit_type)
+            of "=":
+                let (name_exp, val_exp) = (exp[1], exp[2])
+                let name = name_exp.value
                 var opaque = false
                 for part in exp[3 .. ^1]:
-                    if part.is_atom("$opaque"): opaque = true
+                    if part.is_atom("#opaque"): opaque = true
                 var rhs_core : Exp
                 var rhs_typ : Val 
                 if name in ctx.env.vars and ctx.env.vars[name].typ.is_some:
                     let ass_typ = ctx.env.vars[name].typ.unsafe_get
-                    (rhs_core, rhs_typ) = ctx.check(exp[2], ass_typ)
+                    (rhs_core, rhs_typ) = ctx.check(val_exp, ass_typ)
                     if not ctx.is_subtype(rhs_typ, ass_typ):
                         raise type_error("Variable {name} was declared as {ass_typ}, which is incompatible with value {ctx.eval(rhs_core)} of {rhs_typ}. {exp.src}".fmt)
                 else:
-                    (rhs_core, rhs_typ) = ctx.check(exp[2], typ)
-                var core = term("$define".atom, exp[1], rhs_core, reify(rhs_typ), if opaque: atom("true") else: atom("false"))
+                    (rhs_core, rhs_typ) = ctx.check(val_exp, typ)
                 let rhs_val = ctx.eval(rhs_core)
                 ctx.env.define(name, rhs_val, rhs_typ, opaque=opaque) # TODO: De Brujin
-                return (core, rhs_typ)
-            of "$block":
+                return (term("Core/define".atom, name_exp, rhs_core), rhs_typ)
+            of "block":
                 var exps : seq[Exp]
                 var types: seq[Val]
                 for exp in exp.tail:
                     let (core_exp, typ) = ctx.check(exp)
-                    exps.add(core_exp)
-                    types.add(typ)
-                return (term("$block".atom & exps), types[^1])
+                    if not core_exp.is_nil:
+                        exps.add(core_exp)
+                        types.add(typ)
+                if exps.len == 0:
+                    return (term(), unit)
+                return (term("Core/block".atom & exps), types[^1])
             of "case":
                 var types : seq[Val]
-                var core = term(exp[0], ctx.check(exp[1]).exp)
+                var core = term("Core/case".atom, ctx.check(exp[1]).exp)
                 for x in exp.exprs[2 .. ^1]:
                     let (pattern, body) = (x[0], x[1])
                     types &= ctx.infer_type(body)
@@ -867,7 +875,7 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                 return (lhs_core, rhs)
             of "unwrap":
                 let (arg, typ) = ctx.check(exp[1], typ)
-                return (term("$unwrap".atom, arg), typ)
+                return (term("Core/unwrap".atom, arg), typ)
             else:
                 discard
         
@@ -883,17 +891,17 @@ proc eval_lambda_param(ctx: Ctx, exp: Exp): FunParam =
     result.name = exp[1].value
     var typ : Val
     for part in exp.exprs[2 .. ^1]:
-        if part.has_prefix(":"):
+        if part.has_prefix("#type"):
             typ = ctx.eval(part[1])
             result.typ = reify(typ)
-        elif part.has_prefix("="):
+        elif part.has_prefix("#default"):
             result.default = Some(ctx.norm(part[1]))
-        elif part.has_prefix("$variadic"):
+        elif part.has_prefix("#variadic"):
             result.variadic = true
             result.variadic_typ = ctx.norm(part[1])
-        elif part == atom("$quoted"):
+        elif part == atom("#quoted"):
             result.quoted = true
-        elif part == atom("$keyword"):
+        elif part == atom("#keyword"):
             result.keyword = true
     assert typ != nil
     ctx.env.assume(result.name, typ, site=Some(exp)) # TODO: De Brujin
@@ -902,23 +910,23 @@ proc eval_lambda_param(ctx: Ctx, exp: Exp): FunParam =
 proc eval_lambda_type(ctx: Ctx, exp: Exp): FunTyp =
     let ctx = ctx.extend()
     for part in exp.tail:
-        if part.has_prefix("$param"):
+        if part.has_prefix("#param"):
             result.params &= ctx.eval_lambda_param(part)
-        elif part.has_prefix("$result"):
+        elif part.has_prefix("#result"):
             result.result = ctx.norm(part[1])
-        elif part.is_atom("$expand"):
+        elif part.is_atom("#expand"):
             result.autoexpand = true
         else:
-            raise runtime_error("Unexpected $Lambda form {part.str}. {exp.src}".fmt)
+            raise runtime_error("Unexpected Core/Lambda form {part.str}. {exp.src}".fmt)
 
 
 proc eval_lambda(ctx: Ctx, exp: Exp): Fun =
     let ctx = ctx.extend()
     result.ctx = Some(ctx)
     for part in exp.tail:
-        if part.has_prefix("$param"):
+        if part.has_prefix("#param"):
             result.params &= part[1].value
-        elif part.has_prefix("$body"):
+        elif part.has_prefix("#body"):
             let body = part[1]
             result.body = Left[Exp, BuiltinFunProc](body)
 
@@ -926,12 +934,12 @@ proc eval_lambda(ctx: Ctx, exp: Exp): Fun =
 proc eval_record_type(ctx: Ctx, exp: Exp): RecTyp =
     let ctx = ctx.extend()
     for part in exp.tail:
-        if part.has_prefix("$field"):
+        if part.has_prefix("#field"):
             var field : RecField
             field.name = part[1].value
             for part in part[2 .. ^1]:
-                if part.has_prefix(":"): field.typ = part[1]
-                elif part.has_prefix("="): field.default = part[1]
+                if part.has_prefix("#type"): field.typ = part[1]
+                elif part.has_prefix("#default"): field.default = part[1]
                 else: assert false
             let typ = ctx.eval(field.typ)
             field.typ = typ.reify
@@ -943,7 +951,7 @@ proc eval_record_type(ctx: Ctx, exp: Exp): RecTyp =
 
 proc eval_record(ctx: Ctx, exp: Exp): Rec =
     for part in exp.tail:
-        if part.has_prefix("$arg"):
+        if part.has_prefix("#arg"):
             let (name, val) = (part[1], part[2])
             result.values[name.value] = ctx.eval(val)
         else:
@@ -967,7 +975,7 @@ proc eval_apply(ctx: Ctx, exp: Exp): Val =
     of FunVal:
         ctx.eval_apply_lambda(head.fun, exp.tail)
     of NeuVal, OpaqueVal:
-        let res = term("$apply".atom, term(reify(head) & exp.tail.map_it(ctx.norm(it))))
+        let res = term("Core/apply".atom, term(reify(head) & exp.tail.map_it(ctx.norm(it))))
         if head.kind == NeuVal: Neu(res) else: Val(kind: OpaqueVal, exp: res)
     else:
         raise ctx.error(exp=exp, msg="Can't evaluate, because {head.kind} {head.bold} is not callable. {exp.src}".fmt)
@@ -998,24 +1006,14 @@ proc eval_name(ctx: Ctx, exp: Exp): Val =
     vari.val ?? Neu(exp)
 
 
-proc eval_assume(ctx: Ctx, exp: Exp): Val =
-    let (name, typ_exp) = (exp[1].value, exp[2])
-    let local = ctx.env.find(name)
-    if local != nil:
-        if local.vars[name].site.is_none:
-            local.vars[name].site = Some(exp)
-        if local.vars[name].typ.is_none:
-            local.vars[name].typ = Some(ctx.eval(typ_exp))
-    else:
-        ctx.env.assume(name, ctx.eval(typ_exp), site=Some(exp))
-    return unit
-
-
-proc eval_define(ctx: Ctx, exp: Exp, only_assume = false): Val =
-    var (name, val_exp, typ_exp) = (exp[1].value, exp[2], exp[3])
-    let opaque = exp[4].is_atom("true")
+proc eval_define(ctx: Ctx, exp: Exp): Val =
+    # TODO: De Brujin
+    var (name, val_exp) = (exp[1].value, exp[2])
     let val = ctx.eval(val_exp)
-    ctx.env.define(name, val, ctx.eval(typ_exp), site=Some(exp), opaque=opaque) # TODO: De Brujin
+    if name in ctx.env.vars:
+        ctx.env.vars[name].val = Some(val)
+    else:
+        ctx.env.vars[name] = Var(val: Some(val))
     return val
 
 
@@ -1028,7 +1026,7 @@ proc eval_match(ctx: Ctx, lhs_exp: Exp, rhs_val: Val): bool =
 proc eval_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
     let switch = ctx.eval(switch_exp)
     if switch.kind == NeuVal:
-        return Neu(term(@["case".atom, ctx.norm(switch_exp)] & cases)) # FIXME: norm cases (special treatment for patterns)
+        return Neu(term(@["Core/case".atom, ctx.norm(switch_exp)] & cases)) # FIXME: norm cases (special treatment for patterns)
         #raise ctx.error("Can't match on a neutral value {switch_exp.bold}. {switch_exp.src}".fmt)
     for branch in cases:
         #let local = ctx.extend()
@@ -1041,8 +1039,7 @@ proc eval_case(ctx: Ctx, switch_exp: Exp, cases: seq[Exp]): Val =
 proc eval_test(ctx: Ctx, name: string, test: Exp) =
     try:
         let ctx = ctx.extend()
-        let (test_exp, _) = ctx.check(test)
-        discard ctx.eval(test_exp)
+        discard ctx.eval_surface(test)
         stdout.write "test " & name & " \e[32mPASSED\e[0m\n".fmt
     except AssertionDefect:
         echo get_current_exception().getStackTrace()
@@ -1115,36 +1112,33 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
         else: discard
     of expTerm:
         if exp.is_nil:
-            writeStackTrace()
-            raise compiler_defect("Can't evaluate empty term.")
+            return unit # NOP
         if exp.head.is_atom:
             case exp.head.value
-            of "$define":
+            of "Core/define":
                 return ctx.eval_define(exp)
-            of "$assume":
-                return ctx.eval_assume(exp)
-            of "$Lambda":
+            of "Core/Lambda":
                 return Val(kind: FunTypeVal, fun_typ: ctx.eval_lambda_type(exp))
-            of "$lambda":
+            of "Core/lambda":
                 return Val(kind: FunVal, fun: ctx.eval_lambda(exp))
-            of "$Record":
+            of "Core/Record":
                 return Val(kind: RecTypeVal, rec_typ: ctx.eval_record_type(exp))
-            of "$record":
+            of "Core/record":
                 return Val(kind: RecVal, rec: ctx.eval_record(exp))
-            of "$apply":
+            of "Core/apply":
                 return ctx.eval_apply(exp[1])
-            of "$quote":
+            of "Core/quote":
                 return if exp.len == 1: Box(term()) else: Box(exp[1])
-            of "$block":
+            of "Core/block":
                 var res = unit
                 for stat in exp.tail:
                     res = ctx.eval(stat)
                 return res
-            of "$list":
+            of "Core/list":
                 return Val(kind: ListLit, values: ctx.eval_all(exp.tail))
-            of "case":
+            of "Core/case":
                 return ctx.eval_case(exp[1], exp.exprs[2 .. ^1])
-            of "$unwrap":
+            of "Core/unwrap":
                 return ctx.unwrap(exp[1])
             else:
                 discard
@@ -1156,47 +1150,47 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
 #
 
 func reify_lambda_param(param: FunParam): Exp =
-    result = term("$param".atom, param.name.atom)
-    result.exprs &= term(":".atom, param.typ)
-    if param.default.is_some: result.exprs &= term("=".atom, param.default.unsafe_get)
-    if param.variadic: result.exprs &= term("$variadic".atom, param.variadic_typ)
-    if param.keyword: result.exprs &= "$keyword".atom
-    if param.quoted: result.exprs &= "$quoted".atom
+    result = term("#param".atom, param.name.atom)
+    result.exprs &= term("#type".atom, param.typ)
+    if param.default.is_some: result.exprs &= term("#default".atom, param.default.unsafe_get)
+    if param.variadic: result.exprs &= term("#variadic".atom, param.variadic_typ)
+    if param.keyword: result.exprs &= "#keyword".atom
+    if param.quoted: result.exprs &= "#quoted".atom
 
 
 func reify_lambda_type(fun_typ: FunTyp): Exp =
-    result.exprs &= "$Lambda".atom
+    result.exprs &= "Core/Lambda".atom
     for param in fun_typ.params: result.exprs &= reify_lambda_param(param)
-    result.exprs &= term("$result".atom, fun_typ.result)
-    if fun_typ.autoexpand: result.exprs &= "$expand".atom
+    result.exprs &= term("#result".atom, fun_typ.result)
+    if fun_typ.autoexpand: result.exprs &= "#expand".atom
 
 
 func reify_lambda(fun: Fun): Exp =
     raise runtime_error("Can't reify lambda value {fun}.".fmt)
     #if fun.name.len > 0: return fun.name.atom
-    #result.exprs &= "$lambda".atom & reify_lambda_type(fun.typ.unsafe_get).tail
-    #result.exprs &= term("$body".atom, fun.body.unsafe_left)
+    #result.exprs &= "Core/lambda".atom & reify_lambda_type(fun.typ.unsafe_get).tail
+    #result.exprs &= term("#body".atom, fun.body.unsafe_left)
 
 
 func reify_record_field(field: RecField): Exp =
-    result = term("$field".atom, field.name.atom, term(":".atom, field.typ))
-    if not field.default.is_nil: result.exprs &= term("=".atom, field.default)
+    result = term("#field".atom, field.name.atom, term("#type".atom, field.typ))
+    if not field.default.is_nil: result.exprs &= term("#default".atom, field.default)
 
 
 func reify_record_type(rec_typ: RecTyp): Exp =
-    result.exprs &= "$Record".atom
+    result.exprs &= "Core/Record".atom
     for field in rec_typ.fields:
         result.exprs &= reify_record_field(field)
 
 
 func reify_record(rec: Rec): Exp =
-    result.exprs &= "$record".atom
+    result.exprs &= "Core/record".atom
     for (name, val) in rec.values.pairs:
-        result.exprs &= term("$arg".atom, name.atom, val.reify)
+        result.exprs &= term("#arg".atom, name.atom, val.reify)
 
 
 func reify_unary_apply(foo: string, arg: Exp): Exp = 
-    term("$apply".atom, term(foo.atom, arg))
+    term("Core/apply".atom, term(foo.atom, arg))
 
 
 func reify*(val: Val): Exp =
@@ -1216,17 +1210,17 @@ func reify*(val: Val): Exp =
     of StrLit:
         atom("\"" & val.str & "\"", tag=aStr)
     of ListLit:
-        term("$list".atom & val.values.map(reify))
+        term("Core/list".atom & val.values.map(reify))
     of TypeVal:
        "Type".atom
     of ExpVal:
-        term("$quote".atom, val.exp)
+        term("Core/quote".atom, val.exp)
     of OpaqueVal, NeuVal:
         val.exp
     of UnionTypeVal:
-        reify_unary_apply("Union", term("$list".atom & val.values.map(reify)))
+        reify_unary_apply("Union", term("Core/list".atom & val.values.map(reify)))
     of InterTypeVal:
-        reify_unary_apply("Inter", term("$list".atom & val.values.map(reify)))
+        reify_unary_apply("Inter", term("Core/list".atom & val.values.map(reify)))
     of FunTypeVal:
         reify_lambda_type(val.fun_typ)
     of FunVal:
