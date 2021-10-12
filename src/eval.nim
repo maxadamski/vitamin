@@ -874,6 +874,17 @@ proc check*(ctx: Ctx, exp: Exp, typ: Opt[Val] = None(Val)): TypedExp =
                 if exps.len == 0:
                     return (term(), unit)
                 return (term("Core/block".atom & exps), types[^1])
+            of ".":
+                let (lhs, lhs_typ) = ctx.check(exp[1])
+                let rhs = exp[2]
+                assert rhs.kind == expAtom
+                let field_name = rhs.value
+                if lhs_typ.kind != RecTypeVal:
+                    raise type_error("Value {exp[1]} of type {lhs_typ} is not a record, so member access is not allowed. {lhs.src}".fmt)
+                let fields = lhs_typ.rec_typ.fields.filter_it(it.name == field_name)
+                if fields.len == 0:
+                    raise type_error("Value {exp[1]} of type {lhs_typ} has no member {field_name}. {rhs.src}".fmt)
+                return (term("Core/member".atom, lhs, rhs), ctx.eval(fields[0].typ))
             of "while":
                 let (cond, _) = ctx.check(exp[1])
                 let (body, _) = ctx.check(exp[2])
@@ -1158,6 +1169,8 @@ proc eval*(ctx: Ctx, exp: Exp): Val =
                 return unit
             of "Core/break":
                 return Val(kind: InterruptVal)
+            of "Core/member":
+                return ctx.eval(exp[1]).rec.values[exp[2].value]
             else:
                 discard
     raise compiler_defect("Can't evaluate non-core term {exp.str}. {exp.src}".fmt)

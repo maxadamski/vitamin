@@ -516,11 +516,29 @@ test "unit records"
 	assert type-of((x=Unit)) == Record(x: Type)
 	assert type-of((x=())) == Record(x: Unit)
 
+test "access record member"
+	color = (name="blu", value=0x0000FF)
+	assert color.name == "blu"
+	assert color.value == 0x0000FF
+
+test "access nested record member"
+	foo = (bar=(baz=42))
+	assert foo.bar.baz == 42
+
+test "can't access member that is not present in a record"
+	color = (name="blu", value=0x0000FF)
+	assert error(color.whatever)
+
+test "can't access member of non-record value"
+	assert error(Type.whatever)
+	assert error(42.whatever)
+	assert error("blu".whatever)
+
 xtest "record constructor"
 	R = Record()
 	assert R() == constructor-of(R)()
 
-test "record row shorthand syntax"
+test "record type shorthand syntax"
 	A, B, C : Type
 	R1 = Record(a: A, b: B, c: B, d: C)
 	R2 = Record(a: A, b c: B, d: C)
