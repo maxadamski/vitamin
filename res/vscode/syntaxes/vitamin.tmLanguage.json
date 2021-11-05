@@ -13,7 +13,7 @@
     },
     {
       "name": "keyword.other.vitamin",
-      "match": "\\b(let|var|use|fun|test|xtest|Record|Variant|Module|Enum|assert|import|include|pass|undefined|unreachable)(?!-)\\b"
+      "match": "\\b(let|var|static|static|opaque|use|fun|test|xtest|Record|Variant|Module|Enum|assert|import|include|pass|undefined|unreachable)(?!-)\\b"
     },
     {
       "name": "comment.block.vitamin",

@@ -71,10 +71,19 @@ Characters between opening and closing parentheses form a group. A group is also
 Characters inside a group are lexically analyzed and parsed on-demand, so a syntax macro can receive the raw character stream, instead of the token or expression stream, if you desire. This bypasses the Vitamin lexer and parser, so you can perform completely custom analysis.
 
 
+# Checking
+
+Before evaluation surface expressions must be checked for errors. Successfuly checked surface expressions are lowered to core expressions.
+
+Checking is done with the `Meta.check` and `Meta.infer` functions. Together they form the *bidirectional type checking* algorithm.
+
+- `Meta.check(ctx, e, t)` checks that expression `e` is compatible with type `t` in context `ctx` and returns a core expression equivalent to `e`. This function performs *top-down type checking*
+- `Meta.infer(ctx, e)` returns the type of expression `e` in context `ctx` and a core expression equivalent to `e`. This function performs *bottom-up type checking*.
+
 
 # Evaluation
 
-Expressions are evaluated with the `eval` function.
+Core expressions are evaluated with the `Meta.eval` function.
 
 Given value `e` of type `Expr` as its argument, `eval` first expands `e` with `expand`, and then evaluates the resulting expression according to the following rules.
 
@@ -98,23 +107,23 @@ Describe the evaluation of the builtin number and string literals
 
 ### Empty Term
 
-The empty expression `{}` cannot be evaluated. Trying to evaluate `{}` is a fatal error.
+The empty expression `()` cannot be evaluated. Evaluating `()` is a fatal error.
 
 ### Quote Term
 
-The primitive quote expression `{$quote e}`, where `e` is an arbitrary expression, is evaluated to a value, of type `Expr`, which represents the abstract syntax tree of `e`. No expansion, evaluation or interpolation is performed on `e` itself. In short, `$quote` is used to internally withold evaluation.
+The quote core expression `(Core/quote e)`, where `e` is a surface expression, is evaluated to a value, of type `Expr`, which represents the abstract syntax tree of `e`. No expansion, evaluation or interpolation is performed on `e` itself. In short, `Core/quote` is used to withold evaluation.
 
 ### List Literals
 
-The primitive list literal expression `{$list x1 ... xN}` is evaluated by evaluating subexpressions `x1 ... xN` in unspecified order, and storing the results in a heterogenous container. The type of that container is `List-Literal`.
+The list literal core expression `(Core/list x1 ... xN)` is evaluated by evaluating subexpressions `x1 ... xN` in unspecified order, and storing the results in a heterogenous container. The type of that container is `List-Literal`.
 
 ### Block Terms
 
-The primitive block expression `{$block x1 ... xN}` is evaluated by creating a new scope and evaluating subexpressions `x1 ... xN` in order from left to right. The value of the last subexpression is used as the result.
+The block core expression `(Core/block x1 ... xN)` is evaluated by creating a new scope and evaluating subexpressions `x1 ... xN` in order from left to right. The value of the last subexpression is used as the result.
 
-### Call Term
+### Apply Term
 
-Expressions of form `{f x1 ... xN}` represent function calls, and are evaluated according to the following algorithm:
+Core expressions of form `(Core/apply f x1 ... xN)` represent function calls, and are evaluated according to the following algorithm:
 
 1. Expression `f` is evaluated
 	- It is an error if `f` doesn't evaluate to a function value
@@ -127,15 +136,15 @@ Expressions of form `{f x1 ... xN}` represent function calls, and are evaluated 
 ---
 **NOTE**
 
-For terms of form `{f}` steps 2-4 are still performed, since the function `F` may have default arguments, so the normalized argument list may be non-empty.
+For terms of form `(f)` steps 2-4 are still performed, since the function `F` may have default arguments, so the normalized argument list may be non-empty.
 
 ---
 
 #### Argument Normalization
 
 - Let `F` be a function with parameters `p1 ... pN`.
-- Let `x1 ... xM` be an argument list of a function call `{f x1 ... xM}`, where each argument `xi` is an expression, and `f` is an expression evaluating to function `F`.
-- A *keyword argument* is an argument of form `{= ki vi}`, where `ki` is a parameter label and `vi` is an arbitrary expression.
+- Let `x1 ... xM` be an argument list of a function call `(f x1 ... xM)`, where each argument `xi` is an expression, and `f` is an expression evaluating to function `F`.
+- A *keyword argument* is an argument of form `(= ki vi)`, where `ki` is a parameter label and `vi` is an arbitrary expression.
 - An *omitted argument* is an argument of form `_`.
 
 1. Create a new argument list `u1 ... uN`.
@@ -153,9 +162,9 @@ For terms of form `{f}` steps 2-4 are still performed, since the function `F` ma
 	- Add `xi` to the list of values of `uj`, where `pj` is a variadic parameter with element type matching `xi`.
 5. Fail if there are remaining parameters or arguments.
 7. For each quoting parameter `pi`:
-	- Set `ui` to `{inert ui}`.
+	- Set `ui` to `(Core/quote ui)`.
 8. For each variadic parameter `pi`:
-	- Set `ui` to the list literal expression `{list-literal ui1 ... uiM}` where `ui1 ... uiM` is the list of values of `ui`.
+	- Set `ui` to the list literal expression `(Core/list ui1 ... uiM)` where `ui1 ... uiM` is the list of values of `ui`.
 9. Try to infer omitted parameters. At this step the argument list `u1 ... uN` is *almost normalized*.
 	- This step is described in [Argument Inference](#argument-inference).
 	- Fail if didn't succeed.
@@ -164,13 +173,13 @@ For terms of form `{f}` steps 2-4 are still performed, since the function `F` ma
 #### Argument Inference
 
 - Let `F` be a function with parameters `p1 ... pN` of types `a1 ... aN`.
-- Let `u1 ... uN` be the *almost normalized* argument list of a function call `{f x1 ... xM}`, where `f` is an expression evaluating to function `F`, and `t1 ... tN` are the argument types.
+- Let `u1 ... uN` be the *almost normalized* argument list of a function call `(f x1 ... xM)`, where `f` is an expression evaluating to function `F`, and `t1 ... tN` are the argument types.
 
 The argument inference algorithm tries to infer the values of omitted arguments by first trying unification, and then performing implicit search, if needed.
 
 **Unification**
 
-Try to infer as many omitted parameters as possible, by solving the unification problem `{ t1 = a1, ..., tN = aN }`, where `ai = qi(u1, ..., ui-1)`, and `qi` is a function from values of some preceding arguments of `ui` to the type `ai` of parameter `pi`. If no parameter type `ai` is dependent on the value of argument `uj` (j < i), then the value `uj` can't be inferred by unification, so the equation `tj = aj` is excluded for the problem. If the function `qi` is not reversible, then the equation `ti = ai` is not included in the unification problem.
+Try to infer as many omitted parameters as possible, by solving the unification problem `t1 = a1, ..., tN = aN`, where `ai = qi(u1, ..., ui-1)`, and `qi` is a function from values of some preceding arguments of `ui` to the type `ai` of parameter `pi`. If no parameter type `ai` is dependent on the value of argument `uj` (j < i), then the value `uj` can't be inferred by unification, so the equation `tj = aj` is excluded for the problem. If the function `qi` is not reversible, then the equation `ti = ai` is not included in the unification problem.
 
 **Implicit search**
 
@@ -552,8 +561,8 @@ There is no loss of precision
 Decimal number literals can be processed at compile-time by a macro `@unit-x`, where `x` is a unit - a token following the literal (without whitespace).
 
 ```
-@unit-km = (x: Number-Literal) => ...
-assert 18km == @unit-km(18)
+num-km = (x: Number-Literal) => ...
+assert 18km == num-km(18)
 ```
 
 ### Bases
@@ -589,8 +598,8 @@ They can also span multiple lines.
 String literals are processed at compile-time by a function `@sigil-x`, where `x` is a sigil - the token that precedes (without whitespace) the literal.
 
 ```
-@sigil-v = (x: String-Literal) => ...
-v'0.0.1' == @sigil-v('0.0.1')
+str-v = (x: String-Literal) => ...
+v'0.0.1' == str-v('0.0.1')
 ```
 
 By default, if no sigil is specified, strings are processed by `@sigil-f`, which processes escaped characters and interpolates expressions inside escaped parentheses.

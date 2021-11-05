@@ -9,29 +9,24 @@ Size = U64
 Int = I64
 Atom, Term, Expr, Bool, None : Type
 Arguments : (x: Type) -> Type
-type-of : (expr: quoted(Expr)) -> Type
-level-of : (type: quoted(Expr)) -> Int
-type-of-constructor-of : (type: Expr) -> Type
-constructor-of : (type: quoted(Expr)) -> type-of-constructor-of(type)
+type-of : (expr: quoted(Expr)) -> Type = __builtin__('type-of')
+# `Lambda` : (lhs rhs: quoted(Expr)) -> Type = __builtin__('Lambda')
+# `Record` : (expr: quoted(Expr)) -> Type = __builtin__('Record')
 Unit = Record()
-Union, Inter : (types: variadic(Type)) -> Type
+Union : (types: variadic(Type)) -> Type = __builtin__('Union')
+Inter : (types: variadic(Type)) -> Type = __builtin__('Inter')
 Any = Inter()
 Never = Union()
-unwrap : (e: quoted(Expr)) -> type-of(e)
-eval : (e: Expr) -> type-of(e)
-#`as` : (x: quoted(Expr), y: Type) -> y
-`test` : (name: Str-Literal, body: quoted(Expr)) -> Unit
-`xtest` : (name: Str-Literal, body: quoted(Expr)) -> Unit
-`assert` : (cond: quoted(Expr)) -> Unit
-`==` : (lhs rhs: quoted(Expr)) -> Bool
-compare : (expr: quoted(Expr)) -> Bool
-quote : (expr: quoted(Expr)) -> Expr
+`test` : (name: Str-Literal, body: quoted(Expr)) -> Unit = __builtin__('test')
+`xtest` : (name: Str-Literal, body: quoted(Expr)) -> Unit = __builtin__('xtest')
+`assert` : (cond: quoted(Expr)) -> Unit = __builtin__('assert')
 str-r = (x: Str-Literal) => x
-num-u8  : (x: Num-Literal) -> U8
-num-i8  : (x: Num-Literal) -> I8
-num-u64 : (x: Num-Literal) -> U64
-num-i64 : (x: Num-Literal) -> I64
-print : (xs: variadic(Any), sep = ' ', end = '\n') -> Unit
+num-u8  : (x: Num-Literal) -> U8 = __builtin__('num-u8')
+num-i8  : (x: Num-Literal) -> I8 = __builtin__('num-i8')
+num-u64 : (x: Num-Literal) -> U64 = __builtin__('num-u64')
+num-i64 : (x: Num-Literal) -> I64 = __builtin__('num-i64')
+print : (xs: variadic(Any), sep = ' ', end = '\n') -> Unit = __builtin__('print')
+print-env : () -> Unit = __builtin__('print-env')
 true, false : Bool
 none : None
 Expr = Union(Atom, Term)
@@ -391,7 +386,7 @@ test "type intersection laws"
 #
 
 test "gensym produces unique Atoms"
-	gensym : () -> Atom
+	gensym : () -> Atom = __builtin__("gensym")
 	x = gensym()
 	assert type-of(x) == Atom
 	assert gensym() != gensym()
@@ -534,10 +529,6 @@ test "can't access member of non-record value"
 	assert error(42.whatever)
 	assert error("blu".whatever)
 
-xtest "record constructor"
-	R = Record()
-	assert R() == constructor-of(R)()
-
 test "record type shorthand syntax"
 	A, B, C : Type
 	R1 = Record(a: A, b: B, c: B, d: C)
@@ -569,6 +560,40 @@ test "dependent record"
 	either-l : Either = (t=false, data=l)
 	assert error(bad-either-l : Either = (t=false, data=r))
 	assert error(bad-either-r : Either = (t=true, data=l))
+
+test "record field values do not leak"
+	box = (boba=1)
+	assert error(boba)
+
+test "record field values can be imported into current scope"
+	box = (boba=1)
+	assert error(boba)
+	use box
+	assert boba == 1
+
+test "imported names do not shadow local names"
+	box = (boba=1)
+	boba = "boba"
+	assert boba == "boba"
+	use box
+	assert boba == "boba"
+
+test "ambiguous name overload"
+	box1 = (boba=1)
+	box2 = (boba=2)
+	use box1
+	use box2
+	assert error(boba)
+
+test "name overload disambiguated by type"
+	box1 = (boba="boba")
+	box2 = (boba=111)
+	use box1
+	use box2
+	x : Str-Literal = boba
+	y : Num-Literal = boba
+	assert x == "boba"
+	assert y == 111
 
 #
 # Function application
@@ -668,3 +693,15 @@ test "locally bounded names do not leak outside of scope"
 		Type
 	foo()
 	assert error(do-not-leak)
+
+#
+# Pointers
+#
+
+#[
+opaque Heap-Ptr-Mut = (A: Type) => U64
+opaque Heap-Ptr-Imm = (A: Type) => U64
+
+test "stack allocated value"
+	p = stack-allocate()
+]#

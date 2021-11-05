@@ -21,13 +21,12 @@ const block_head = "block"
 func desugar*(exp: Exp): Exp
 
 
-func desugar_define*(exp: Exp): Exp =
+func extract_define*(exp: Exp): tuple[name, val, typ: Exp, opaque: bool] =
     let (lhs, rhs) = (exp[1], exp[2])
-    var opaque = false
 
     template desugar_name(x: var Exp) =
         if x.has_prefix("opaque"):
-            opaque = true
+            result.opaque = true
             x = x[1]
         if not x.is_atom:
             raise error("Left side of definition must be an atom, but got term " & $x)
@@ -35,52 +34,41 @@ func desugar_define*(exp: Exp): Exp =
     if lhs.is_term:
         if lhs.has_prefix(":"):
             # (x : a) = y
-            var name = lhs[1]
-            let typ = lhs[2].desugar
-            let val = rhs.desugar
-            desugar_name(name)
-            return term(block_head.atom, term(assume_head.atom, name, typ), term(define_head.atom, name, val))
+            result.name = lhs[1]
+            result.typ = lhs[2].desugar
+            result.val = rhs.desugar
+            desugar_name(result.name)
+            return
 
         if lhs.has_prefix("->"):
             # short function definition with return type
-            var name = lhs[1][1]
+            result.name = lhs[1][1]
             let params = term(atom("(_)"), lhs[1][2])
             let res_typ = lhs[2]
             let fun_typ = term(atom("->"), params, res_typ)
-            let fun = term(atom("=>"), fun_typ, rhs)
-            desugar_name(name)
-            result = term(define_head.atom, name, fun.desugar)
-            if opaque: result.exprs &= "#opaque".atom
-            return result
+            result.val = term(atom("=>"), fun_typ, rhs).desugar
+            desugar_name(result.name)
+            return
 
         if lhs.has_prefix("()"):
             # short function definition or pattern matching
-            var name = lhs[1]
+            result.name = lhs[1]
             let params = term(atom("(_)"), lhs[2])
-            let fun = term(atom("=>"), params, rhs)
-            desugar_name(name)
-            result = term(define_head.atom, name, fun.desugar)
-            if opaque: result.exprs &= "#opaque".atom
-            return result
+            result.val = term(atom("=>"), params, rhs).desugar
+            desugar_name(result.name)
+            return
 
-    var name = lhs
-    desugar_name(name)
-    result = term(define_head.atom, name, rhs.desugar)
-    if opaque: result.exprs &= "#opaque".atom
+    result.name = lhs
+    result.val = rhs.desugar
+    desugar_name(result.name)
 
 
-func desugar_assume*(exp: Exp): Exp =
-    let (lhs, rhs) = (exp[1], exp[2].desugar)
-
-    if lhs.has_prefix(","):
-        var parts: seq[Exp]
-        for name in lhs.tail:
-            if not name.is_atom: assert false
-            parts &= term(assume_head.atom, name, rhs)
-        return term(block_head.atom & parts)
-
-    if not lhs.is_atom: assert false
-    term(assume_head.atom, lhs, rhs)
+func desugar_define*(exp: Exp): Exp =
+    let define = extract_define(exp)
+    result = term(define_head.atom, define.name, define.val)
+    if define.opaque: result &= "#opaque".atom
+    if not define.typ.is_nil:
+        result = term(block_head.atom, term(assume_head.atom, define.name, define.typ), result)
 
 
 func desugar_record_type*(exp: Exp): Exp =
@@ -140,8 +128,7 @@ func desugar_record*(exp: Exp): Exp =
         var arg = group[0]
         #if not arg.has_prefix("="): raise ctx.error(exp=arg, msg="Missing label for record field {arg.src}".fmt)
 
-        var name, typ : Exp
-        var val = arg
+        var name, val, typ : Exp
 
         if arg.has_prefix("="):
             name = arg[1]
@@ -151,11 +138,11 @@ func desugar_record*(exp: Exp): Exp =
         if arg.has_prefix(":"):
             name = arg[1]
             typ = arg[2]
-            val = term("as".atom, val, typ)
 
         if not name.is_nil and not name.is_atom: assert false
+        if val.is_nil and typ.is_nil: assert false
 
-        fields &= term("#arg".atom, name, val.desugar)
+        fields &= term("#def".atom, name, val.desugar, typ.desugar)
 
     term(record_head.atom & fields)
 
@@ -324,12 +311,41 @@ func desugar_compare*(exp: Exp): Exp =
     term(exp[2].desugar, exp[1].desugar, exp[3].desugar)
 
 
+func desugar_file*(exp: Exp): Exp =
+    result = term("record".atom)
+    for sub in exp.exprs[1 .. ^1]:
+        if sub.has_prefix(":"):
+            if sub[1].has_prefix(","):
+                for name in sub[1].tail:
+                    assert name.kind == expAtom
+                    result &= term("#def".atom, name, term(), sub[2].desugar)
+            else:
+                assert sub[1].kind == expAtom
+                result &= term("#def".atom, sub[1], term(), sub[2].desugar)
+        elif sub.has_prefix("="):
+            let define = extract_define(sub)
+            result &= term("#def".atom, define.name, define.val, define.typ)
+        else:
+            result &= sub.desugar
+
+
+func desugar_assume(exp: Exp): Exp =
+    if exp[1].has_prefix(","):
+        result = term(block_head.atom)
+        for name in exp[1].tail:
+            result &= term(assume_head.atom, name, exp[2].desugar)
+    else:
+        assert exp[1].is_atom
+        return term(assume_head.atom, exp[1], exp[2].desugar)
+
+
 func desugar*(exp: Exp): Exp =
     if exp.len < 1 or exp.head.is_term: return exp
     let arg = exp.tail
     case exp.head.value:
     of "compare": desugar_compare(exp)
     of "Record": desugar_record_type(exp)
+    of "file": desugar_file(exp)
     of ":": desugar_assume(exp)
     of "=": desugar_define(exp)
     of "(_)": desugar_group(exp)

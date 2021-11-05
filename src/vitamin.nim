@@ -2,12 +2,6 @@ import os, strformat, strutils, sequtils
 import options, tables
 import noise
 
-when defined(profile):
-    import nimprof
-
-when defined(profile):
-    import nimprof
-
 import scan, parse, eval, format, desugar
 import common/[exp, error, types]
 from syntax import parser
@@ -36,7 +30,8 @@ Commands:
 
 const cmd_help = """
 Positional arguments:
-  INPUT ...             input source files (if none given, start REPL)
+  FILE                  input source file (if none given, start REPL)
+  ...                   program arguments
 
 Optional arguments:
   -h, --help            show this help message and exit
@@ -50,16 +45,14 @@ Optional arguments:
   -I, --no-interactive  do not enter REPL even if no input files were provided
   -S, --no-greeting     disable REPL greeting
   -d, --debug scan|indent|parse|run|stat
-                        show debug output for a compilation phase
-  --trace               force show stack trace on error
-  --trace-mode=MODE     MODE := expr | code | code+expr (default=expr)""".fmt
+                        show debug output for a compilation phase""".fmt
 
 
 var inputs, command_args: seq[string]
 
 when defined(posix):
     let home = get_env("HOME")
-    var libs = @[home & "/.local/lib/vita", "/usr/lib/vita"]
+    var libs = @[home & "/.local/lib/vita", "/usr/local/lib/vita", "/usr/lib/vita"]
 else:
     var libs: seq[string]
 
@@ -73,7 +66,7 @@ proc panic(msg: string, code: int = 1) {.noreturn.} =
     quit(code)
 
 proc print_help =
-    echo "Usage: {paramStr(0)} [INPUT ...]\n\n{cmd_help}".fmt
+    echo "Usage: {paramStr(0)} [FILE ...]\n\n{cmd_help}".fmt
     quit(0)
 
 proc print_version =
@@ -94,16 +87,18 @@ proc find_source(name: string, search: seq[string]): Option[string] =
         if file_exists(full): return some(full)
     return none(string)
 
-proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), start_line = 1, print = false) =
+proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), start_line = 1, print = false, as_module = false): tuple[val, typ: Val] =
     try:
         let tokens = scan(str, file, start_line=start_line).filter_it(not it.is_comment).indent()
         if debug == "scan":
             for x in tokens: echo x.str
             quit(0)
-        let exprs = to_seq(parse(parser, tokens))
+        var exprs = to_seq(parse(parser, tokens))
         if debug == "parse":
             for x in exprs: echo x.str
             quit(0)
+        if as_module:
+            exprs = @[term("file".atom & exprs)]
         if debug == "desugar":
             for x in exprs: echo x.desugar.str
             quit(0)
@@ -113,20 +108,22 @@ proc eval_string(ctx: Ctx, str: string, file: Option[string] = none(string), sta
                 if not core.is_nil: echo core
         if debug != "":
             return
+
         for x in exprs:
             let exp_surf = x.desugar
             let (exp_core, typ) = ctx.check(exp_surf)
             let val = ctx.eval(exp_core)
+            result = (val, typ)
             if print and val != unit:
                 echo val.str & " : " & typ.reify.str
     except VitaminError:
         let error = cast[ref VitaminError](get_current_exception())
         print_error(error, force_trace=force_trace, trace_code=code_in_trace, trace_expr=expr_in_trace)
 
-proc eval_file(ctx: Ctx, path: string) =
+proc eval_file(ctx: Ctx, path: string): tuple[val, typ: Val] =
     let data = read_file(path)
     #echo fmt"DEBUG: run {path}"
-    eval_string(ctx, data, some(path))
+    eval_string(ctx, data, some(path), as_module = true)
 
 proc repl(ctx: Ctx, silent: bool = false) =
     const prompt_ok   = "λ "
@@ -155,7 +152,7 @@ proc repl(ctx: Ctx, silent: bool = false) =
             stdout.write "\e[1A\e[K"
 
             stdin_history &= exp
-            eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
+            discard eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
             noise.set_prompt(prompt_ok)
             lines = @[]
 
@@ -172,13 +169,13 @@ proc repl(ctx: Ctx, silent: bool = false) =
         elif cmd.starts_with(":run"):
             let args = cmd.split(" ")
             if args.len != 2:
-                echo "Usage:  :del FILE"
+                echo "Usage:  :run FILE"
                 continue
             let path = args[1]
             if not file_exists(path):
                 echo fmt"File {path} doesn't exist!"
                 continue
-            eval_file(ctx, path)
+            discard eval_file(ctx, path)
         elif cmd.starts_with(":del"):
             let args = cmd.split(" ")
             if args.len != 2:
@@ -209,85 +206,72 @@ proc repl(ctx: Ctx, silent: bool = false) =
                 stdout.write "\e[s\e[F\e[{last_col}C \e[u".fmt
 
             stdin_history &= exp & "\n"
-            eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
+            discard eval_string(ctx, exp, print=true, start_line=stdin_history.count_lines-1)
 
 
 proc main() =
     let vpath = get_env("VITAPATH")
     if vpath != "": libs = vpath.split(":") & libs
-    var prelude = none(string)
-    var command = none(string)
+    var prelude : string
     var no_greeting = false
     var no_prelude = false
     var force_interactive = false
     var force_batch = false
     var only_format = false
+    var input : string
+    var args : seq[string]
 
     var arg = 1
     while arg <= param_count():
         case param_str(arg)
         of "-h", "--help": print_help()
         of "-V", "--version": print_version()
-        of "-L", "--library": arg += 1; libs.add(param_str(arg))
-        of "-p", "--prelude": arg += 1; prelude = some(param_str(arg)); no_prelude = false
+        of "-L", "--library": arg += 1; libs &= param_str(arg)
+        of "-p", "--prelude": arg += 1; prelude = param_str(arg)
         of "-P", "--no-prelude": no_prelude = true
         of "-S", "--no-greeting": no_greeting = true
         of "-i", "--interative": force_interactive = true
         of "-I", "--no-interactive": force_batch = true
-        of "--format": only_format = true
-        of "--trace": force_trace = true
         of "-d", "--debug": arg += 1; debug = param_str(arg)
-        of "--trace-mode=code":
-            code_in_trace = true; expr_in_trace = false
-        of "--trace-mode=expr":
-            code_in_trace = false; expr_in_trace = true
-        of "--trace-mode=code+expr", "--trace-mode=expr+code":
-            code_in_trace = true; expr_in_trace = true
-        of "-c", "--command":
-            arg += 1; command = some(param_str(arg)); arg += 1
-            while arg <= param_count():
-                command_args.add(param_str(arg)); arg += 1
-        else: inputs.add(param_str(arg))
+        of "--format": only_format = true
+        else:
+            if input == "":
+                input = param_str(arg)
+            else:
+                args &= param_str(arg)
         arg += 1
 
     #echo fmt"DEBUG: library paths = {libs}"
     #echo fmt"DEBUG: input paths   = {inputs}"
 
-    for path in inputs:
-        if not file_exists(path): panic fmt"ERROR: input file {path} doesn't exist!"
+    if input != "" and not file_exists(input):
+        panic fmt"ERROR: input file {input} doesn't exist!"
 
     if only_format:
-        for path in inputs:
-            stdout.write format_file(path)
+        stdout.write format_file(input)
         return
 
-    libs = libs.filter_it(dir_exists(it))
+    libs = libs.filter(dir_exists)
+
+    var file_ctx = root_ctx.extend()
 
     if not no_prelude:
-        var path: string
-        if prelude.is_some:
-            path = prelude.get
-        else:
+        if prelude == "":
             let found = find_source("prelude.v", libs)
-            if found.is_none: panic fmt"ERROR: couldn't find file {path}"
-            path = found.get
+            if found.is_none: panic fmt"ERROR: couldn't find prelude.v"
+            prelude = found.get
             
-        if not file_exists(path): panic fmt"ERROR: prelude file {path} doesn't exist!"
-        root_ctx.eval_file(path)
+        if not file_exists(prelude): panic fmt"ERROR: prelude file {prelude} doesn't exist!"
+        let module = root_ctx.eval_file(prelude)
+        file_ctx.env.define("Prelude", module.val, module.typ)
+        for field in module.typ.rec_typ.fields:
+            file_ctx.env.use(field.name, module.val.rec.ctx.eval(field.typ), term("Core/member".atom, "Prelude".atom, field.name.atom), module.val.rec.ctx)
 
-    for path in inputs:
-        var file_ctx = root_ctx.extend()
-        file_ctx.eval_file(path)
+    if input != "":
+        discard file_ctx.eval_file(input)
 
-    if command.is_some:
-        # TODO: pass command_args
-        for i, arg in command_args:
-            echo fmt"args[{i}] = {arg}"
-        #echo command.get
-        root_ctx.eval_string(command.get)
-
-    if ((inputs.len == 0 and command.is_none) or force_interactive) and not force_batch:
-        root_ctx.repl(no_greeting)
+    if (input == "" or force_interactive) and not force_batch:
+        file_ctx.repl(no_greeting)
 
 when is_main_module:
     main()

@@ -4,9 +4,9 @@ import types, utils
 
 var stdin_history* = ""
 
-proc print_env*(ctx: Ctx, skip_top = true, only_args = false) =
-    var env = ctx.env
-    var level = ctx.env.depth
+proc print_env*(env: Env, skip_top = true, only_args = false, uses = false) =
+    var level = env.depth
+    var env = env
     while env != nil:
         if skip_top and env.parent == nil: break
         for (k, v) in env.vars.pairs:
@@ -21,9 +21,16 @@ proc print_env*(ctx: Ctx, skip_top = true, only_args = false) =
             var tag = ""
             if v.capture: tag &= "C"
             if v.arg: tag &= "A"
+            if typ == "": tag &= "!"
             echo "({level}) [{tag}] {k}{typ}{val}".fmt
+        for (k, xs) in env.uses.pairs:
+            for (typ, exp, _) in xs:
+                echo "({level}) [u] {k} : {typ}".fmt
         env = env.parent
         level -= 1
+
+proc print_env*(ctx: Ctx, skip_top = true, only_args = false, uses = false) =
+    print_env(ctx.env, skip_top, only_args, uses)
 
 proc type_rule*(goal: string, given: varargs[string]): string =
     given.join("\n") & "\n-------------------------\n" & goal

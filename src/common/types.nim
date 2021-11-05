@@ -29,6 +29,7 @@ type
     Env* = ref object
         parent*: Env
         vars*: Table[string, Var]
+        uses*: Table[string, seq[tuple[typ: Val, exp: Exp, ctx: Ctx]]]
         depth*: int
 
     EvalMode* {.pure.} = enum
@@ -39,6 +40,7 @@ type
         eval_mode*: EvalMode
         site_stack*: seq[Exp]
         call_stack*: seq[TraceCall]
+        builtins*: Table[string, Val]
         values*: seq[Val]
         names*: seq[string]
         types*: seq[Val]
@@ -59,9 +61,14 @@ type
         extensible*: bool
 
     Rec* = object
+        ctx*: Ctx
         values*: Table[string, Val]
 
     BuiltinFunProc* = proc(ctx: Ctx, args: seq[Val]): Val
+
+    BuiltinFun* = object
+        fun*: BuiltinFunProc
+        name*: string
 
     FunParam* = object
         name*: string
@@ -73,6 +80,7 @@ type
         variadic*: bool
 
     FunTyp* = object
+        ctx*: Ctx
         params*: seq[FunParam]
         result*: Exp
         #autoapply*: bool
@@ -85,16 +93,15 @@ type
 
     Fun* = object
         params*: seq[string]
-        body*: Either[Exp, BuiltinFunProc]
-        ctx*: Opt[Ctx] # closure context
-        builtin*: bool
+        body*: Exp
+        ctx*: Ctx # closure context
 
     Mem* = object
         buf*: pointer
 
     ValTag* = enum
         NeverVal, OpaqueVal, NeuVal, RecVal, RecTypeVal, UnionTypeVal, InterTypeVal,
-        TypeVal, ExpVal, MemVal, FunVal, FunTypeVal, ListLit, InterruptVal,
+        TypeVal, ExpVal, MemVal, FunVal, FunTypeVal, ListLit, InterruptVal, BuiltinFunVal
         NumLit, StrLit, I8, U8, I64, U64
 
     ValObj* = object
@@ -121,6 +128,8 @@ type
             fun_typ*: FunTyp
         of FunVal:
             fun*: Fun
+        of BuiltinFunVal:
+            builtin_fun*: BuiltinFun
         of NumLit, StrLit:
             lit*: string
         of MemVal:
@@ -181,6 +190,7 @@ func MakeListLit*(values: varargs[Val]): Val =
 func noun*(v: Val): string =
     case v.kind
     of NeverVal: "unreachable"
+    of BuiltinFunVal: "builtin function"
     of InterruptVal: "interrupt"
     of I8, I64: "integer"
     of U8, U64: "unsigned integer"
@@ -248,6 +258,7 @@ func str*(x: Rec): string =
 
 func str*(v: Val): string =
     case v.kind
+    of BuiltinFunVal: "<builtin " & v.builtin_fun.name & ">"
     of NeverVal: "unreachable"
     of InterruptVal: "interrupt"
     of OpaqueVal, NeuVal, ExpVal: v.exp.str
@@ -266,7 +277,7 @@ func str*(v: Val): string =
             return if v.kind == UnionTypeVal: "Never" else: "Any"
         v.values.map(str).join(op)
     of FunVal:
-        if v.fun.body.is_left: "λ " & v.fun.params.join(" ") & " => ..." else: "<builtin>"
+        "λ " & v.fun.params.join(" ") & " => ..."
     of FunTypeVal: v.fun_typ.str
     of RecVal: v.rec.str
     of RecTypeVal: v.rec_typ.str
@@ -283,6 +294,7 @@ func extend*(ctx: Ctx, new_env = true, eval_mode: EvalMode): Ctx =
         env: if new_env: ctx.env.extend() else: ctx.env,
         #env: ctx.env,
         eval_mode: eval_mode,
+        builtins: ctx.builtins,
         site_stack: ctx.site_stack,
         call_stack: ctx.call_stack,
         names: ctx.names,
@@ -318,6 +330,9 @@ proc find*(env: Env, name: string): Env =
         env = env.parent
     nil
 
+#proc use*(env: Env, record: Rec) =
+#    env.uses[]
+
 proc site*(ctx: Ctx): Exp =
     if ctx.site_stack.len > 0:
         ctx.site_stack[^1]
@@ -329,6 +344,13 @@ proc push_call*(ctx: Ctx, site: Exp, infer = false) =
 
 proc pop_call*(ctx: Ctx) =
     discard ctx.call_stack.pop()
+
+proc use*(env: Env, name: string, typ: Val, exp: Exp, ctx: Ctx) =
+    let x = (typ, exp, ctx)
+    if name notin env.uses:
+        env.uses[name] = @[x]
+    else:
+        env.uses[name] &= x
 
 #[
 proc push_value*(ctx: Ctx, val: Val) =
@@ -345,16 +367,3 @@ proc pop_type*(ctx: Ctx) =
     discard ctx.names.pop()
     discard ctx.types.pop()
 ]#
-
-proc lookup*(env: Env, name: string): Opt[Var] =
-    let env = env.find(name)
-    if env == nil: return None[Var]()
-    Some(env.vars[name])
-
-proc lookup_type*(env: Env, name: string): Opt[Val] =
-    let variable = env.lookup(name).or_else: return None(Val)
-    variable.typ
-
-proc lookup_value*(env: Env, name: string): Opt[Val] =
-    let variable = env.lookup(name).or_else: return None(Val)
-    variable.val
