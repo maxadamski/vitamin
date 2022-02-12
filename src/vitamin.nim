@@ -221,6 +221,7 @@ proc main() =
     var input : string
     var args : seq[string]
 
+    # TODO: All compilation options should be settable directly in .v files
     var arg = 1
     while arg <= param_count():
         case param_str(arg)
@@ -253,6 +254,7 @@ proc main() =
 
     libs = libs.filter(dir_exists)
 
+    let root_ctx = Ctx(env: Env(parent: nil))
     var file_ctx = root_ctx.extend()
 
     if not no_prelude:
@@ -264,8 +266,8 @@ proc main() =
         if not file_exists(prelude): panic fmt"ERROR: prelude file {prelude} doesn't exist!"
         let module = root_ctx.eval_file(prelude)
         file_ctx.env.define("Prelude", module.val, module.typ)
-        for field in module.typ.rec_typ.fields:
-            file_ctx.env.use(field.name, module.val.rec.ctx.eval(field.typ), term("Core/member".atom, "Prelude".atom, field.name.atom), module.val.rec.ctx)
+        for label, field in module.typ.rec_typ.fields:
+            file_ctx.env.use(label, module.val.rec.ctx.eval(field.typ), term("Core/member".atom, "Prelude".atom, label.atom), module.val.rec.ctx)
 
     if input != "":
         discard file_ctx.eval_file(input)

@@ -24,8 +24,11 @@ num-i8  : (x: Num-Literal) -> I8 = __builtin__("num-i8")
 num-u64 : (x: Num-Literal) -> U64 = __builtin__("num-u64")
 num-i64 : (x: Num-Literal) -> I64 = __builtin__("num-i64")
 print : (xs: variadic(Any), sep = ' ', end = '\n') -> Unit = __builtin__("print")
-opaque Bool = Byte
-false = 0u8 as Bool
-true = 1u8 as Bool
-none : None
 Expr = Union(Atom, Term)
+opaque Bool = Byte
+none : None
+true = 1u8 as Bool
+false = 0u8 as Bool
+`and` = (x y: Bool) -> Bool => case x of true y of false false
+`or` = (x y: Bool) -> Bool => case x of true true of false y
+`not` = (x: Bool) -> Bool => case x of true false of false true

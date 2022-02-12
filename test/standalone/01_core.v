@@ -30,6 +30,12 @@ print-env : () -> Unit = __builtin__('print-env')
 true, false : Bool
 none : None
 Expr = Union(Atom, Term)
+opaque Bool = Byte
+true = 1u8 as Bool
+false = 0u8 as Bool
+`and` = (x y: Bool) -> Bool => case x of true y of false false
+`or` = (x y: Bool) -> Bool => case x of true true of false y
+`not` = (x: Bool) -> Bool => case x of true false of false true
 
 assert error(Has-Prelude) # run this file without prelude (-P option)
 
@@ -463,13 +469,6 @@ test "short named opaque function syntax"
 # Booleans
 #
 
-opaque Bool = Byte
-true = 1u8 as Bool
-false = 0u8 as Bool
-`and` = (x y: Bool) -> Bool => case x of true y of false false
-`or` = (x y: Bool) -> Bool => case x of true true of false y
-`not` = (x: Bool) -> Bool => case x of true false of false true
-
 test "bool operators"
 	assert (not true) == false
 	assert (not false) == true
@@ -535,6 +534,14 @@ test "record type shorthand syntax"
 	R2 = Record(a: A, b c: B, d: C)
 	assert R1 == R2
 
+test "record subtyping"
+	A, B, C : Type
+	assert is-subtype(Record(), Record())
+	assert is-subtype(Record(a: A), Record())
+	assert is-subtype(Record(a: A), Record(a: A))
+	assert not is-subtype(Record(a: A), Record(a: B))
+	assert not is-subtype(Record(a: A), Record(b: A))
+
 test "row order doesn't affect record type equality"
 	assert Record(x: Type, y: I64) == Record(y: I64, x: Type)
 	assert type-of((x=Unit, y=42)) == type-of((y=42, x=Unit))
@@ -569,10 +576,10 @@ test "record field values can be imported into current scope"
 	box = (boba=1)
 	assert error(boba)
 	use box
-	assert boba == 1
+	boba
 
 test "imported names do not shadow local names"
-	box = (boba=1)
+	box = (boba="baba")
 	boba = "boba"
 	assert boba == "boba"
 	use box

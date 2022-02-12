@@ -40,7 +40,6 @@ type
         eval_mode*: EvalMode
         site_stack*: seq[Exp]
         call_stack*: seq[TraceCall]
-        builtins*: Table[string, Val]
         values*: seq[Val]
         names*: seq[string]
         types*: seq[Val]
@@ -57,8 +56,7 @@ type
         default*: Exp # optional
 
     RecTyp* = object
-        fields*: seq[RecField]
-        extensible*: bool
+        fields*: Table[string, RecField]
 
     Rec* = object
         ctx*: Ctx
@@ -221,17 +219,15 @@ func bold*(x: Exp): string = x.str.bold
 
 func bold*(x: Val): string = x.str.bold
 
+func str*(x: RecField): string =
+    if x.name != "":
+        result &= x.name & ": "
+    result &= x.typ.str
+    if not x.default.is_nil:
+        result &= " = " & x.default.str
+
 func str*(x: RecTyp): string =
-    var res: seq[string]
-    for s in x.fields:
-        var repr = ""
-        if s.name != "":
-            repr &= s.name & ": "
-        repr &= s.typ.str
-        if not s.default.is_nil:
-            repr &= " = " & s.default.str
-        res &= repr
-    "Record(" & res.join(", ") & ")"
+    "Record{" & x.fields.values.to_seq.map(str).join(", ") & "}"
 
 func str*(x: FunTyp, ret = true): string =
     var params: seq[string]
@@ -294,7 +290,6 @@ func extend*(ctx: Ctx, new_env = true, eval_mode: EvalMode): Ctx =
         env: if new_env: ctx.env.extend() else: ctx.env,
         #env: ctx.env,
         eval_mode: eval_mode,
-        builtins: ctx.builtins,
         site_stack: ctx.site_stack,
         call_stack: ctx.call_stack,
         names: ctx.names,

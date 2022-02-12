@@ -1,4 +1,4 @@
-import options, strutils, strformat, sequtils, re
+import options, strutils, strformat, sequtils, re, utils
 
 type
     Position* = object
@@ -172,7 +172,7 @@ func str*(x: Exp): string =
         if x.tag == aWs: return "$WS"
         if x.tag == aNl: return "$NL"
         if x.tag == aRes: return "\e[4m" & x.value & "\e[0m"
-        if x.tag == aStr: return x.value
+        if x.tag == aStr: return x.value.my_escape
         if x.tag == aNum: return x.value
         if x.value.match(re"[ ;,(){}\[\]]"):
             return "`" & x.value & "`"
@@ -183,5 +183,19 @@ func str*(x: Exp): string =
                 return x.value
     of expTerm:
         return "(" & x.exprs.map(str).join(" ")  & ")"
+
+proc core_to_pretty*(exp: Exp, level=0): string =
+    case exp.kind
+    of expAtom:
+        result &= exp.str
+    of expTerm:
+        if exp.has_prefix("Core/block"):
+            let indent = "  ".repeat(level)
+            result &= "(Core/block\n"
+            for stat in exp.tail:
+                result &= indent & "  " & stat.core_to_pretty(level+1) & "\n"
+            result &= indent & ")"
+        else:
+            result &= "(" & exp.exprs.map_it(it.core_to_pretty(level)).join(" ") & ")"
 
 func `$`*(x: Exp): string = x.str

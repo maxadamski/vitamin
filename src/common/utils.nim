@@ -10,6 +10,8 @@ func `??`*(s: string, default: string): string =
 
 func bold*(x: string): string = "\e[1m" & x & "\e[0m"
 
+func my_escape*(x: string): string = x.multi_replace(("\n", "\\n"), ("\t", "\\t"))
+
 # Flatten seq of seqs into seq
 
 func flatten*[A](x: seq[seq[A]]) =
